@@ -11,8 +11,8 @@ log = logging.getLogger(__name__)
 
 app = FastAPI(title="BIST Terminal v2")
 
-ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
-ANTHROPIC_URL = "https://api.anthropic.com/v1/messages"
+XAI_API_KEY = os.getenv("XAI_API_KEY", "")
+XAI_URL = "https://api.x.ai/v1/chat/completions"
 
 # ─── API endpoint ───
 @app.post("/api/analyze")
@@ -22,21 +22,25 @@ async def analyze(request: Request):
         system = body.get("system", "")
         messages = body.get("messages", [])
 
-        payload = {
-            "model": "claude-sonnet-4-20250514",
-            "max_tokens": 8000,
-            "messages": messages,
-        }
+        # Grok uses OpenAI format: system message goes in messages array
+        grok_messages = []
         if system:
-            payload["system"] = system
+            grok_messages.append({"role": "system", "content": system})
+        grok_messages.extend(messages)
+
+        payload = {
+            "model": "grok-3-fast",
+            "max_tokens": 8000,
+            "messages": grok_messages,
+            "temperature": 0.3,
+        }
 
         async with httpx.AsyncClient(timeout=120.0) as client:
             resp = await client.post(
-                ANTHROPIC_URL,
+                XAI_URL,
                 headers={
                     "Content-Type": "application/json",
-                    "x-api-key": ANTHROPIC_API_KEY,
-                    "anthropic-version": "2023-06-01",
+                    "Authorization": f"Bearer {XAI_API_KEY}",
                 },
                 json=payload,
             )
@@ -44,10 +48,16 @@ async def analyze(request: Request):
 
         if resp.status_code != 200:
             err_msg = data.get("error", {}).get("message", str(data))
-            log.error(f"Anthropic {resp.status_code}: {err_msg}")
+            log.error(f"Grok {resp.status_code}: {err_msg}")
             return JSONResponse({"error": err_msg}, status_code=resp.status_code)
 
-        return JSONResponse(data)
+        # Convert OpenAI format to our frontend format
+        # OpenAI: {"choices": [{"message": {"content": "..."}}]}
+        # Our frontend expects: {"content": [{"type": "text", "text": "..."}]}
+        text = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+        result = {"content": [{"type": "text", "text": text}]}
+        return JSONResponse(result)
+
     except Exception as e:
         log.error(f"API error: {e}")
         return JSONResponse({"error": str(e)}, status_code=500)
@@ -55,7 +65,7 @@ async def analyze(request: Request):
 # ─── Health check ───
 @app.get("/health")
 def health():
-    return {"status": "ok", "version": "2.0"}
+    return {"status": "ok", "version": "2.0", "engine": "grok"}
 
 # ─── Static files ───
 app.mount("/static", StaticFiles(directory="static"), name="static")

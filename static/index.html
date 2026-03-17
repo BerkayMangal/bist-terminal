@@ -122,7 +122,7 @@ table.dt td{padding:7px 8px;white-space:nowrap}
   <!-- Nav -->
   <div class="nav">
     <div class="logo">BIST TERMINAL<span>v2.0</span></div>
-    <button class="act" onclick="go('dashboard')">◉ Analiz</button>
+    <button class="act" onclick="go('dashboard')">⚡ Radar</button>
     <button onclick="go('cross')">⚡ Cross Hunter</button>
     <button onclick="go('quantum')">◈ Quantum</button>
     <button onclick="go('takas')">◎ Takas</button>
@@ -185,8 +185,8 @@ async function loadMarketBar() {
   try {
     mbarData = await callAPI(
       'Sen piyasa veri servisisin. Güncel fiyatları bul. SADECE JSON döndür, markdown kullanma.',
-      `Güncel fiyatları bul: 1)BIST XU030 2)USD/TRY 3)EUR/TRY 4)Brent petrol USD 5)Gram altın TRY 6)BIST XBANK
-JSON: {"xu030":{"price":0,"chg":0},"usdtry":{"price":0,"chg":0},"eurtry":{"price":0,"chg":0},"brent":{"price":0,"chg":0},"gold":{"price":0,"chg":0},"xbank":{"price":0,"chg":0},"ts":"HH:MM"}`
+      `Güncel fiyatları bul: 1)BIST XU030 2)BIST XU100 3)USD/TRY 4)EUR/TRY 5)Brent petrol USD 6)Gram altın TRY 7)BIST XBANK 8)Bitcoin USD
+JSON: {"xu030":{"price":0,"chg":0},"xu100":{"price":0,"chg":0},"usdtry":{"price":0,"chg":0},"eurtry":{"price":0,"chg":0},"brent":{"price":0,"chg":0},"gold":{"price":0,"chg":0},"xbank":{"price":0,"chg":0},"btc":{"price":0,"chg":0},"ts":"HH:MM"}`
     );
   } catch(e) { console.error('MarketBar:',e); }
   renderMarketBar();
@@ -195,8 +195,8 @@ JSON: {"xu030":{"price":0,"chg":0},"usdtry":{"price":0,"chg":0},"eurtry":{"price
 function renderMarketBar() {
   const el = document.getElementById('marketBar');
   const items = [
-    {k:'xu030',l:'XU030'},{k:'usdtry',l:'USD/TRY'},{k:'eurtry',l:'EUR/TRY'},
-    {k:'brent',l:'BRENT'},{k:'gold',l:'ALTIN'},{k:'xbank',l:'XBANK'}
+    {k:'xu030',l:'XU030'},{k:'xu100',l:'XU100'},{k:'usdtry',l:'USD/TRY'},{k:'eurtry',l:'EUR/TRY'},
+    {k:'brent',l:'BRENT'},{k:'gold',l:'ALTIN'},{k:'xbank',l:'XBANK'},{k:'btc',l:'BTC'}
   ];
   let h = items.map(({k,l})=>{
     const d = mbarData?.[k];
@@ -257,19 +257,111 @@ function empty(icon, msg) {
 }
 
 // ═══════════════════════════════════════════════
-// PAGE: DASHBOARD
+// PAGE: DASHBOARD (RADAR LANDING)
 // ═══════════════════════════════════════════════
 let dashData = null;
+let radarData = null;
+let xRadarData = null;
+
 function dashboardHTML() {
-  let h = `<div style="display:flex;gap:8px;margin-bottom:14px">
-    <div class="search" style="flex:1;max-width:400px">
-      <span style="color:var(--amb);font-size:14px">⌕</span>
-      <input id="dashTicker" placeholder="Hisse kodu — GARAN, THYAO, AKBNK..." onkeydown="if(event.key==='Enter')dashAnalyze()" style="text-transform:uppercase">
-    </div>
-    <button class="btn pri" onclick="dashAnalyze()">◉ Analiz Et</button>
+  let h = '';
+
+  // ── RADAR SECTION (auto-loads) ──
+  h += `<div style="display:flex;gap:10px;align-items:center;margin-bottom:14px;flex-wrap:wrap">
+    <h2 style="font:700 18px var(--disp);color:var(--amb)">⚡ Piyasa Radarı</h2>
+    <span style="font-size:11px;color:var(--t3)">Otomatik güncellenir</span>
+    <button class="btn" onclick="loadRadar()" style="margin-left:auto;font-size:10px">↻ Yenile</button>
   </div>`;
 
-  if(!dashData) return h + empty('◉','Hisse kodu girip ANALİZ ET butonuna bas.<br>8 modül birden çalışacak.');
+  if(radarData==='loading') {
+    h += loading('Piyasa radarı yükleniyor...');
+  } else if(radarData && !radarData.error) {
+    const r = radarData;
+    // Market Pulse
+    h += `<div class="sbar" style="margin-bottom:10px">
+      <div class="si"><span class="sl">Piyasa Modu</span><span class="sv" style="font-size:14px">${tagHTML(r.piyasa_modu||'NÖTR', (r.piyasa_modu||'').includes('YÜKSELİŞ')?'al':(r.piyasa_modu||'').includes('DÜŞÜŞ')?'sat':'notr')}</span></div>
+      <div class="si"><span class="sl">Korku/Açgözlülük</span><span class="sv" style="color:${(r.fear_greed||50)>60?'var(--grn)':(r.fear_greed||50)<40?'var(--red)':'var(--amb)'}">${r.fear_greed||'—'}/100</span></div>
+      <div class="si"><span class="sl">Hacim</span><span class="sv" style="font-size:14px">${r.hacim_durumu||'—'}</span></div>
+      <div class="si"><span class="sl">Trend</span><span class="sv" style="font-size:14px">${r.genel_trend||'—'}</span></div>
+    </div>`;
+
+    // Hot Stocks Grid
+    if(r.sicak_hisseler?.length) {
+      h += `<div class="ptitle" style="margin-bottom:8px">🔥 EN SICAK 5 HİSSE</div>`;
+      h += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px;margin-bottom:14px">';
+      r.sicak_hisseler.forEach(s => {
+        const c = (s.degisim||0)>=0?'var(--grn)':'var(--red)';
+        h += `<div class="panel" style="padding:10px;cursor:pointer" onclick="document.getElementById('dashTicker').value='${s.ticker}';dashAnalyze()">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+            <span style="font:700 14px var(--disp);color:var(--amb)">${s.ticker}</span>
+            <span style="font-size:12px;font-weight:600;color:${c}">${(s.degisim||0)>=0?'+':''}${s.degisim||0}%</span>
+          </div>
+          <div style="font-size:10px;color:var(--t3);margin-bottom:4px">${s.sebep||''}</div>
+          <div style="display:flex;gap:4px">${tagHTML(s.sinyal||'NÖTR')}</div>
+        </div>`;
+      });
+      h += '</div>';
+    }
+
+    // Market overview text
+    if(r.ozet) {
+      h += `<div class="panel" style="margin-bottom:14px;border-left:3px solid var(--amb)">
+        <div class="ptitle" style="margin-bottom:6px">📋 GÜNLÜK ÖZET</div>
+        <p style="color:var(--t2);font-size:12px;line-height:1.7">${r.ozet}</p>
+      </div>`;
+    }
+  } else if(radarData?.error) {
+    h += `<div class="err" style="margin-bottom:14px">Radar hatası: ${radarData.error}</div>`;
+  }
+
+  // ── X RADAR ──
+  h += `<div style="display:flex;gap:10px;align-items:center;margin:14px 0 10px;flex-wrap:wrap">
+    <h2 style="font:700 16px var(--disp);color:var(--blu)">🐦 X / Twitter Radar</h2>
+    <span style="font-size:11px;color:var(--t3)">Piyasa etkili hesaplardan sentiment</span>
+    <button class="btn" onclick="loadXRadar()" style="margin-left:auto;font-size:10px">↻ Yenile</button>
+  </div>`;
+
+  if(xRadarData==='loading') {
+    h += loading('X/Twitter radarı taranıyor...');
+  } else if(xRadarData && !xRadarData.error) {
+    const x = xRadarData;
+    h += `<div class="sbar" style="margin-bottom:10px">
+      <div class="si"><span class="sl">Genel Sentiment</span><span class="sv" style="color:${(x.genel_skor||50)>60?'var(--grn)':(x.genel_skor||50)<40?'var(--red)':'var(--amb)'}">${x.genel_skor||'—'}/100</span></div>
+      <div class="si"><span class="sl">Mood</span><span class="sv" style="font-size:14px">${x.mood||'—'}</span></div>
+      <div class="si"><span class="sl">Trend Konu</span><span class="sv" style="font-size:13px;color:var(--amb)">${x.trend_konu||'—'}</span></div>
+    </div>`;
+
+    if(x.hesaplar?.length) {
+      h += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:8px;margin-bottom:14px">';
+      x.hesaplar.forEach(a => {
+        const sc = (a.sentiment||'Nötr')==='Pozitif'?'var(--grn)':(a.sentiment||'Nötr')==='Negatif'?'var(--red)':'var(--amb)';
+        h += `<div class="panel" style="padding:10px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+            <span style="font-weight:600;color:${sc}">@${a.hesap}</span>
+            ${tagHTML(a.sentiment||'Nötr')}
+          </div>
+          <div style="font-size:11px;color:var(--t2);line-height:1.5">${a.ozet||''}</div>
+          ${a.ilgili_hisseler?`<div style="font-size:10px;color:var(--amb);margin-top:4px">→ ${a.ilgili_hisseler}</div>`:''}
+        </div>`;
+      });
+      h += '</div>';
+    }
+  } else if(xRadarData?.error) {
+    h += `<div class="err" style="margin-bottom:14px">X Radar hatası: ${xRadarData.error}</div>`;
+  }
+
+  // ── DIVIDER ──
+  h += `<div style="border-top:1px solid var(--brd);margin:20px 0 14px;padding-top:14px">
+    <div style="display:flex;gap:8px;margin-bottom:14px">
+      <div class="search" style="flex:1;max-width:400px">
+        <span style="color:var(--amb);font-size:14px">⌕</span>
+        <input id="dashTicker" placeholder="Hisse kodu — GARAN, THYAO, AKBNK..." onkeydown="if(event.key==='Enter')dashAnalyze()" style="text-transform:uppercase">
+      </div>
+      <button class="btn pri" onclick="dashAnalyze()">◉ Detaylı Analiz</button>
+    </div>
+  </div>`;
+
+  if(!dashData) return h;
   if(dashData==='loading') return h + loading('Claude analiz ediyor...');
   if(dashData.error) return h + `<div class="err">Hata: ${dashData.error}</div>`;
 
@@ -700,11 +792,45 @@ JSON: {"ticker":"${ticker}","yabanci_oran_pct":0,"yabanci_trend":"Artış|Azalı
 }
 
 // ═══════════════════════════════════════════════
+// RADAR LOADERS
+// ═══════════════════════════════════════════════
+async function loadRadar() {
+  radarData = 'loading'; render();
+  try {
+    radarData = await callAPI(
+      'Sen BIST piyasa radarısın. Güncel piyasa durumunu analiz et. SADECE JSON döndür, markdown kullanma.',
+      `BIST piyasası için güncel radar analizi yap. Web'den bugünkü verileri ara.
+JSON: {"piyasa_modu":"YÜKSELİŞ|DÜŞÜŞ|YATAY","fear_greed":50,"hacim_durumu":"Düşük|Normal|Yüksek","genel_trend":"Boğa|Ayı|Kararsız",
+"sicak_hisseler":[{"ticker":"","degisim":0,"sebep":"kısa açıklama","sinyal":"AL|SAT|NÖTR"}],
+"ozet":"Bugün piyasanın genel durumu, önemli gelişmeler, dikkat edilecek konular 2-3 cümle"}`
+    );
+  } catch(e) { radarData = {error:e.message}; }
+  render();
+}
+
+async function loadXRadar() {
+  xRadarData = 'loading'; render();
+  try {
+    xRadarData = await callAPI(
+      'Sen X/Twitter finans sentiment analistsin. Piyasayı etkileyen hesapların son paylaşımlarını analiz et. SADECE JSON döndür, markdown kullanma.',
+      `X/Twitter'da piyasayı etkileyen büyük hesapların bugünkü paylaşımlarını analiz et.
+Hesaplar: @DeItaone, @zerohedge, @NickTimiraos, @unusual_whales, @ForeksTurkey, @BloombergHT, @Reuters, @FirstSquawk
+Her hesap için son tweet/paylaşım özetini ve BIST etkisini değerlendir.
+JSON: {"genel_skor":50,"mood":"Risk-On|Risk-Off|Karışık","trend_konu":"en çok konuşulan konu",
+"hesaplar":[{"hesap":"","sentiment":"Pozitif|Negatif|Nötr","ozet":"ne paylaştı kısa","ilgili_hisseler":"varsa THYAO, TUPRS gibi"}]}`
+    );
+  } catch(e) { xRadarData = {error:e.message}; }
+  render();
+}
+
+// ═══════════════════════════════════════════════
 // INIT
 // ═══════════════════════════════════════════════
 renderMarketBar();
 render();
 loadMarketBar();
+loadRadar();
+loadXRadar();
 </script>
 </body>
 </html>
