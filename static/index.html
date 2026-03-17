@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BIST Terminal</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=DM+Sans:wght@400;500;600;700&display=swap');
+
+:root {
+  --bg: #0a0e17; --bg2: #0f1520; --bg3: #151c28;
+  --border: #1e2a3a; --border2: #2a3a4f;
+  --text: #e2e8f0; --text2: #94a3b8; --text3: #64748b;
+  --blue: #3b82f6; --green: #22c55e; --red: #ef4444;
+  --yellow: #f59e0b; --purple: #a855f7;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: var(--bg); color: var(--text); font-family: 'DM Sans', sans-serif; min-height: 100vh; }
+
+/* HEADER */
+.header {
+  background: var(--bg2); border-bottom: 1px solid var(--border);
+  padding: 12px 24px; display: flex; align-items: center; gap: 24px;
+  position: sticky; top: 0; z-index: 100;
+}
+.logo { font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 18px; color: var(--blue); letter-spacing: -0.5px; }
+.logo span { color: var(--text3); font-weight: 400; font-size: 12px; margin-left: 6px; }
+
+.search-box {
+  flex: 1; max-width: 420px; position: relative;
+}
+.search-box input {
+  width: 100%; padding: 10px 16px 10px 40px;
+  background: var(--bg3); border: 1px solid var(--border); border-radius: 8px;
+  color: var(--text); font-family: 'JetBrains Mono', monospace; font-size: 14px;
+  outline: none; transition: border 0.2s;
+}
+.search-box input:focus { border-color: var(--blue); }
+.search-box input::placeholder { color: var(--text3); }
+.search-box::before {
+  content: "⌕"; position: absolute; left: 14px; top: 50%; transform: translateY(-50%);
+  color: var(--text3); font-size: 16px;
+}
+
+.nav { display: flex; gap: 4px; }
+.nav button {
+  padding: 8px 16px; background: none; border: 1px solid transparent;
+  color: var(--text2); font-size: 13px; cursor: pointer; border-radius: 6px;
+  font-family: 'DM Sans', sans-serif; transition: all 0.2s;
+}
+.nav button:hover { background: var(--bg3); color: var(--text); }
+.nav button.active { background: var(--blue); color: white; border-color: var(--blue); }
+
+/* MAIN */
+.main { max-width: 1200px; margin: 0 auto; padding: 24px; }
+
+/* TOP10 TABLE */
+.top10-header {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 16px;
+}
+.top10-header h2 { font-size: 20px; font-weight: 700; }
+.top10-header h2 span { color: var(--blue); }
+.refresh-btn {
+  padding: 6px 14px; background: var(--bg3); border: 1px solid var(--border);
+  color: var(--text2); font-size: 12px; cursor: pointer; border-radius: 6px;
+  transition: all 0.2s;
+}
+.refresh-btn:hover { border-color: var(--blue); color: var(--text); }
+
+.table-wrap { overflow-x: auto; }
+table {
+  width: 100%; border-collapse: collapse;
+  font-family: 'JetBrains Mono', monospace; font-size: 13px;
+}
+th {
+  text-align: left; padding: 10px 12px; color: var(--text3); font-size: 11px;
+  text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid var(--border);
+  font-weight: 600;
+}
+td {
+  padding: 12px; border-bottom: 1px solid var(--border);
+  cursor: pointer; transition: background 0.15s;
+}
+tr:hover td { background: var(--bg3); }
+.ticker-cell { font-weight: 700; color: var(--blue); }
+.score-cell { font-weight: 700; }
+.signal-tag {
+  display: inline-block; padding: 2px 8px; border-radius: 4px;
+  font-size: 10px; font-weight: 600; margin: 1px;
+}
+.signal-bull { background: rgba(34,197,94,0.15); color: var(--green); }
+.signal-bear { background: rgba(239,68,68,0.15); color: var(--red); }
+.signal-neutral { background: rgba(245,158,11,0.15); color: var(--yellow); }
+
+/* DETAIL VIEW */
+.detail { display: none; }
+.detail.active { display: block; }
+.back-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 12px; background: none; border: 1px solid var(--border);
+  color: var(--text2); font-size: 13px; cursor: pointer; border-radius: 6px;
+  margin-bottom: 16px;
+}
+.back-btn:hover { border-color: var(--blue); color: var(--text); }
+
+.detail-header {
+  display: flex; align-items: baseline; gap: 16px; margin-bottom: 8px;
+}
+.detail-ticker { font-family: 'JetBrains Mono', monospace; font-size: 28px; font-weight: 700; }
+.detail-name { color: var(--text2); font-size: 14px; }
+.detail-meta { color: var(--text3); font-size: 12px; margin-bottom: 20px; }
+
+.score-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px; margin-bottom: 24px;
+}
+.score-card {
+  background: var(--bg2); border: 1px solid var(--border); border-radius: 10px;
+  padding: 14px; text-align: center;
+}
+.score-card .label { font-size: 11px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
+.score-card .value { font-family: 'JetBrains Mono', monospace; font-size: 24px; font-weight: 700; }
+.score-card.quantum { border-color: var(--purple); }
+.score-card.quantum .label { color: var(--purple); }
+
+.chart-wrap {
+  background: var(--bg2); border: 1px solid var(--border); border-radius: 10px;
+  padding: 8px; margin-bottom: 24px; text-align: center;
+}
+.chart-wrap img { max-width: 100%; border-radius: 6px; }
+
+.metrics-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px; margin-bottom: 24px;
+}
+.metric-group {
+  background: var(--bg2); border: 1px solid var(--border); border-radius: 10px;
+  padding: 16px;
+}
+.metric-group h3 {
+  font-size: 12px; color: var(--blue); text-transform: uppercase;
+  letter-spacing: 0.5px; margin-bottom: 10px; font-weight: 600;
+}
+.metric-row {
+  display: flex; justify-content: space-between; padding: 4px 0;
+  font-size: 13px; border-bottom: 1px solid rgba(30,42,58,0.5);
+}
+.metric-row:last-child { border-bottom: none; }
+.metric-row .k { color: var(--text2); }
+.metric-row .v { font-family: 'JetBrains Mono', monospace; font-weight: 600; }
+
+/* LOADING */
+.loading {
+  text-align: center; padding: 60px; color: var(--text3);
+}
+.loading::after {
+  content: ""; display: block; width: 32px; height: 32px;
+  margin: 16px auto; border: 3px solid var(--border);
+  border-top-color: var(--blue); border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* SCORE COLORS */
+.sc-green { color: var(--green); }
+.sc-yellow { color: var(--yellow); }
+.sc-red { color: var(--red); }
+
+/* RESPONSIVE */
+@media (max-width: 768px) {
+  .header { flex-wrap: wrap; gap: 12px; padding: 10px 16px; }
+  .search-box { max-width: 100%; order: 3; }
+  .nav { order: 2; }
+  .main { padding: 16px; }
+  .score-grid { grid-template-columns: repeat(3, 1fr); }
+}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="logo">BIST TERMINAL<span>v1.0</span></div>
+  <div class="search-box">
+    <input type="text" id="searchInput" placeholder="Ticker yaz... THYAO, ASELS, KOZAL" autocomplete="off">
+  </div>
+  <div class="nav">
+    <button class="active" onclick="showHome()">Quantum Top 10</button>
+  </div>
+</div>
+
+<div class="main">
+  <!-- HOME: TOP 10 -->
+  <div id="homeView">
+    <div class="top10-header">
+      <h2>🏆 <span>QUANTUM</span> TOP 10</h2>
+      <button class="refresh-btn" onclick="loadTop10()">↻ Yenile</button>
+    </div>
+    <div id="top10Content" class="loading">Quantum skorlar hesaplaniyor...</div>
+  </div>
+
+  <!-- DETAIL VIEW -->
+  <div id="detailView" class="detail">
+    <button class="back-btn" onclick="showHome()">← Listeye Dön</button>
+    <div id="detailContent"></div>
+  </div>
+</div>
+
+<script>
+const API = '';
+let currentView = 'home';
+
+// ================================================================
+// HELPERS
+// ================================================================
+function scoreColor(v) {
+  if (v >= 75) return 'sc-green';
+  if (v >= 55) return 'sc-yellow';
+  return 'sc-red';
+}
+
+function fmtPct(v) {
+  if (v == null) return 'N/A';
+  return (v * 100).toFixed(1) + '%';
+}
+
+function fmtNum(v, d=2) {
+  if (v == null) return 'N/A';
+  if (Math.abs(v) >= 1e9) return (v/1e9).toFixed(2) + 'B';
+  if (Math.abs(v) >= 1e6) return (v/1e6).toFixed(2) + 'M';
+  return v.toFixed(d);
+}
+
+function signalHTML(signals) {
+  return (signals || []).map(s => {
+    const cls = s.includes('Golden') || s.includes('Satım') || s.includes('Zirve')
+      ? 'signal-bull' : s.includes('Death') || s.includes('Alım') || s.includes('Dip')
+      ? 'signal-bear' : 'signal-neutral';
+    return `<span class="signal-tag ${cls}">${s}</span>`;
+  }).join(' ');
+}
+
+// ================================================================
+// TOP 10
+// ================================================================
+async function loadTop10() {
+  const el = document.getElementById('top10Content');
+  el.innerHTML = '<div class="loading">Quantum skorlar hesaplaniyor...</div>';
+  try {
+    const res = await fetch(`${API}/api/top10`);
+    const data = await res.json();
+    renderTop10(data.items);
+  } catch (e) {
+    el.innerHTML = '<div class="loading">Hata: ' + e.message + '</div>';
+  }
+}
+
+function renderTop10(items) {
+  const el = document.getElementById('top10Content');
+  if (!items || !items.length) {
+    el.innerHTML = '<div class="loading">Veri bulunamadı</div>';
+    return;
+  }
+  let html = `<div class="table-wrap"><table>
+    <tr>
+      <th>#</th><th>Hisse</th><th>Quantum</th><th>Temel</th>
+      <th>Momentum</th><th>Flow</th><th>Fiyat</th><th>Stil</th><th>Sinyaller</th>
+    </tr>`;
+  items.forEach((item, i) => {
+    const qc = scoreColor(item.quantum);
+    const fc = scoreColor(item.fundamental);
+    const mc = scoreColor(item.momentum || 50);
+    html += `<tr onclick="loadDetail('${item.ticker}')">
+      <td>${i+1}</td>
+      <td class="ticker-cell">${item.ticker}</td>
+      <td class="score-cell ${qc}">${item.quantum}</td>
+      <td class="${fc}">${item.fundamental}</td>
+      <td class="${mc}">${item.momentum != null ? item.momentum : '—'}</td>
+      <td>${item.flow != null ? item.flow.toFixed(0) : '—'}</td>
+      <td>₺${item.price ? item.price.toFixed(2) : '—'}</td>
+      <td style="color:var(--text3);font-size:11px">${item.style}</td>
+      <td>${signalHTML(item.signals)}</td>
+    </tr>`;
+  });
+  html += '</table></div>';
+  el.innerHTML = html;
+}
+
+// ================================================================
+// DETAIL
+// ================================================================
+async function loadDetail(ticker) {
+  document.getElementById('homeView').style.display = 'none';
+  document.getElementById('detailView').style.display = 'block';
+  document.getElementById('detailView').classList.add('active');
+  const el = document.getElementById('detailContent');
+  el.innerHTML = '<div class="loading">' + ticker + ' analiz ediliyor...</div>';
+  currentView = 'detail';
+
+  try {
+    const [qRes, aRes] = await Promise.all([
+      fetch(`${API}/api/quantum/${ticker}`),
+      fetch(`${API}/api/analyze/${ticker}`)
+    ]);
+    const q = await qRes.json();
+    const a = await aRes.json();
+    renderDetail(q, a, ticker);
+  } catch (e) {
+    el.innerHTML = '<div class="loading">Hata: ' + e.message + '</div>';
+  }
+}
+
+function renderDetail(q, a, ticker) {
+  const el = document.getElementById('detailContent');
+  const s = q.scores || a.scores || {};
+  const t = q.tech || {};
+
+  let html = `
+    <div class="detail-header">
+      <div class="detail-ticker">${a.ticker}</div>
+      <div class="detail-name">${a.name}</div>
+    </div>
+    <div class="detail-meta">
+      ${a.sector || ''} ${a.industry ? '· ' + a.industry : ''} · ${a.style} · ${a.currency}
+      ${t.pct_from_high != null ? ' · 52W: ' + t.pct_from_high + '% zirveden' : ''}
+    </div>
+
+    <div class="score-grid">
+      <div class="score-card quantum">
+        <div class="label">Quantum Score</div>
+        <div class="value ${scoreColor(q.quantum)}">${q.quantum}</div>
+      </div>
+      <div class="score-card">
+        <div class="label">Temel</div>
+        <div class="value ${scoreColor(a.overall)}">${a.overall}</div>
+      </div>
+      <div class="score-card">
+        <div class="label">Momentum</div>
+        <div class="value ${scoreColor(q.momentum || 50)}">${q.momentum || '—'}</div>
+      </div>
+      <div class="score-card">
+        <div class="label">Flow</div>
+        <div class="value ${scoreColor(q.flow || 50)}">${q.flow ? q.flow.toFixed(0) : '—'}</div>
+      </div>
+      <div class="score-card">
+        <div class="label">Fiyat</div>
+        <div class="value" style="color:var(--text)">₺${a.price ? a.price.toFixed(2) : '—'}</div>
+      </div>
+      <div class="score-card">
+        <div class="label">Piotroski</div>
+        <div class="value ${(a.piotroski||0) >= 7 ? 'sc-green' : (a.piotroski||0) >= 5 ? 'sc-yellow' : 'sc-red'}">${a.piotroski != null ? a.piotroski + '/9' : 'N/A'}</div>
+      </div>
+    </div>
+
+    ${q.signals && q.signals.length ? '<div style="margin-bottom:20px">' + signalHTML(q.signals) + '</div>' : ''}
+
+    <div class="chart-wrap">
+      <img src="/api/chart/${ticker}" alt="Chart" onerror="this.parentElement.innerHTML='Chart yüklenemedi'">
+    </div>
+
+    <div class="score-grid" style="margin-bottom:24px">
+      ${['value','quality','growth','balance','earnings','moat'].map(k =>
+        `<div class="score-card">
+          <div class="label">${k}</div>
+          <div class="value ${scoreColor(s[k] || 50)}">${s[k] != null ? s[k].toFixed(0) : '—'}</div>
+        </div>`
+      ).join('')}
+    </div>
+
+    <div class="metrics-grid">
+      <div class="metric-group">
+        <h3>Değerleme</h3>
+        <div class="metric-row"><span class="k">P/E</span><span class="v">${fmtNum(a.pe)}</span></div>
+        <div class="metric-row"><span class="k">P/B</span><span class="v">${fmtNum(a.pb)}</span></div>
+        <div class="metric-row"><span class="k">EV/EBITDA</span><span class="v">${fmtNum(a.ev_ebitda)}</span></div>
+        <div class="metric-row"><span class="k">FCF Yield</span><span class="v">${fmtPct(a.fcf_yield)}</span></div>
+        <div class="metric-row"><span class="k">Graham FV</span><span class="v">${fmtNum(a.graham_fv)}</span></div>
+        <div class="metric-row"><span class="k">MoS</span><span class="v">${fmtPct(a.margin_safety)}</span></div>
+      </div>
+      <div class="metric-group">
+        <h3>Kalite</h3>
+        <div class="metric-row"><span class="k">ROE</span><span class="v">${fmtPct(a.roe)}</span></div>
+        <div class="metric-row"><span class="k">ROIC</span><span class="v">${fmtPct(a.roic)}</span></div>
+        <div class="metric-row"><span class="k">Gross Margin</span><span class="v">${fmtPct(a.gross_margin)}</span></div>
+        <div class="metric-row"><span class="k">Op Margin</span><span class="v">${fmtPct(a.operating_margin)}</span></div>
+        <div class="metric-row"><span class="k">Net Margin</span><span class="v">${fmtPct(a.net_margin)}</span></div>
+      </div>
+      <div class="metric-group">
+        <h3>Büyüme</h3>
+        <div class="metric-row"><span class="k">Gelir Büyümesi</span><span class="v">${fmtPct(a.revenue_growth)}</span></div>
+        <div class="metric-row"><span class="k">EPS Büyümesi</span><span class="v">${fmtPct(a.eps_growth)}</span></div>
+        <div class="metric-row"><span class="k">Temettü</span><span class="v">${fmtPct(a.dividend_yield)}</span></div>
+      </div>
+      <div class="metric-group">
+        <h3>Bilanço</h3>
+        <div class="metric-row"><span class="k">Borç/Özsermaye</span><span class="v">${fmtNum(a.debt_equity)}</span></div>
+        <div class="metric-row"><span class="k">Net Borç/EBITDA</span><span class="v">${fmtNum(a.net_debt_ebitda)}</span></div>
+        <div class="metric-row"><span class="k">Cari Oran</span><span class="v">${fmtNum(a.current_ratio)}</span></div>
+        <div class="metric-row"><span class="k">Faiz Karşılama</span><span class="v">${fmtNum(a.interest_coverage)}</span></div>
+        <div class="metric-row"><span class="k">Altman Z</span><span class="v">${a.altman != null ? a.altman.toFixed(2) : 'N/A'}</span></div>
+      </div>
+    </div>
+
+    ${t.rsi != null ? `
+    <div class="metric-group" style="margin-bottom:24px">
+      <h3>Teknik Göstergeler</h3>
+      <div class="metric-row"><span class="k">RSI (14)</span><span class="v">${t.rsi ? t.rsi.toFixed(1) : 'N/A'}</span></div>
+      <div class="metric-row"><span class="k">MACD</span><span class="v ${t.macd_bullish ? 'sc-green' : 'sc-red'}">${t.macd_bullish ? 'Bullish' : 'Bearish'}</span></div>
+      <div class="metric-row"><span class="k">MA Durum</span><span class="v ${t.ma_state === 'BULLISH' ? 'sc-green' : 'sc-red'}">${t.ma_state || '—'}</span></div>
+      <div class="metric-row"><span class="k">Flow</span><span class="v ${t.flow_score > 0 ? 'sc-green' : 'sc-red'}">${t.flow_score}</span></div>
+      <div class="metric-row"><span class="k">Hacim</span><span class="v">${t.vol_ratio}x ort.</span></div>
+      <div class="metric-row"><span class="k">52W Range</span><span class="v">₺${t.low_52w?.toFixed(2)} — ₺${t.high_52w?.toFixed(2)}</span></div>
+    </div>` : ''}
+  `;
+  el.innerHTML = html;
+}
+
+function showHome() {
+  document.getElementById('homeView').style.display = 'block';
+  document.getElementById('detailView').style.display = 'none';
+  document.getElementById('detailView').classList.remove('active');
+  currentView = 'home';
+}
+
+// ================================================================
+// SEARCH
+// ================================================================
+document.getElementById('searchInput').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') {
+    const ticker = this.value.trim().toUpperCase().replace('.IS','');
+    if (ticker.length >= 3) {
+      loadDetail(ticker);
+      this.value = '';
+    }
+  }
+});
+
+// AUTO-LOAD
+loadTop10();
+</script>
+</body>
+</html>
