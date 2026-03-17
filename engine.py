@@ -17,7 +17,7 @@ log = logging.getLogger("engine")
 UNIVERSE = [
     "ASELS","THYAO","BIMAS","KCHOL","SISE","EREGL","TUPRS","AKBNK","ISCTR","YKBNK",
     "GARAN","SAHOL","MGROS","FROTO","TOASO","TCELL","KRDMD","PETKM","ENKAI","TAVHL",
-    "PGSUS","EKGYO","KOZAL","TTKOM","ARCLK","VESTL","DOHOL","AYGAZ","LOGO","SOKM",
+    "PGSUS","EKGYO","KOZAA","TTKOM","ARCLK","VESTL","DOHOL","AYGAZ","LOGO","SOKM",
     "TKFEN","KONTR","ODAS","GUBRF","SASA","ISMEN","OYAKC","CIMSA","MPARK","AKSEN",
 ]
 
@@ -553,3 +553,113 @@ def scan_top10():
             except Exception: pass
     results.sort(key=lambda x: x["quantum"], reverse=True)
     return results[:10]
+
+# ================================================================
+# AI TRADER SUMMARY (GPT-4o-mini)
+# ================================================================
+import os as _os
+AI_CACHE = TTLCache(maxsize=200, ttl=7200)
+
+def ai_summary(ticker, quantum_data):
+    key = f"{ticker}_{quantum_data.get('quantum',0)}"
+    if key in AI_CACHE: return AI_CACHE[key]
+    api_key = _os.environ.get("OPENAI_KEY","")
+    if not api_key: return None
+    try:
+        from openai import OpenAI
+        client = OpenAI(api_key=api_key)
+        q = quantum_data
+        s = q.get("scores",{})
+        t = q.get("tech",{}) or {}
+        prompt = (
+            f"Sen BIST uzmani Turk trader. 2-3 cumle ile yatirim tezi yaz. Turkce, kisa, net.\n"
+            f"Hisse: {q['ticker']} ({q['name']})\n"
+            f"Quantum: {q['quantum']}/100 | Stil: {q['style']}\n"
+            f"Value:{s.get('value',0):.0f} Quality:{s.get('quality',0):.0f} Growth:{s.get('growth',0):.0f} "
+            f"Balance:{s.get('balance',0):.0f} Moat:{s.get('moat',0):.0f}\n"
+            f"RSI:{t.get('rsi','?')} MACD:{'Bullish' if t.get('macd_bullish') else 'Bearish'} "
+            f"Flow:{t.get('flow_score','?')} 52W:{t.get('pct_from_high','?')}%\n"
+            f"Sinyaller: {', '.join(q.get('signals',[])) or 'Yok'}\n\n"
+            f"SADECE 2-3 cumle yaz. Pozitif ve negatif dengeli. Baska birsey yazma."
+        )
+        resp = client.chat.completions.create(
+            model=_os.environ.get("SCORING_MODEL","gpt-4o-mini"),
+            max_tokens=200, temperature=0.4,
+            messages=[{"role":"user","content":prompt}]
+        )
+        text = resp.choices[0].message.content.strip()
+        AI_CACHE[key] = text
+        return text
+    except Exception as e:
+        log.warning(f"AI {ticker}: {e}")
+        return None
+
+# ================================================================
+# TECHNICAL SIGNALS DETAIL
+# ================================================================
+def tech_detail(ticker):
+    tech = compute_technical(ticker)
+    if not tech: return None
+    signals = []
+    rsi = tech.get("rsi")
+    if rsi:
+        if rsi > 70:
+            signals.append({"name":"RSI","value":f"{rsi:.0f}","status":"danger","detail":"Asiri alim bolgesi. Kisa vadede duzeltme riski yuksek."})
+        elif rsi > 60:
+            signals.append({"name":"RSI","value":f"{rsi:.0f}","status":"warning","detail":"Guclu momentum. Trend devam edebilir ama dikkatli ol."})
+        elif rsi > 40:
+            signals.append({"name":"RSI","value":f"{rsi:.0f}","status":"neutral","detail":"Notr bolge. Net yon belli degil."})
+        elif rsi > 30:
+            signals.append({"name":"RSI","value":f"{rsi:.0f}","status":"opportunity","detail":"Asiri satima yakinlasiyor. Dip olusmasini bekle."})
+        else:
+            signals.append({"name":"RSI","value":f"{rsi:.0f}","status":"opportunity","detail":"Asiri satim. Teknik toparlanma beklentisi guclu."})
+
+    if tech.get("macd_bullish"):
+        signals.append({"name":"MACD","value":f"{tech['macd_hist']:.4f}","status":"bullish","detail":"MACD pozitif. Yukari momentum devam ediyor."})
+    else:
+        signals.append({"name":"MACD","value":f"{tech['macd_hist']:.4f}","status":"bearish","detail":"MACD negatif. Asagi baski devam ediyor."})
+
+    ma = tech.get("ma_state")
+    if ma == "BULLISH":
+        signals.append({"name":"MA Trend","value":"Yukari","status":"bullish","detail":"MA50 > MA200. Orta vade trend yukari."})
+    elif ma == "BEARISH":
+        signals.append({"name":"MA Trend","value":"Asagi","status":"bearish","detail":"MA50 < MA200. Orta vade trend asagi."})
+
+    cross = tech.get("cross")
+    if cross == "GOLDEN":
+        signals.append({"name":"Golden Cross","value":"Aktif","status":"bullish","detail":"Son 5 gunde MA50 yukari kesti MA200. Guclu alis sinyali."})
+    elif cross == "DEATH":
+        signals.append({"name":"Death Cross","value":"Aktif","status":"bearish","detail":"Son 5 gunde MA50 asagi kesti MA200. Guclu satis sinyali."})
+
+    flow = tech.get("flow_score", 0)
+    if flow > 30:
+        signals.append({"name":"Para Akisi","value":f"+{flow:.0f}","status":"bullish","detail":"Guclu para girisi. Kurumsal alim olabilir."})
+    elif flow < -30:
+        signals.append({"name":"Para Akisi","value":f"{flow:.0f}","status":"bearish","detail":"Guclu para cikisi. Kurumsal satis olabilir."})
+    else:
+        signals.append({"name":"Para Akisi","value":f"{flow:.0f}","status":"neutral","detail":"Dengede. Belirgin yon yok."})
+
+    vol = tech.get("vol_ratio", 1)
+    if vol > 2:
+        signals.append({"name":"Hacim","value":f"{vol:.1f}x","status":"warning","detail":f"Hacim ortalamanin {vol:.1f} kati. Onemli hareket olabilir."})
+
+    if tech.get("is_squeeze"):
+        signals.append({"name":"BB Squeeze","value":"Aktif","status":"warning","detail":"Bollinger bantlari daralmis. Sert kirilim yaklasıyor."})
+
+    pct_h = tech.get("pct_from_high", -99)
+    pct_l = tech.get("pct_from_low", 99)
+    if pct_h >= -3:
+        signals.append({"name":"52W Zirve","value":f"{pct_h:.1f}%","status":"bullish","detail":"52 haftalik zirveye cok yakin. Momentum cok guclu."})
+    if pct_l <= 5:
+        signals.append({"name":"52W Dip","value":f"+{pct_l:.1f}%","status":"danger","detail":"52 haftalik dibe yakin. Deger firsati veya tuzak."})
+
+    bull = sum(1 for s in signals if s["status"] in ("bullish","opportunity"))
+    bear = sum(1 for s in signals if s["status"] in ("bearish","danger"))
+    if bull > bear + 1:
+        overall = "Teknik gostergelerin cogunlugu yukari yonu isaret ediyor."
+    elif bear > bull + 1:
+        overall = "Teknik gostergelerin cogunlugu asagi yonu isaret ediyor."
+    else:
+        overall = "Teknik gorunumde net bir yon yok. Karar icin ek veri bekle."
+
+    return {"signals": signals, "overall": overall, "momentum": tech.get("momentum_score",50), "breakout": tech.get("breakout_score",0)}

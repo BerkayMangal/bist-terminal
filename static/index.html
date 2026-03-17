@@ -183,7 +183,7 @@ tr:hover td { background: var(--bg3); }
 <div class="header">
   <div class="logo">BIST TERMINAL<span>v1.0</span></div>
   <div class="search-box">
-    <input type="text" id="searchInput" placeholder="Ticker yaz... THYAO, ASELS, KOZAL" autocomplete="off">
+    <input type="text" id="searchInput" placeholder="Ticker yaz... THYAO, ASELS, KOZAA" autocomplete="off">
   </div>
   <div class="nav">
     <button class="active" onclick="showHome()">Quantum Top 10</button>
@@ -285,6 +285,38 @@ function renderTop10(items) {
   });
   html += '</table></div>';
   el.innerHTML = html;
+
+    // AI Summary
+    fetch(`${API}/api/ai/${ticker}`)
+      .then(r => r.json())
+      .then(data => {
+        const box = document.getElementById('aiBox');
+        if (data.summary && box) {
+          box.innerHTML = '<div style="background:var(--bg2);border:1px solid var(--purple);border-radius:10px;padding:16px;margin-bottom:24px"><h3 style="font-size:12px;color:var(--purple);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">\ud83e\udd16 AI Trader Yorumu</h3><p style="color:var(--text);font-size:14px;line-height:1.6">' + data.summary + '</p></div>';
+        } else if (box) { box.innerHTML = ''; }
+      }).catch(() => { const b = document.getElementById('aiBox'); if(b) b.innerHTML = ''; });
+
+    // Tech Detail
+    fetch(`${API}/api/techdetail/${ticker}`)
+      .then(r => r.json())
+      .then(data => {
+        const box = document.getElementById('techBox');
+        if (data && data.signals && box) {
+          const colors = {bullish:'var(--green)',bearish:'var(--red)',danger:'var(--red)',warning:'var(--yellow)',opportunity:'var(--green)',neutral:'var(--text3)'};
+          const icons = {bullish:'\u25b2',bearish:'\u25bc',danger:'\u26a0',warning:'\u26a1',opportunity:'\u2605',neutral:'\u25cf'};
+          let th = '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:24px"><h3 style="font-size:12px;color:var(--blue);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">Teknik Analiz Detay</h3>';
+          th += '<p style="color:var(--text);font-size:13px;margin-bottom:12px;font-style:italic">' + data.overall + '</p>';
+          data.signals.forEach(s => {
+            th += '<div style="padding:10px 0;border-bottom:1px solid var(--border)">';
+            th += '<div style="display:flex;justify-content:space-between;align-items:center">';
+            th += '<span style="color:var(--text);font-weight:600;font-size:13px">' + (icons[s.status]||'\u25cf') + ' ' + s.name + '</span>';
+            th += '<span style="font-family:JetBrains Mono;font-weight:700;color:' + (colors[s.status]||'var(--text)') + '">' + s.value + '</span>';
+            th += '</div><div style="color:var(--text2);font-size:12px;margin-top:4px">' + s.detail + '</div></div>';
+          });
+          th += '</div>';
+          box.innerHTML = th;
+        } else if (box) { box.innerHTML = ''; }
+      }).catch(() => { const b = document.getElementById('techBox'); if(b) b.innerHTML = ''; });
 }
 
 // ================================================================
@@ -355,6 +387,7 @@ function renderDetail(q, a, ticker) {
 
     ${q.signals && q.signals.length ? '<div style="margin-bottom:20px">' + signalHTML(q.signals) + '</div>' : ''}
 
+    <div id="aiBox"><div style="text-align:center;padding:20px;color:var(--text3)">AI yorumu yukleniyor...</div></div>
     <div class="chart-wrap">
       <img src="/api/chart/${ticker}" alt="Chart" onerror="this.parentElement.innerHTML='Chart yüklenemedi'">
     </div>
@@ -368,6 +401,7 @@ function renderDetail(q, a, ticker) {
       ).join('')}
     </div>
 
+    <div id="techBox"><div style="text-align:center;padding:20px;color:var(--text3)">Teknik analiz yukleniyor...</div></div>
     <div class="metrics-grid">
       <div class="metric-group">
         <h3>Değerleme</h3>
@@ -414,6 +448,38 @@ function renderDetail(q, a, ticker) {
     </div>` : ''}
   `;
   el.innerHTML = html;
+
+    // AI Summary
+    fetch(`${API}/api/ai/${ticker}`)
+      .then(r => r.json())
+      .then(data => {
+        const box = document.getElementById('aiBox');
+        if (data.summary && box) {
+          box.innerHTML = '<div style="background:var(--bg2);border:1px solid var(--purple);border-radius:10px;padding:16px;margin-bottom:24px"><h3 style="font-size:12px;color:var(--purple);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">\ud83e\udd16 AI Trader Yorumu</h3><p style="color:var(--text);font-size:14px;line-height:1.6">' + data.summary + '</p></div>';
+        } else if (box) { box.innerHTML = ''; }
+      }).catch(() => { const b = document.getElementById('aiBox'); if(b) b.innerHTML = ''; });
+
+    // Tech Detail
+    fetch(`${API}/api/techdetail/${ticker}`)
+      .then(r => r.json())
+      .then(data => {
+        const box = document.getElementById('techBox');
+        if (data && data.signals && box) {
+          const colors = {bullish:'var(--green)',bearish:'var(--red)',danger:'var(--red)',warning:'var(--yellow)',opportunity:'var(--green)',neutral:'var(--text3)'};
+          const icons = {bullish:'\u25b2',bearish:'\u25bc',danger:'\u26a0',warning:'\u26a1',opportunity:'\u2605',neutral:'\u25cf'};
+          let th = '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:24px"><h3 style="font-size:12px;color:var(--blue);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">Teknik Analiz Detay</h3>';
+          th += '<p style="color:var(--text);font-size:13px;margin-bottom:12px;font-style:italic">' + data.overall + '</p>';
+          data.signals.forEach(s => {
+            th += '<div style="padding:10px 0;border-bottom:1px solid var(--border)">';
+            th += '<div style="display:flex;justify-content:space-between;align-items:center">';
+            th += '<span style="color:var(--text);font-weight:600;font-size:13px">' + (icons[s.status]||'\u25cf') + ' ' + s.name + '</span>';
+            th += '<span style="font-family:JetBrains Mono;font-weight:700;color:' + (colors[s.status]||'var(--text)') + '">' + s.value + '</span>';
+            th += '</div><div style="color:var(--text2);font-size:12px;margin-top:4px">' + s.detail + '</div></div>';
+          });
+          th += '</div>';
+          box.innerHTML = th;
+        } else if (box) { box.innerHTML = ''; }
+      }).catch(() => { const b = document.getElementById('techBox'); if(b) b.innerHTML = ''; });
 }
 
 function showHome() {

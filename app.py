@@ -90,6 +90,28 @@ async def api_chart(ticker: str):
     except Exception as e:
         raise HTTPException(500, str(e))
 
+
+@app.get("/api/ai/{ticker}")
+async def api_ai(ticker: str):
+    try:
+        q = await asyncio.get_event_loop().run_in_executor(pool, engine.quantum_score, ticker.upper())
+        if not q: raise HTTPException(404, "Veri yok")
+        summary = await asyncio.get_event_loop().run_in_executor(pool, engine.ai_summary, ticker.upper(), q)
+        return {"ticker": ticker.upper(), "summary": summary or "AI ozet alinamadi. OPENAI_KEY kontrol edin."}
+    except HTTPException: raise
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+@app.get("/api/techdetail/{ticker}")
+async def api_techdetail(ticker: str):
+    try:
+        r = await asyncio.get_event_loop().run_in_executor(pool, engine.tech_detail, ticker.upper())
+        if not r: raise HTTPException(404, "Veri yok")
+        return r
+    except HTTPException: raise
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
 @app.get("/api/health")
 async def health():
     return {"status": "ok", "universe": len(engine.UNIVERSE)}
