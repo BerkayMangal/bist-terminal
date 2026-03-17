@@ -5,7 +5,10 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY . .
+COPY app.py .
+COPY Procfile .
+RUN mkdir -p /app/static
+COPY static/index.html /app/static/index.html
 
 EXPOSE 8080
 

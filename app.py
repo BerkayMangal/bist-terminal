@@ -1071,4 +1071,5 @@ async def api_health():
     }
 
 # Serve static files AFTER api routes
+os.makedirs("static", exist_ok=True)
 app.mount("/", StaticFiles(directory="static", html=True), name="static")
