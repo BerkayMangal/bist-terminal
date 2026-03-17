@@ -1,5 +1,4 @@
 import os
-import json
 import logging
 import httpx
 from fastapi import FastAPI, Request
@@ -9,12 +8,15 @@ from fastapi.responses import FileResponse, JSONResponse
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger(__name__)
 
-app = FastAPI(title="BIST Terminal v2")
+app = FastAPI(title="BistBull v2")
 
-XAI_API_KEY = os.getenv("XAI_API_KEY", "")
-XAI_URL = "https://api.x.ai/v1/chat/completions"
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+OPENAI_URL = "https://api.openai.com/v1/chat/completions"
+MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 
-# ─── API endpoint ───
+log.info(f"OPENAI_API_KEY set: {'YES' if OPENAI_API_KEY else 'NO'}, len={len(OPENAI_API_KEY)}, model={MODEL}")
+
+
 @app.post("/api/analyze")
 async def analyze(request: Request):
     try:
@@ -22,61 +24,72 @@ async def analyze(request: Request):
         system = body.get("system", "")
         messages = body.get("messages", [])
 
-        # Grok uses OpenAI format: system message goes in messages array
-        grok_messages = []
+        oai_messages = []
         if system:
-            grok_messages.append({"role": "system", "content": system})
-        grok_messages.extend(messages)
+            oai_messages.append({"role": "system", "content": system})
+        oai_messages.extend(messages)
 
         payload = {
-            "model": "grok-3-fast",
-            "max_tokens": 8000,
-            "messages": grok_messages,
+            "model": MODEL,
+            "max_tokens": 4096,
             "temperature": 0.3,
+            "messages": oai_messages,
         }
 
         async with httpx.AsyncClient(timeout=120.0) as client:
             resp = await client.post(
-                XAI_URL,
+                OPENAI_URL,
                 headers={
                     "Content-Type": "application/json",
-                    "Authorization": f"Bearer {XAI_API_KEY}",
+                    "Authorization": f"Bearer {OPENAI_API_KEY}",
                 },
                 json=payload,
             )
+
+        raw = resp.text
+        log.info(f"OpenAI status={resp.status_code} body={raw[:300]}")
+
+        try:
             data = resp.json()
+        except Exception:
+            return JSONResponse({"error": f"Parse error: {raw[:200]}"}, status_code=500)
 
         if resp.status_code != 200:
-            err_msg = data.get("error", {}).get("message", str(data))
-            log.error(f"Grok {resp.status_code}: {err_msg}")
-            return JSONResponse({"error": err_msg}, status_code=resp.status_code)
+            if isinstance(data, dict):
+                err = data.get("error", {})
+                msg = err.get("message", str(err)) if isinstance(err, dict) else str(err)
+            else:
+                msg = str(data)
+            log.error(f"OpenAI {resp.status_code}: {msg}")
+            return JSONResponse({"error": msg}, status_code=resp.status_code)
 
-        # Convert OpenAI format to our frontend format
-        # OpenAI: {"choices": [{"message": {"content": "..."}}]}
-        # Our frontend expects: {"content": [{"type": "text", "text": "..."}]}
         text = data.get("choices", [{}])[0].get("message", {}).get("content", "")
-        result = {"content": [{"type": "text", "text": text}]}
-        return JSONResponse(result)
+        return JSONResponse({"content": [{"type": "text", "text": text}]})
 
     except Exception as e:
         log.error(f"API error: {e}")
         return JSONResponse({"error": str(e)}, status_code=500)
 
-# ─── Health check ───
+
 @app.get("/health")
 def health():
-    return {"status": "ok", "version": "2.0", "engine": "grok"}
+    return {"status": "ok", "version": "2.0", "engine": MODEL}
 
-# ─── Static files ───
+
 app.mount("/static", StaticFiles(directory="static"), name="static")
+
 
 @app.get("/")
 def index():
     return FileResponse("static/index.html")
 
+
 @app.get("/favicon.ico")
 def favicon():
-    return FileResponse("static/favicon.ico", media_type="image/x-icon") if os.path.exists("static/favicon.ico") else JSONResponse({})
+    if os.path.exists("static/favicon.ico"):
+        return FileResponse("static/favicon.ico", media_type="image/x-icon")
+    return JSONResponse({})
+
 
 if __name__ == "__main__":
     import uvicorn
