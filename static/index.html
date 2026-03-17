@@ -342,7 +342,7 @@ function dashboardHTML() {
         <div style="font:800 22px var(--disp);color:${n.skor>60?'var(--grn)':n.skor>40?'var(--amb)':'var(--red)'}">${n.skor||0}/100</div>
         <span style="font-size:10px;color:var(--t3)">Sentiment</span>
       </div>
-      ${(n.son_haberler||[]).slice(0,3).map(x=>`<div style="padding:3px 0;border-bottom:1px solid var(--brd);font-size:11px"><span style="color:${x.etki==='Pozitif'?'var(--grn)':x.etki==='Negatif'?'var(--red)':'var(--t3)';margin-right:5px">${x.etki==='Pozitif'?'▲':x.etki==='Negatif'?'▼':'●'}</span><span style="color:var(--t2)">${x.baslik}</span> <span style="color:var(--t3);font-size:9px">${x.kaynak||''}</span></div>`).join('')}
+      ${(n.son_haberler||[]).slice(0,3).map(x=>`<div style="padding:3px 0;border-bottom:1px solid var(--brd);font-size:11px"><span style="color:${x.etki==='Pozitif'?'var(--grn)':x.etki==='Negatif'?'var(--red)':'var(--t3)'};margin-right:5px">${x.etki==='Pozitif'?'▲':x.etki==='Negatif'?'▼':'●'}</span><span style="color:var(--t2)">${x.baslik}</span> <span style="color:var(--t3);font-size:9px">${x.kaynak||''}</span></div>`).join('')}
     </div>`;
   }
 
