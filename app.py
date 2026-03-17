@@ -1069,6 +1069,214 @@ async def api_health():
         "cache": {"raw": len(RAW_CACHE), "analysis": len(ANALYSIS_CACHE), "tech": len(TECH_CACHE)},
     }
 
+# ================================================================
+# MACRO RADAR — live macro indicators via yfinance
+# ================================================================
+MACRO_CACHE = TTLCache(maxsize=50, ttl=300)  # 5 min cache
+
+MACRO_SYMBOLS = {
+    "XU030": {"symbol": "XU030.IS", "name": "BIST 30", "category": "borsa"},
+    "XU100": {"symbol": "XU100.IS", "name": "BIST 100", "category": "borsa"},
+    "USDTRY": {"symbol": "USDTRY=X", "name": "USD/TRY", "category": "doviz"},
+    "EURTRY": {"symbol": "EURTRY=X", "name": "EUR/TRY", "category": "doviz"},
+    "BRENT": {"symbol": "BZ=F", "name": "Brent Petrol", "category": "emtia"},
+    "GOLD": {"symbol": "GC=F", "name": "Altin (oz)", "category": "emtia"},
+    "DXY": {"symbol": "DX-Y.NYB", "name": "Dolar Endeksi", "category": "global"},
+    "VIX": {"symbol": "^VIX", "name": "Korku Endeksi", "category": "global"},
+    "SP500": {"symbol": "^GSPC", "name": "S&P 500", "category": "global"},
+}
+
+def _fetch_macro_item(key, info):
+    try:
+        tk = yf.Ticker(info["symbol"])
+        h = tk.history(period="5d", interval="1d")
+        if h is None or h.empty:
+            return None
+        price = float(h["Close"].iloc[-1])
+        prev = float(h["Close"].iloc[-2]) if len(h) >= 2 else price
+        change = price - prev
+        change_pct = (change / prev * 100) if prev != 0 else 0
+        return {
+            "key": key, "name": info["name"], "category": info["category"],
+            "price": round(price, 4), "change": round(change, 4),
+            "change_pct": round(change_pct, 2),
+        }
+    except Exception as e:
+        log.debug(f"Macro {key}: {e}")
+        return None
+
+@app.get("/api/macro")
+async def api_macro():
+    cache_key = "macro_all"
+    if cache_key in MACRO_CACHE:
+        return MACRO_CACHE[cache_key]
+    try:
+        results = []
+        with ThreadPoolExecutor(max_workers=5) as pool:
+            futures = {pool.submit(_fetch_macro_item, k, v): k for k, v in MACRO_SYMBOLS.items()}
+            for f in as_completed(futures):
+                r = f.result()
+                if r:
+                    results.append(r)
+        result = {"timestamp": dt.datetime.now(dt.timezone.utc).isoformat(), "items": clean_for_json(results)}
+        MACRO_CACHE[cache_key] = result
+        return result
+    except Exception as e:
+        log.error(f"macro: {e}")
+        raise HTTPException(status_code=500, detail="Macro veri alinamadi")
+
+# ================================================================
+# DASHBOARD SUMMARY — aggregated hero data
+# ================================================================
+@app.get("/api/dashboard")
+async def api_dashboard():
+    """Aggregated dashboard: top picks, risks, opportunities, sector breakdown, counters"""
+    items = TOP10_CACHE.get("items", [])
+    scanned = len(items)
+
+    # Top 3 picks (highest overall)
+    top3 = []
+    for r in items[:3]:
+        top3.append({
+            "ticker": r["ticker"], "name": r["name"], "overall": r["overall"],
+            "style": r["style"], "scores": r["scores"],
+            "price": r["metrics"].get("price"),
+            "positives": r["positives"][:2],
+        })
+
+    # Top 3 opportunities (high value + growth combo)
+    opps = sorted([r for r in items if r["scores"].get("value", 0) >= 55],
+                  key=lambda x: x["scores"].get("value", 0) + x["scores"].get("growth", 0), reverse=True)
+    opportunities = []
+    for r in opps[:3]:
+        opportunities.append({
+            "ticker": r["ticker"], "name": r["name"], "overall": r["overall"],
+            "reason": f"Value: {r['scores']['value']:.0f} + Growth: {r['scores']['growth']:.0f}",
+            "price": r["metrics"].get("price"),
+        })
+
+    # Top 3 risks (low balance or low overall)
+    risky = sorted([r for r in items if r["scores"].get("balance", 100) < 50 or r["overall"] < 40],
+                   key=lambda x: x["overall"])
+    risks = []
+    for r in risky[:3]:
+        risks.append({
+            "ticker": r["ticker"], "name": r["name"], "overall": r["overall"],
+            "reason": "; ".join(r["negatives"][:2]),
+            "price": r["metrics"].get("price"),
+        })
+
+    # Sector breakdown
+    sector_map = defaultdict(lambda: {"count": 0, "avg_score": 0, "tickers": []})
+    for r in items:
+        sec = r.get("sector") or "Diger"
+        sector_map[sec]["count"] += 1
+        sector_map[sec]["avg_score"] += r["overall"]
+        sector_map[sec]["tickers"].append(r["ticker"])
+    sectors = []
+    for sec, data in sector_map.items():
+        sectors.append({
+            "sector": sec,
+            "count": data["count"],
+            "avg_score": round(data["avg_score"] / max(data["count"], 1), 1),
+            "tickers": data["tickers"][:5],
+        })
+    sectors.sort(key=lambda x: x["avg_score"], reverse=True)
+
+    # Style distribution
+    style_map = defaultdict(int)
+    for r in items:
+        style_map[r["style"]] += 1
+
+    return {
+        "scanned": scanned,
+        "asof": TOP10_CACHE["asof"].isoformat() if TOP10_CACHE.get("asof") else None,
+        "top3": clean_for_json(top3),
+        "opportunities": clean_for_json(opportunities),
+        "risks": clean_for_json(risks),
+        "sectors": clean_for_json(sectors),
+        "styles": dict(style_map),
+        "counters": {
+            "total_analyzed": scanned,
+            "cache_raw": len(RAW_CACHE),
+            "cache_tech": len(TECH_CACHE),
+            "cross_signals": len(cross_hunter.last_results),
+        },
+    }
+
+# ================================================================
+# BRIEFING — AI-generated market briefing
+# ================================================================
+BRIEFING_CACHE = TTLCache(maxsize=10, ttl=3600)
+
+@app.get("/api/briefing")
+async def api_briefing():
+    if not AI_AVAILABLE or not OPENAI_KEY:
+        return {"briefing": None, "error": "AI pasif — OPENAI_KEY gerekli"}
+    cache_key = "daily_briefing"
+    if cache_key in BRIEFING_CACHE:
+        return BRIEFING_CACHE[cache_key]
+    try:
+        items = TOP10_CACHE.get("items", [])
+        if not items:
+            return {"briefing": "Henuz tarama yapilmadi. Once SCAN calistirin.", "generated": False}
+
+        top5 = items[:5]
+        summary_parts = []
+        for r in top5:
+            summary_parts.append(f"{r['ticker']}: {r['overall']}/100 ({r['style']}), V:{r['scores']['value']:.0f} Q:{r['scores']['quality']:.0f} G:{r['scores']['growth']:.0f} B:{r['scores']['balance']:.0f}")
+
+        prompt = (
+            "Sen BistBull Terminal'in piyasa analisti yazarisin. Turkce yaz.\n"
+            "Asagidaki BIST hisse tarama sonuclarina gore kisa bir 'GUNUN OZETI' yaz.\n"
+            "3-4 cumle: genel piyasa durumu, en dikkat cekici hisseler, firsatlar ve riskler.\n"
+            "Sonra ayri 1-2 cumle: 'BUGUNKU STRATEJI' onerisi.\n"
+            "Profesyonel, net, aksiyona yonelik.\n\n"
+            f"Top 5 hisse:\n" + "\n".join(summary_parts) + "\n\n"
+            f"Toplam taranan: {len(items)} hisse\n"
+            "SADECE ozet ve strateji yaz. Baska birsey ekleme."
+        )
+        client = OpenAI(api_key=OPENAI_KEY)
+        resp = await asyncio.to_thread(
+            lambda: client.chat.completions.create(
+                model=SCORING_MODEL, max_tokens=400, temperature=0.5,
+                messages=[{"role": "user", "content": prompt}]
+            )
+        )
+        text = resp.choices[0].message.content.strip()
+        result = {"briefing": text, "generated": True, "timestamp": dt.datetime.now(dt.timezone.utc).isoformat()}
+        BRIEFING_CACHE[cache_key] = result
+        return result
+    except Exception as e:
+        log.warning(f"briefing: {e}")
+        return {"briefing": None, "error": str(e)}
+
+# ================================================================
+# QUICK ANALYZE — batch analyze multiple tickers at once
+# ================================================================
+@app.get("/api/batch/{tickers}")
+async def api_batch(tickers: str):
+    """Analyze up to 5 tickers at once: /api/batch/ASELS,THYAO,BIMAS"""
+    ticker_list = [t.strip().upper() for t in tickers.split(",") if t.strip()][:5]
+    results = []
+    for t in ticker_list:
+        try:
+            r = await asyncio.to_thread(analyze_symbol, normalize_symbol(t))
+            results.append({
+                "ticker": r["ticker"], "name": r["name"], "overall": r["overall"],
+                "confidence": r["confidence"], "style": r["style"],
+                "scores": r["scores"], "legendary": r["legendary"],
+                "positives": r["positives"], "negatives": r["negatives"],
+                "price": r["metrics"].get("price"),
+                "pe": r["metrics"].get("pe"),
+                "roe": r["metrics"].get("roe"),
+                "revenue_growth": r["metrics"].get("revenue_growth"),
+                "market_cap": r["metrics"].get("market_cap"),
+            })
+        except Exception as e:
+            results.append({"ticker": t, "error": str(e)})
+    return {"items": clean_for_json(results)}
+
 # Serve frontend — read index.html from same directory as app.py, no static/ folder needed
 _INDEX_HTML_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "index.html")
 
