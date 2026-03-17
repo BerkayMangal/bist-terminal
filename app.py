@@ -22,6 +22,14 @@ async def analyze(request: Request):
         system = body.get("system", "")
         messages = body.get("messages", [])
 
+        payload = {
+            "model": "claude-sonnet-4-20250514",
+            "max_tokens": 8000,
+            "messages": messages,
+        }
+        if system:
+            payload["system"] = system
+
         async with httpx.AsyncClient(timeout=120.0) as client:
             resp = await client.post(
                 ANTHROPIC_URL,
@@ -30,15 +38,15 @@ async def analyze(request: Request):
                     "x-api-key": ANTHROPIC_API_KEY,
                     "anthropic-version": "2023-06-01",
                 },
-                json={
-                    "model": "claude-sonnet-4-20250514",
-                    "max_tokens": 8000,
-                    "system": system,
-                    "messages": messages,
-                    "tools": [{"type": "web_search_20250305", "name": "web_search"}],
-                },
+                json=payload,
             )
             data = resp.json()
+
+        if resp.status_code != 200:
+            err_msg = data.get("error", {}).get("message", str(data))
+            log.error(f"Anthropic {resp.status_code}: {err_msg}")
+            return JSONResponse({"error": err_msg}, status_code=resp.status_code)
+
         return JSONResponse(data)
     except Exception as e:
         log.error(f"API error: {e}")
