@@ -4,1275 +4,244 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>BistBull Terminal</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='28' font-size='28'>🐂</text></svg>">
 <style>
-@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=IBM+Plex+Sans:wght@300;400;500;600;700&display=swap');
-
-:root {
-  --bg-primary: #0a0e17;
-  --bg-secondary: #0f1520;
-  --bg-tertiary: #141c2b;
-  --bg-card: #111927;
-  --bg-hover: #1a2436;
-  --border: #1e2d44;
-  --border-bright: #2a3f5f;
-  --text-primary: #e8edf5;
-  --text-secondary: #8899b4;
-  --text-muted: #556580;
-  --accent-green: #00e676;
-  --accent-green-dim: #00c85330;
-  --accent-red: #ff3d57;
-  --accent-red-dim: #ff3d5730;
-  --accent-yellow: #ffc107;
-  --accent-yellow-dim: #ffc10730;
-  --accent-blue: #2196f3;
-  --accent-blue-dim: #2196f330;
-  --accent-cyan: #00e5ff;
-  --accent-orange: #ff9100;
-  --accent-purple: #bb86fc;
-  --bull-gradient: linear-gradient(135deg, #00e676 0%, #00c853 100%);
-  --bear-gradient: linear-gradient(135deg, #ff3d57 0%, #d50000 100%);
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=DM+Sans:wght@300;400;500;600;700&display=swap');
+:root{
+--bg0:#060a10;--bg1:#0a0f18;--bg2:#0e1420;--bg3:#121a2a;--bg4:#182236;
+--bdr:#1a2540;--bdr2:#243352;
+--t1:#eaf0fa;--t2:#8fa0c0;--t3:#5a6e90;--t4:#3a4d6a;
+--grn:#00e676;--grn2:#00c853;--grnd:rgba(0,230,118,.12);
+--red:#ff3d57;--redd:rgba(255,61,87,.12);
+--ylw:#ffc107;--ylwd:rgba(255,193,7,.12);
+--blu:#2196f3;--blud:rgba(33,150,243,.12);
+--cyn:#00e5ff;--orn:#ff9100;--prp:#bb86fc;--prpd:rgba(187,134,252,.12);
+--rad:5px;--rad2:8px;
 }
-
-* { margin: 0; padding: 0; box-sizing: border-box; }
-
-body {
-  font-family: 'IBM Plex Sans', -apple-system, sans-serif;
-  background: var(--bg-primary);
-  color: var(--text-primary);
-  min-height: 100vh;
-  overflow-x: hidden;
-}
-
-::-webkit-scrollbar { width: 6px; height: 6px; }
-::-webkit-scrollbar-track { background: var(--bg-secondary); }
-::-webkit-scrollbar-thumb { background: var(--border-bright); border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: var(--accent-blue); }
-
-/* ============ HEADER ============ */
-.header {
-  background: var(--bg-secondary);
-  border-bottom: 1px solid var(--border);
-  padding: 0 24px;
-  height: 56px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  position: sticky;
-  top: 0;
-  z-index: 100;
-}
-.header-left { display: flex; align-items: center; gap: 16px; }
-.logo {
-  font-family: 'JetBrains Mono', monospace;
-  font-weight: 700;
-  font-size: 18px;
-  letter-spacing: -0.5px;
-}
-.logo .bull { color: var(--accent-green); }
-.logo .terminal { color: var(--text-muted); font-weight: 400; font-size: 12px; margin-left: 6px; }
-.version-badge {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 10px;
-  color: var(--accent-cyan);
-  background: var(--accent-blue-dim);
-  padding: 2px 8px;
-  border-radius: 3px;
-  border: 1px solid var(--accent-blue);
-}
-.header-center { display: flex; gap: 2px; }
-.nav-btn {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 12px;
-  font-weight: 500;
-  padding: 8px 18px;
-  background: transparent;
-  color: var(--text-secondary);
-  border: none;
-  cursor: pointer;
-  transition: all 0.15s;
-  border-bottom: 2px solid transparent;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-.nav-btn:hover { color: var(--text-primary); background: var(--bg-hover); }
-.nav-btn.active {
-  color: var(--accent-green);
-  border-bottom-color: var(--accent-green);
-  background: var(--accent-green-dim);
-}
-.header-right { display: flex; align-items: center; gap: 12px; }
-.status-dot {
-  width: 8px; height: 8px; border-radius: 50%;
-  background: var(--accent-green);
-  animation: pulse 2s infinite;
-}
-@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
-.clock {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 12px;
-  color: var(--text-muted);
-}
-
-/* ============ SEARCH BAR ============ */
-.search-bar {
-  background: var(--bg-tertiary);
-  border-bottom: 1px solid var(--border);
-  padding: 10px 24px;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-.search-input-wrap {
-  flex: 1;
-  max-width: 400px;
-  position: relative;
-}
-.search-input {
-  width: 100%;
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 14px;
-  padding: 8px 12px 8px 36px;
-  background: var(--bg-primary);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  color: var(--text-primary);
-  outline: none;
-  transition: border-color 0.2s;
-}
-.search-input:focus { border-color: var(--accent-blue); }
-.search-input::placeholder { color: var(--text-muted); }
-.search-icon {
-  position: absolute;
-  left: 10px;
-  top: 50%;
-  transform: translateY(-50%);
-  color: var(--text-muted);
-  font-size: 14px;
-}
-.quick-tickers { display: flex; gap: 6px; flex-wrap: wrap; }
-.quick-tick {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 11px;
-  padding: 4px 10px;
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: 3px;
-  color: var(--text-secondary);
-  cursor: pointer;
-  transition: all 0.15s;
-}
-.quick-tick:hover { border-color: var(--accent-blue); color: var(--accent-cyan); background: var(--accent-blue-dim); }
-
-/* ============ MAIN CONTENT ============ */
-.main { padding: 16px 24px; }
-.page { display: none; }
-.page.active { display: block; }
-
-/* ============ CARDS & PANELS ============ */
-.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-.grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
-.grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
-
-.card {
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  overflow: hidden;
-}
-.card-header {
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--border);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-.card-title {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--text-secondary);
-  text-transform: uppercase;
-  letter-spacing: 1px;
-}
-.card-body { padding: 16px; }
-
-/* ============ SCORE COMPONENTS ============ */
-.score-ring {
-  width: 120px; height: 120px;
-  border-radius: 50%;
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin: 0 auto 12px;
-}
-.score-ring svg { position: absolute; top: 0; left: 0; transform: rotate(-90deg); }
-.score-ring .value {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 28px;
-  font-weight: 700;
-  z-index: 1;
-}
-.score-ring .label {
-  font-size: 10px;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  position: absolute;
-  bottom: 20px;
-  z-index: 1;
-}
-
-.score-bar-wrap { margin-bottom: 10px; }
-.score-bar-label {
-  display: flex;
-  justify-content: space-between;
-  margin-bottom: 4px;
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 11px;
-}
-.score-bar-label .name { color: var(--text-secondary); }
-.score-bar-label .val { font-weight: 600; }
-.score-bar {
-  height: 6px;
-  background: var(--bg-primary);
-  border-radius: 3px;
-  overflow: hidden;
-}
-.score-bar-fill {
-  height: 100%;
-  border-radius: 3px;
-  transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-/* ============ DATA TABLE ============ */
-.data-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 12px;
-}
-.data-table th {
-  text-align: left;
-  padding: 8px 10px;
-  color: var(--text-muted);
-  font-weight: 500;
-  text-transform: uppercase;
-  font-size: 10px;
-  letter-spacing: 0.5px;
-  border-bottom: 1px solid var(--border);
-  position: sticky;
-  top: 0;
-  background: var(--bg-card);
-}
-.data-table td {
-  padding: 8px 10px;
-  border-bottom: 1px solid var(--border);
-  color: var(--text-primary);
-}
-.data-table tr:hover td { background: var(--bg-hover); }
-.data-table .clickable { cursor: pointer; }
-.data-table .clickable:hover { color: var(--accent-cyan); }
-
-/* ============ METRIC PILLS ============ */
-.pill {
-  display: inline-block;
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 11px;
-  padding: 2px 8px;
-  border-radius: 3px;
-  font-weight: 500;
-}
-.pill-green { background: var(--accent-green-dim); color: var(--accent-green); border: 1px solid #00e67650; }
-.pill-red { background: var(--accent-red-dim); color: var(--accent-red); border: 1px solid #ff3d5750; }
-.pill-yellow { background: var(--accent-yellow-dim); color: var(--accent-yellow); border: 1px solid #ffc10750; }
-.pill-blue { background: var(--accent-blue-dim); color: var(--accent-blue); border: 1px solid #2196f350; }
-
-/* ============ LOADING ============ */
-.loading {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 60px 20px;
-  gap: 16px;
-}
-.spinner {
-  width: 32px; height: 32px;
-  border: 3px solid var(--border);
-  border-top-color: var(--accent-green);
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-}
-@keyframes spin { to { transform: rotate(360deg); } }
-.loading-text {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 12px;
-  color: var(--text-muted);
-}
-
-/* ============ EMPTY STATE ============ */
-.empty-state {
-  text-align: center;
-  padding: 80px 20px;
-}
-.empty-state .icon { font-size: 48px; margin-bottom: 16px; opacity: 0.3; }
-.empty-state h3 { color: var(--text-secondary); font-size: 16px; margin-bottom: 8px; }
-.empty-state p { color: var(--text-muted); font-size: 13px; }
-
-/* ============ SIGNAL CARDS (Cross Hunter) ============ */
-.signal-card {
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 14px 16px;
-  border-left: 3px solid;
-  transition: transform 0.15s;
-}
-.signal-card:hover { transform: translateX(2px); }
-.signal-card.bullish { border-left-color: var(--accent-green); }
-.signal-card.bearish { border-left-color: var(--accent-red); }
-.signal-card.neutral { border-left-color: var(--accent-yellow); }
-.signal-name {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 13px;
-  font-weight: 600;
-  margin-bottom: 4px;
-}
-.signal-ticker {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 15px;
-  font-weight: 700;
-  color: var(--accent-cyan);
-  cursor: pointer;
-}
-.signal-ticker:hover { text-decoration: underline; }
-.signal-meta {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 11px;
-  color: var(--text-muted);
-  margin-top: 6px;
-}
-.signal-explain {
-  font-size: 11px;
-  color: var(--text-secondary);
-  font-style: italic;
-  margin-top: 4px;
-}
-
-/* ============ TICKER DETAIL PANEL ============ */
-.detail-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0,0,0,0.7);
-  z-index: 200;
-  display: none;
-  backdrop-filter: blur(4px);
-}
-.detail-overlay.open { display: flex; justify-content: center; align-items: flex-start; padding-top: 40px; }
-.detail-panel {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  width: 95%;
-  max-width: 1200px;
-  max-height: 90vh;
-  overflow-y: auto;
-  box-shadow: 0 20px 60px rgba(0,0,0,0.5);
-}
-.detail-header {
-  padding: 20px 24px;
-  border-bottom: 1px solid var(--border);
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  position: sticky;
-  top: 0;
-  background: var(--bg-secondary);
-  z-index: 1;
-}
-.detail-ticker {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 24px;
-  font-weight: 700;
-  color: var(--accent-cyan);
-}
-.detail-name { color: var(--text-secondary); font-size: 14px; margin-top: 2px; }
-.detail-close {
-  background: none;
-  border: 1px solid var(--border);
-  color: var(--text-secondary);
-  width: 32px; height: 32px;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 16px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.15s;
-}
-.detail-close:hover { border-color: var(--accent-red); color: var(--accent-red); }
-.detail-body { padding: 24px; }
-
-.detail-tabs { display: flex; gap: 2px; margin-bottom: 20px; border-bottom: 1px solid var(--border); }
-.detail-tab {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 11px;
-  padding: 8px 16px;
-  background: none;
-  border: none;
-  color: var(--text-muted);
-  cursor: pointer;
-  border-bottom: 2px solid transparent;
-  text-transform: uppercase;
-}
-.detail-tab:hover { color: var(--text-primary); }
-.detail-tab.active { color: var(--accent-green); border-bottom-color: var(--accent-green); }
-.detail-section { display: none; }
-.detail-section.active { display: block; }
-
-/* ============ METRIC GRID ============ */
-.metric-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; }
-.metric-item {
-  background: var(--bg-tertiary);
-  padding: 12px;
-  border-radius: 4px;
-  border: 1px solid var(--border);
-}
-.metric-label {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 10px;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  margin-bottom: 4px;
-}
-.metric-value {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 16px;
-  font-weight: 600;
-}
-
-/* ============ CHART WRAPPER ============ */
-.chart-img {
-  width: 100%;
-  border-radius: 6px;
-  border: 1px solid var(--border);
-}
-
-/* ============ AI BOX ============ */
-.ai-box {
-  background: linear-gradient(135deg, #1a1040 0%, #0f1520 100%);
-  border: 1px solid var(--accent-purple);
-  border-radius: 6px;
-  padding: 16px;
-  margin-top: 16px;
-}
-.ai-box-title {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 11px;
-  color: var(--accent-purple);
-  text-transform: uppercase;
-  margin-bottom: 8px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.ai-box-text { font-size: 14px; color: var(--text-primary); line-height: 1.6; }
-
-/* ============ SCAN BTN ============ */
-.scan-btn {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 12px;
-  font-weight: 600;
-  padding: 10px 24px;
-  background: var(--bull-gradient);
-  color: #000;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  transition: all 0.2s;
-}
-.scan-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 16px var(--accent-green-dim); }
-.scan-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
-
-/* ============ DRIVER TAGS ============ */
-.driver-tag {
-  display: inline-block;
-  font-size: 12px;
-  padding: 4px 10px;
-  border-radius: 3px;
-  margin: 3px 4px 3px 0;
-}
-.driver-pos { background: var(--accent-green-dim); color: var(--accent-green); }
-.driver-neg { background: var(--accent-red-dim); color: var(--accent-red); }
-
-/* ============ RESPONSIVE ============ */
-@media (max-width: 900px) {
-  .grid-2 { grid-template-columns: 1fr; }
-  .grid-3 { grid-template-columns: 1fr; }
-  .grid-4 { grid-template-columns: 1fr 1fr; }
-  .header { padding: 0 12px; }
-  .header-center { overflow-x: auto; }
-  .search-bar { flex-wrap: wrap; padding: 8px 12px; }
-  .quick-tickers { display: none; }
-  .main { padding: 12px; }
-  .detail-panel { width: 100%; border-radius: 0; }
-}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg0);color:var(--t1);min-height:100vh;overflow-x:hidden;}
+::-webkit-scrollbar{width:5px;height:5px;}::-webkit-scrollbar-track{background:var(--bg1);}::-webkit-scrollbar-thumb{background:var(--bdr2);border-radius:3px;}
+.mono{font-family:'JetBrains Mono',monospace;}
+.hdr{background:var(--bg1);border-bottom:1px solid var(--bdr);height:52px;display:flex;align-items:center;padding:0 20px;position:sticky;top:0;z-index:100;gap:16px;}
+.logo{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:17px;white-space:nowrap;letter-spacing:-.5px;}
+.logo b{color:var(--grn);}.logo small{color:var(--t3);font-weight:400;font-size:10px;margin-left:6px;}
+.hdr-nav{display:flex;gap:1px;margin-left:16px;}
+.nav-b{font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:500;padding:6px 14px;background:0;color:var(--t3);border:0;cursor:pointer;border-bottom:2px solid transparent;text-transform:uppercase;letter-spacing:.5px;transition:.15s;}
+.nav-b:hover{color:var(--t2);background:var(--bg3);}.nav-b.on{color:var(--grn);border-bottom-color:var(--grn);background:var(--grnd);}
+.hdr-r{margin-left:auto;display:flex;align-items:center;gap:10px;}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--grn);animation:pls 2s infinite;}
+@keyframes pls{0%,100%{opacity:1;}50%{opacity:.3;}}
+.clk{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--t3);}
+.tbar{background:var(--bg2);border-bottom:1px solid var(--bdr);height:32px;overflow:hidden;display:flex;align-items:center;}
+.tbar-inner{display:flex;gap:24px;white-space:nowrap;animation:scroll 40s linear infinite;padding-left:100%;}
+.tbar-inner:hover{animation-play-state:paused;}
+@keyframes scroll{to{transform:translateX(-50%);}}
+.tbar-item{font-family:'JetBrains Mono',monospace;font-size:11px;display:flex;gap:6px;align-items:center;flex-shrink:0;}
+.tbar-item .sym{color:var(--t2);font-weight:600;}.tbar-item .prc{color:var(--t1);}
+.cbar{background:linear-gradient(90deg,var(--bg2),var(--bg3));border-bottom:1px solid var(--bdr);padding:6px 20px;display:flex;align-items:center;gap:20px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--t3);text-transform:uppercase;letter-spacing:.5px;}
+.cbar-item{display:flex;align-items:center;gap:5px;}.cbar-val{color:var(--cyn);font-weight:700;font-size:13px;}
+.sbar{background:var(--bg2);border-bottom:1px solid var(--bdr);padding:8px 20px;display:flex;align-items:center;gap:10px;}
+.sinp{font-family:'JetBrains Mono',monospace;font-size:13px;padding:7px 12px;background:var(--bg0);border:1px solid var(--bdr);border-radius:var(--rad);color:var(--t1);outline:0;width:320px;transition:.2s;}
+.sinp:focus{border-color:var(--blu);}.sinp::placeholder{color:var(--t4);}
+.qticks{display:flex;gap:4px;flex-wrap:wrap;}
+.qtk{font-family:'JetBrains Mono',monospace;font-size:10px;padding:3px 8px;background:var(--bg3);border:1px solid var(--bdr);border-radius:3px;color:var(--t3);cursor:pointer;transition:.15s;}
+.qtk:hover{border-color:var(--cyn);color:var(--cyn);background:var(--blud);}
+.main{padding:16px 20px;max-width:1600px;margin:0 auto;}
+.page{display:none;}.page.on{display:block;}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+.g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;}
+.g4{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;}
+.card{background:var(--bg2);border:1px solid var(--bdr);border-radius:var(--rad2);overflow:hidden;transition:border-color .2s;}
+.card:hover{border-color:var(--bdr2);}
+.card-h{padding:10px 14px;border-bottom:1px solid var(--bdr);display:flex;align-items:center;justify-content:space-between;}
+.card-t{font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:600;color:var(--t3);text-transform:uppercase;letter-spacing:1px;}
+.card-b{padding:14px;}
+.hero{background:linear-gradient(135deg,var(--bg3) 0%,var(--bg2) 40%,#0c1628 100%);border:1px solid var(--bdr2);border-radius:var(--rad2);padding:24px;margin-bottom:16px;position:relative;overflow:hidden;}
+.hero::before{content:'';position:absolute;top:-40%;right:-10%;width:300px;height:300px;background:radial-gradient(circle,rgba(0,230,118,.06),transparent 70%);pointer-events:none;}
+.hero-tag{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--grn);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:8px;}
+.hero-title{font-size:20px;font-weight:700;margin-bottom:6px;}
+.hero-sub{color:var(--t2);font-size:13px;line-height:1.6;}
+.hero-strat{margin-top:12px;padding:10px 14px;background:var(--grnd);border:1px solid rgba(0,230,118,.2);border-radius:var(--rad);font-size:13px;color:var(--grn);line-height:1.5;}
+.pill{display:inline-block;font-family:'JetBrains Mono',monospace;font-size:10px;padding:2px 7px;border-radius:3px;font-weight:600;}
+.p-grn{background:var(--grnd);color:var(--grn);border:1px solid rgba(0,230,118,.3);}
+.p-red{background:var(--redd);color:var(--red);border:1px solid rgba(255,61,87,.3);}
+.p-ylw{background:var(--ylwd);color:var(--ylw);border:1px solid rgba(255,193,7,.3);}
+.p-blu{background:var(--blud);color:var(--blu);border:1px solid rgba(33,150,243,.3);}
+.ring{position:relative;display:flex;align-items:center;justify-content:center;}
+.ring svg{transform:rotate(-90deg);}.ring .rv{position:absolute;font-family:'JetBrains Mono',monospace;font-weight:700;z-index:1;}.ring .rl{position:absolute;bottom:12px;font-size:8px;color:var(--t3);text-transform:uppercase;z-index:1;}
+.sb{margin-bottom:8px;}.sb-l{display:flex;justify-content:space-between;margin-bottom:3px;font-family:'JetBrains Mono',monospace;font-size:10px;}.sb-l .n{color:var(--t3);}.sb-l .v{font-weight:600;}.sb-bar{height:5px;background:var(--bg0);border-radius:3px;overflow:hidden;}.sb-fill{height:100%;border-radius:3px;transition:width .8s cubic-bezier(.4,0,.2,1);}
+.dtb{width:100%;border-collapse:collapse;font-family:'JetBrains Mono',monospace;font-size:11px;}
+.dtb th{text-align:left;padding:7px 8px;color:var(--t4);font-weight:500;text-transform:uppercase;font-size:9px;letter-spacing:.5px;border-bottom:1px solid var(--bdr);position:sticky;top:0;background:var(--bg2);}
+.dtb td{padding:7px 8px;border-bottom:1px solid var(--bdr);}.dtb tr:hover td{background:var(--bg4);}
+.clk-t{cursor:pointer;color:var(--cyn);font-weight:700;}.clk-t:hover{text-decoration:underline;}
+.pkc{background:var(--bg3);border:1px solid var(--bdr);border-radius:var(--rad);padding:14px;border-left:3px solid var(--grn);transition:.15s;}
+.pkc:hover{transform:translateX(2px);}.pkc.risk{border-left-color:var(--red);}.pkc.opp{border-left-color:var(--ylw);}
+.pkc-tick{font-family:'JetBrains Mono',monospace;font-size:16px;font-weight:700;color:var(--cyn);cursor:pointer;}.pkc-tick:hover{text-decoration:underline;}
+.pkc-score{font-family:'JetBrains Mono',monospace;font-size:22px;font-weight:700;}
+.pkc-reason{font-size:11px;color:var(--t2);margin-top:6px;line-height:1.4;}
+.mac-item{background:var(--bg3);border:1px solid var(--bdr);border-radius:var(--rad);padding:10px 12px;text-align:center;}
+.mac-sym{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--t3);text-transform:uppercase;margin-bottom:4px;}
+.mac-prc{font-family:'JetBrains Mono',monospace;font-size:15px;font-weight:700;}
+.mac-chg{font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:600;margin-top:2px;}
+.sec-bar{display:flex;align-items:flex-end;gap:6px;height:120px;padding-bottom:24px;position:relative;}
+.sec-col{flex:1;border-radius:3px 3px 0 0;min-width:40px;position:relative;transition:.3s;cursor:pointer;}.sec-col:hover{opacity:.85;}
+.sec-lbl{position:absolute;bottom:-20px;left:50%;transform:translateX(-50%);font-size:8px;color:var(--t4);white-space:nowrap;font-family:'JetBrains Mono',monospace;}
+.sec-val{position:absolute;top:-16px;left:50%;transform:translateX(-50%);font-size:9px;font-weight:700;font-family:'JetBrains Mono',monospace;}
+.sigc{background:var(--bg3);border:1px solid var(--bdr);border-radius:var(--rad);padding:12px 14px;border-left:3px solid var(--ylw);transition:.15s;}.sigc:hover{transform:translateX(2px);}.sigc.bull{border-left-color:var(--grn);}.sigc.bear{border-left-color:var(--red);}
+.wl-item{display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--bdr);}.wl-item:last-child{border:0;}
+.wl-tick{font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:700;color:var(--cyn);cursor:pointer;}.wl-tick:hover{text-decoration:underline;}
+.wl-rm{background:0;border:0;color:var(--t4);cursor:pointer;font-size:14px;}.wl-rm:hover{color:var(--red);}
+.btn{font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:600;padding:8px 18px;border:0;border-radius:var(--rad);cursor:pointer;text-transform:uppercase;letter-spacing:.5px;transition:.2s;}
+.btn:disabled{opacity:.4;cursor:not-allowed;}
+.btn-grn{background:linear-gradient(135deg,var(--grn),var(--grn2));color:#000;}.btn-grn:hover:not(:disabled){box-shadow:0 4px 16px var(--grnd);transform:translateY(-1px);}
+.btn-orn{background:linear-gradient(135deg,var(--orn),#ff6d00);color:#000;}
+.btn-blu{background:linear-gradient(135deg,var(--blu),#1565c0);color:#fff;}
+.btn-sm{font-size:9px;padding:4px 10px;}
+.ov{position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:200;display:none;backdrop-filter:blur(4px);}.ov.open{display:flex;justify-content:center;align-items:flex-start;padding-top:32px;}
+.dp{background:var(--bg1);border:1px solid var(--bdr2);border-radius:var(--rad2);width:96%;max-width:1200px;max-height:92vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.6);}
+.dp-h{padding:18px 20px;border-bottom:1px solid var(--bdr);display:flex;justify-content:space-between;align-items:flex-start;position:sticky;top:0;background:var(--bg1);z-index:1;}
+.dp-tick{font-family:'JetBrains Mono',monospace;font-size:22px;font-weight:700;color:var(--cyn);}
+.dp-name{color:var(--t2);font-size:13px;margin-top:2px;}
+.dp-close{background:0;border:1px solid var(--bdr);color:var(--t3);width:30px;height:30px;border-radius:4px;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;transition:.15s;}.dp-close:hover{border-color:var(--red);color:var(--red);}
+.dp-body{padding:20px;}
+.dp-tabs{display:flex;gap:1px;margin-bottom:16px;border-bottom:1px solid var(--bdr);}
+.dp-tab{font-family:'JetBrains Mono',monospace;font-size:10px;padding:7px 14px;background:0;border:0;color:var(--t4);cursor:pointer;border-bottom:2px solid transparent;text-transform:uppercase;}.dp-tab:hover{color:var(--t1);}.dp-tab.on{color:var(--grn);border-bottom-color:var(--grn);}
+.ds{display:none;}.ds.on{display:block;}
+.mg{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px;}
+.mi{background:var(--bg3);padding:10px;border-radius:var(--rad);border:1px solid var(--bdr);}
+.mi-l{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--t4);text-transform:uppercase;margin-bottom:3px;}
+.mi-v{font-family:'JetBrains Mono',monospace;font-size:15px;font-weight:600;}
+.aib{background:linear-gradient(135deg,#140e30,var(--bg2));border:1px solid var(--prp);border-radius:var(--rad);padding:14px;margin-top:14px;}
+.aib-t{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--prp);text-transform:uppercase;margin-bottom:6px;}.aib-tx{font-size:13px;color:var(--t1);line-height:1.6;}
+.ld{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:50px 20px;gap:12px;}
+.sp{width:28px;height:28px;border:3px solid var(--bdr);border-top-color:var(--grn);border-radius:50%;animation:spn .7s linear infinite;}
+@keyframes spn{to{transform:rotate(360deg);}}
+.ld-t{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--t3);}
+.emp{text-align:center;padding:60px 20px;}.emp h3{color:var(--t2);font-size:15px;margin-bottom:6px;}.emp p{color:var(--t3);font-size:12px;}
+.chart-img{width:100%;border-radius:var(--rad);border:1px solid var(--bdr);}
+.drv{display:inline-block;font-size:11px;padding:3px 8px;border-radius:3px;margin:2px 3px 2px 0;}.drv-p{background:var(--grnd);color:var(--grn);}.drv-n{background:var(--redd);color:var(--red);}
+.ls-item{font-family:'JetBrains Mono',monospace;font-size:11px;padding:4px 8px;background:var(--bg3);border:1px solid var(--bdr);border-radius:3px;color:var(--cyn);cursor:pointer;display:inline-block;margin:2px;}.ls-item:hover{background:var(--blud);}
+@media(max-width:900px){.g2,.g3,.g4{grid-template-columns:1fr;}.hdr{flex-wrap:wrap;height:auto;padding:8px 12px;}.hdr-nav{overflow-x:auto;width:100%;}.sbar .qticks{display:none;}.sinp{width:100%;}.main{padding:10px;}.hero{padding:16px;}}
 </style>
 </head>
 <body>
-
-<!-- ============ HEADER ============ -->
-<div class="header">
-  <div class="header-left">
-    <div class="logo">BIST<span class="bull">BULL</span><span class="terminal">TERMINAL</span></div>
-    <span class="version-badge">V5</span>
-  </div>
-  <div class="header-center">
-    <button class="nav-btn active" data-page="radar">Radar</button>
-    <button class="nav-btn" data-page="analiz">Analiz</button>
-    <button class="nav-btn" data-page="cross">Cross</button>
-    <button class="nav-btn" data-page="quantum">Quantum</button>
-    <button class="nav-btn" data-page="takas">Takas</button>
-  </div>
-  <div class="header-right">
-    <div class="status-dot"></div>
-    <div class="clock" id="clock"></div>
-  </div>
-</div>
-
-<!-- ============ SEARCH BAR ============ -->
-<div class="search-bar">
-  <div class="search-input-wrap">
-    <span class="search-icon">⌘</span>
-    <input type="text" class="search-input" id="searchInput" placeholder="Ticker yaz... (ASELS, THYAO, BIMAS)" autocomplete="off">
-  </div>
-  <div class="quick-tickers" id="quickTickers"></div>
-</div>
-
-<!-- ============ MAIN CONTENT ============ -->
+<div class="hdr"><div class="logo">BIST<b>BULL</b><small>TERMINAL V5</small></div><div class="hdr-nav" id="nav"></div><div class="hdr-r"><div class="dot"></div><div class="clk" id="clk"></div></div></div>
+<div class="tbar"><div class="tbar-inner" id="tbar"><div class="tbar-item"><span class="sym">BISTBULL</span><span class="prc" style="color:var(--t3)">Macro yukleniyor...</span></div></div></div>
+<div class="cbar"><div class="cbar-item">Analiz <span class="cbar-val" id="cnt-a">0</span></div><div class="cbar-item">Sinyal <span class="cbar-val" id="cnt-s">0</span></div><div class="cbar-item">Cache <span class="cbar-val" id="cnt-c">0</span></div><div class="cbar-item" style="margin-left:auto;">Son <span class="cbar-val" id="cnt-u">—</span></div></div>
+<div class="sbar"><input type="text" class="sinp" id="sinp" placeholder="Ticker ara... (ASELS, THYAO)" autocomplete="off"><div class="qticks" id="qticks"></div></div>
 <div class="main">
-
-  <!-- RADAR PAGE -->
-  <div class="page active" id="page-radar">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
-      <div>
-        <h2 style="font-family:'JetBrains Mono',monospace;font-size:16px;color:var(--accent-cyan);">BIST Top Radar</h2>
-        <p style="font-size:12px;color:var(--text-muted);margin-top:2px;" id="radarInfo">40 hisse universe — yfinance canli veri</p>
-      </div>
-      <button class="scan-btn" id="scanBtn" onclick="startScan()">▶ SCAN BASLAT</button>
-    </div>
-    <div id="radarContent">
-      <div class="empty-state">
-        <div class="icon">📡</div>
-        <h3>Radar bosn</h3>
-        <p>SCAN BASLAT butonuna basarak 40 hisselik BIST universe'i tarayin.</p>
-        <p style="margin-top:8px;color:var(--text-muted);font-size:11px;">yfinance canli veri — fake veri yok</p>
-      </div>
-    </div>
-  </div>
-
-  <!-- ANALIZ PAGE -->
-  <div class="page" id="page-analiz">
-    <div id="analizContent">
-      <div class="empty-state">
-        <div class="icon">📊</div>
-        <h3>Ticker secin</h3>
-        <p>Yukardaki arama cubuguna ticker yazin (ornek: ASELS, THYAO)</p>
-      </div>
-    </div>
-  </div>
-
-  <!-- CROSS PAGE -->
-  <div class="page" id="page-cross">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
-      <div>
-        <h2 style="font-family:'JetBrains Mono',monospace;font-size:16px;color:var(--accent-orange);">Cross Hunter</h2>
-        <p style="font-size:12px;color:var(--text-muted);margin-top:2px;">Golden/Death Cross, RSI, MACD, BB sinyalleri</p>
-      </div>
-      <button class="scan-btn" style="background:linear-gradient(135deg,#ff9100,#ff6d00);" onclick="startCross()">⚡ SINYAL TARA</button>
-    </div>
-    <div id="crossContent">
-      <div class="empty-state">
-        <div class="icon">🔍</div>
-        <h3>Sinyal taramasi baslatilmadi</h3>
-        <p>SINYAL TARA butonuna basarak 40 hissede teknik sinyalleri tarayin.</p>
-      </div>
-    </div>
-  </div>
-
-  <!-- QUANTUM PAGE (AI) -->
-  <div class="page" id="page-quantum">
-    <div>
-      <h2 style="font-family:'JetBrains Mono',monospace;font-size:16px;color:var(--accent-purple);">Quantum AI</h2>
-      <p style="font-size:12px;color:var(--text-muted);margin-top:2px;margin-bottom:16px;">GPT-4o-mini ile yatirim tezi — ticker secin</p>
-    </div>
-    <div id="quantumContent">
-      <div class="empty-state">
-        <div class="icon">🤖</div>
-        <h3>AI Ozet</h3>
-        <p>Ticker aratarak AI yatirim tezini gorun</p>
-      </div>
-    </div>
-  </div>
-
-  <!-- TAKAS PAGE -->
-  <div class="page" id="page-takas">
-    <div>
-      <h2 style="font-family:'JetBrains Mono',monospace;font-size:16px;color:var(--accent-blue);">Universe & Takas</h2>
-      <p style="font-size:12px;color:var(--text-muted);margin-top:2px;margin-bottom:16px;">40 hisselik BIST universe listesi</p>
-    </div>
-    <div id="takasContent"></div>
-  </div>
+<div class="page on" id="pg-home" data-page="home"></div>
+<div class="page" id="pg-radar" data-page="radar"></div>
+<div class="page" id="pg-cross" data-page="cross"></div>
+<div class="page" id="pg-makro" data-page="makro"></div>
 </div>
-
-<!-- ============ DETAIL OVERLAY ============ -->
-<div class="detail-overlay" id="detailOverlay" onclick="if(event.target===this)closeDetail()">
-  <div class="detail-panel" id="detailPanel"></div>
-</div>
-
+<div class="ov" id="ov" onclick="if(event.target===this)closeD()"><div class="dp" id="dp"></div></div>
 <script>
-// ================================================================
-// STATE
-// ================================================================
-const state = {
-  currentPage: 'radar',
-  scanData: null,
-  crossData: null,
-  detailCache: {},
-  techCache: {},
-};
+const S={page:'home',scan:null,cross:null,macro:null,dash:null,wl:JSON.parse(localStorage.getItem('bb_wl')||'[]'),seen:JSON.parse(localStorage.getItem('bb_seen')||'[]')};
+const QT=['ASELS','THYAO','BIMAS','KCHOL','TUPRS','AKBNK','GARAN','FROTO','TOASO','PGSUS','SISE','EREGL'];
+const PAGES=[{id:'home',label:'Home'},{id:'radar',label:'Radar'},{id:'cross',label:'Cross'},{id:'makro',label:'Makro'}];
+const $=s=>document.getElementById(s);
+const fN=(x,d=2)=>{if(x==null)return'N/A';if(Math.abs(x)>=1e9)return(x/1e9).toFixed(2)+'B';if(Math.abs(x)>=1e6)return(x/1e6).toFixed(2)+'M';if(Math.abs(x)>=1e3)return x.toLocaleString('en',{maximumFractionDigits:0});return x.toFixed(d);};
+const fP=(x,d=1)=>x==null?'N/A':(x*100).toFixed(d)+'%';
+const sC=v=>{if(v==null)return'var(--t3)';return v>=75?'var(--grn)':v>=55?'var(--ylw)':'var(--red)';};
+const sPill=v=>{if(v==null)return'<span class="pill p-blu">N/A</span>';return v>=75?`<span class="pill p-grn">${v.toFixed(0)}</span>`:v>=55?`<span class="pill p-ylw">${v.toFixed(0)}</span>`:`<span class="pill p-red">${v.toFixed(0)}</span>`;};
+const sPL=l=>l==='Pass'?'<span class="pill p-grn">Pass</span>':l==='Borderline'?'<span class="pill p-ylw">Border</span>':'<span class="pill p-red">Fail</span>';
+const chgC=v=>v>=0?'var(--grn)':'var(--red)';
+const chgS=v=>v>=0?'+'+v.toFixed(2):v.toFixed(2);
+async function api(p){const r=await fetch(p);if(!r.ok)throw new Error(r.status);return r.json();}
+setInterval(()=>{$('clk').textContent=new Date().toLocaleTimeString('tr-TR',{hour:'2-digit',minute:'2-digit',second:'2-digit'})+' IST';},1000);
 
-const QUICK_TICKERS = ['ASELS','THYAO','BIMAS','KCHOL','SISE','EREGL','TUPRS','AKBNK','GARAN','FROTO','TOASO','PGSUS'];
+// NAV
+const nav=$('nav');PAGES.forEach(p=>{const b=document.createElement('button');b.className='nav-b'+(p.id==='home'?' on':'');b.textContent=p.label;b.dataset.p=p.id;b.onclick=()=>goPage(p.id);nav.appendChild(b);});
+function goPage(id){S.page=id;nav.querySelectorAll('.nav-b').forEach(b=>b.classList.toggle('on',b.dataset.p===id));document.querySelectorAll('.page').forEach(p=>p.classList.toggle('on',p.dataset.page===id));if(id==='makro'&&!S.macro)loadMacroFull();if(id==='cross'&&!S.cross)startCross();}
 
-// ================================================================
-// HELPERS
-// ================================================================
-function fmtNum(x, d=2) {
-  if (x == null) return 'N/A';
-  if (Math.abs(x) >= 1e9) return (x/1e9).toFixed(2)+'B';
-  if (Math.abs(x) >= 1e6) return (x/1e6).toFixed(2)+'M';
-  if (Math.abs(x) >= 1e3) return x.toLocaleString('en',{maximumFractionDigits:0});
-  return x.toFixed(d);
-}
-function fmtPct(x, d=1) {
-  if (x == null) return 'N/A';
-  return (x*100).toFixed(d)+'%';
-}
-function scoreColor(v) {
-  if (v == null) return 'var(--text-muted)';
-  if (v >= 75) return 'var(--accent-green)';
-  if (v >= 55) return 'var(--accent-yellow)';
-  return 'var(--accent-red)';
-}
-function scorePill(v) {
-  if (v == null) return '<span class="pill pill-blue">N/A</span>';
-  if (v >= 75) return `<span class="pill pill-green">${v.toFixed(0)}</span>`;
-  if (v >= 55) return `<span class="pill pill-yellow">${v.toFixed(0)}</span>`;
-  return `<span class="pill pill-red">${v.toFixed(0)}</span>`;
-}
-function pillFor(label, value) {
-  const c = label === 'Pass' ? 'pill-green' : label === 'Borderline' ? 'pill-yellow' : 'pill-red';
-  return `<span class="pill ${c}">${label}</span>`;
-}
-
-// ================================================================
-// CLOCK
-// ================================================================
-function updateClock() {
-  const now = new Date();
-  document.getElementById('clock').textContent = now.toLocaleTimeString('tr-TR',{hour:'2-digit',minute:'2-digit',second:'2-digit'}) + ' IST';
-}
-setInterval(updateClock, 1000);
-updateClock();
-
-// ================================================================
-// NAVIGATION
-// ================================================================
-document.querySelectorAll('.nav-btn').forEach(btn => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
-    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-    btn.classList.add('active');
-    const page = btn.dataset.page;
-    document.getElementById('page-'+page).classList.add('active');
-    state.currentPage = page;
-    if (page === 'takas') renderTakas();
-  });
-});
-
-// ================================================================
 // QUICK TICKERS
-// ================================================================
-const qt = document.getElementById('quickTickers');
-QUICK_TICKERS.forEach(t => {
-  const el = document.createElement('div');
-  el.className = 'quick-tick';
-  el.textContent = t;
-  el.onclick = () => loadTicker(t);
-  qt.appendChild(el);
-});
+const qtEl=$('qticks');QT.forEach(t=>{const d=document.createElement('div');d.className='qtk';d.textContent=t;d.onclick=()=>loadTicker(t);qtEl.appendChild(d);});
+$('sinp').addEventListener('keydown',e=>{if(e.key==='Enter'){const v=e.target.value.trim().toUpperCase();if(v.length>=3)loadTicker(v);}});
 
-// ================================================================
-// SEARCH
-// ================================================================
-document.getElementById('searchInput').addEventListener('keydown', e => {
-  if (e.key === 'Enter') {
-    const v = e.target.value.trim().toUpperCase();
-    if (v.length >= 3) loadTicker(v);
-  }
-});
+// WATCHLIST
+function wlAdd(t){t=t.toUpperCase();if(!S.wl.includes(t)){S.wl.push(t);localStorage.setItem('bb_wl',JSON.stringify(S.wl));}}
+function wlRm(t){S.wl=S.wl.filter(x=>x!==t);localStorage.setItem('bb_wl',JSON.stringify(S.wl));}
+function seenAdd(t){t=t.toUpperCase();S.seen=S.seen.filter(x=>x!==t);S.seen.unshift(t);S.seen=S.seen.slice(0,10);localStorage.setItem('bb_seen',JSON.stringify(S.seen));}
 
-// ================================================================
-// API CALLS
-// ================================================================
-async function api(path) {
-  const r = await fetch(path);
-  if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
-  return r.json();
-}
+// RING
+function ring(val,label,sz=100){const r=(sz/2)-6,circ=2*Math.PI*r,off=circ*(1-(val||0)/100),c=sC(val);return`<div class="ring" style="width:${sz}px;height:${sz}px;"><svg width="${sz}" height="${sz}" viewBox="0 0 ${sz} ${sz}"><circle cx="${sz/2}" cy="${sz/2}" r="${r}" fill="none" stroke="var(--bdr)" stroke-width="3"/><circle cx="${sz/2}" cy="${sz/2}" r="${r}" fill="none" stroke="${c}" stroke-width="3" stroke-dasharray="${circ}" stroke-dashoffset="${off}" stroke-linecap="round" style="transition:stroke-dashoffset 1s ease;"/></svg><span class="rv" style="color:${c};font-size:${sz>80?24:16}px;">${val!=null?val.toFixed(0):'?'}</span>${label?`<span class="rl" style="bottom:${sz>80?12:6}px;">${label}</span>`:''}</div>`;}
 
-// ================================================================
-// LOAD TICKER — opens detail panel
-// ================================================================
-async function loadTicker(ticker) {
-  ticker = ticker.replace('.IS','').toUpperCase();
-  openDetail();
-  document.getElementById('detailPanel').innerHTML = `<div class="loading"><div class="spinner"></div><div class="loading-text">${ticker} yukleniyor...</div></div>`;
+// SCORE BARS
+function scoreBars(sc){const dims=[{k:'value',l:'Value',w:20},{k:'quality',l:'Quality',w:22},{k:'growth',l:'Growth',w:15},{k:'balance',l:'Balance',w:20},{k:'earnings',l:'Earn',w:10},{k:'moat',l:'Moat',w:8},{k:'capital',l:'Capital',w:5}];return dims.map(d=>{const v=sc[d.k],c=sC(v);return`<div class="sb"><div class="sb-l"><span class="n">${d.l} (${d.w}%)</span><span class="v" style="color:${c}">${v!=null?v.toFixed(0):'?'}</span></div><div class="sb-bar"><div class="sb-fill" style="width:${v||0}%;background:${c};"></div></div></div>`;}).join('');}
+function mBox(l,v){return`<div class="mi"><div class="mi-l">${l}</div><div class="mi-v">${v}</div></div>`;}
 
-  try {
-    const [analysis, tech] = await Promise.all([
-      api(`/api/analyze/${ticker}`),
-      api(`/api/technical/${ticker}`).catch(()=>null),
-    ]);
-    state.detailCache[ticker] = analysis;
-    state.techCache[ticker] = tech;
-    renderDetail(ticker, analysis, tech);
+// HOME
+function renderHome(){
+const pg=$('pg-home');const d=S.dash;const sc=S.scan;const hasSc=sc&&sc.items&&sc.items.length>0;const hasD=d&&d.top3&&d.top3.length>0;
+let h=`<div class="hero"><div class="hero-tag">📡 BUGÜN NE OLUYOR?</div><div class="hero-title" id="hT">${hasSc?'Piyasa Tarandi — '+sc.items.length+' Hisse Analiz Edildi':'BistBull Terminal Hazır'}</div><div class="hero-sub" id="hS">${hasSc?'Scan tamamlandi. Asagida en iyi hisseler, firsatlar ve riskler.':'SCAN BASLAT ile 40 hisselik BIST universe\'ini tarayin. Canli yfinance verisi.'}</div><div id="hSt"></div><div style="margin-top:12px;display:flex;gap:8px;"><button class="btn btn-grn" id="scanBtn" onclick="startScan()">▶ SCAN BASLAT</button><button class="btn btn-blu" onclick="loadBriefing()">🤖 AI BRIFING</button></div></div>`;
+if(hasD){
+h+=`<div class="g3" style="margin-bottom:16px;"><div class="card"><div class="card-h"><span class="card-t">🏆 Günün 3 Hissesi</span></div><div class="card-b" style="display:flex;flex-direction:column;gap:10px;">${d.top3.map(i=>`<div class="pkc"><div style="display:flex;justify-content:space-between;align-items:center;"><span class="pkc-tick" onclick="loadTicker('${i.ticker}')">${i.ticker}</span><span class="pkc-score" style="color:${sC(i.overall)}">${i.overall}</span></div><div style="font-size:11px;color:var(--t3)">${i.name||''} · ${i.style}</div><div class="pkc-reason">${(i.positives||[]).join(' · ')}</div></div>`).join('')}</div></div>`;
+h+=`<div class="card"><div class="card-h"><span class="card-t">💡 3 Fırsat</span></div><div class="card-b" style="display:flex;flex-direction:column;gap:10px;">${(d.opportunities||[]).map(i=>`<div class="pkc opp"><div style="display:flex;justify-content:space-between;"><span class="pkc-tick" onclick="loadTicker('${i.ticker}')">${i.ticker}</span><span class="mono" style="font-size:12px;color:var(--ylw)">${i.overall}/100</span></div><div class="pkc-reason">${i.reason||''}</div></div>`).join('')||'<p style="color:var(--t3);font-size:12px">Scan sonrasi</p>'}</div></div>`;
+h+=`<div class="card"><div class="card-h"><span class="card-t">⚠️ 3 Risk</span></div><div class="card-b" style="display:flex;flex-direction:column;gap:10px;">${(d.risks||[]).map(i=>`<div class="pkc risk"><div style="display:flex;justify-content:space-between;"><span class="pkc-tick" onclick="loadTicker('${i.ticker}')">${i.ticker}</span><span class="mono" style="font-size:12px;color:var(--red)">${i.overall}/100</span></div><div class="pkc-reason">${i.reason||''}</div></div>`).join('')||'<p style="color:var(--t3);font-size:12px">Scan sonrasi</p>'}</div></div></div>`;}
+h+=`<div class="g2" style="margin-bottom:16px;"><div class="card"><div class="card-h"><span class="card-t">🌍 Makro Radar</span><button class="btn btn-sm btn-blu" onclick="goPage('makro')">DETAY →</button></div><div class="card-b"><div class="g4" id="macMini"><div class="ld"><div class="sp"></div><div class="ld-t">Macro...</div></div></div></div></div>`;
+h+=`<div class="card"><div class="card-h"><span class="card-t">🏢 Sektör</span></div><div class="card-b" id="secBox">${hasD?renderSectors(d.sectors):'<p style="color:var(--t3);font-size:12px">Scan sonrasi</p>'}</div></div></div>`;
+h+=`<div class="g3" style="margin-bottom:16px;"><div class="card"><div class="card-h"><span class="card-t">⭐ Watchlist</span></div><div class="card-b" id="wlBox">${renderWL()}</div></div>`;
+h+=`<div class="card"><div class="card-h"><span class="card-t">🕐 Son Baktiklariniz</span></div><div class="card-b">${renderSeen()}</div></div>`;
+h+=`<div class="card"><div class="card-h"><span class="card-t">⚡ Sinyaller</span><button class="btn btn-sm btn-orn" onclick="goPage('cross')">TÜMÜ →</button></div><div class="card-b">${S.cross?renderSigMini(S.cross):'<p style="color:var(--t3);font-size:12px">Cross Hunter baslatilmadi</p>'}</div></div></div>`;
+if(hasSc){h+=`<div class="card" style="margin-bottom:16px;"><div class="card-h"><span class="card-t">📊 Top 10</span><button class="btn btn-sm btn-grn" onclick="goPage('radar')">TÜMÜ →</button></div><div class="card-b" style="overflow-x:auto;">${renderRadarTbl(sc.items.slice(0,10))}</div></div>`;}
+pg.innerHTML=h;loadMacroMini();}
 
-    // also switch to Analiz page
-    document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
-    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-    document.querySelector('[data-page="analiz"]').classList.add('active');
-    document.getElementById('page-analiz').classList.add('active');
-    state.currentPage = 'analiz';
-    renderAnalizSummary(analysis, tech);
+function renderSectors(secs){if(!secs||!secs.length)return'';const mx=Math.max(...secs.map(s=>s.avg_score||1));return`<div class="sec-bar">${secs.slice(0,8).map(s=>{const h=Math.max(10,((s.avg_score||0)/mx)*90),c=sC(s.avg_score);return`<div class="sec-col" style="height:${h}%;background:${c};" title="${s.sector}: ${s.avg_score}"><div class="sec-val" style="color:${c}">${s.avg_score?.toFixed(0)||'?'}</div><div class="sec-lbl">${(s.sector||'?').slice(0,8)}</div></div>`;}).join('')}</div>`;}
+function renderWL(){if(!S.wl.length)return'<p style="color:var(--t3);font-size:12px">⭐ ile hisse ekleyin</p>';return S.wl.map(t=>`<div class="wl-item"><span class="wl-tick" onclick="loadTicker('${t}')">${t}</span><button class="wl-rm" onclick="wlRm('${t}');renderHome();">✕</button></div>`).join('');}
+function renderSeen(){if(!S.seen.length)return'<p style="color:var(--t3);font-size:12px">Henuz hisse incelemediniz</p>';return S.seen.map(t=>`<span class="ls-item" onclick="loadTicker('${t}')">${t}</span>`).join('');}
+function renderSigMini(data){const sigs=(data.signals||[]).slice(0,5);if(!sigs.length)return'<p style="color:var(--t3);font-size:12px">Aktif sinyal yok</p>';return sigs.map(s=>{const cls=s.signal_type==='bullish'?'bull':s.signal_type==='bearish'?'bear':'';return`<div class="sigc ${cls}" style="margin-bottom:6px;padding:8px 10px;"><div style="display:flex;justify-content:space-between;"><span class="clk-t" style="font-size:13px;" onclick="loadTicker('${s.ticker}')">${s.ticker}</span><span class="mono" style="font-size:10px;color:var(--t3)">${s.signal}</span></div></div>`;}).join('');}
+function renderRadarTbl(items){let h='<table class="dtb"><thead><tr><th>#</th><th>Ticker</th><th>Skor</th><th>Stil</th><th>Val</th><th>Qlt</th><th>Grw</th><th>Bal</th><th>P/E</th><th>ROE</th><th>Buffett</th></tr></thead><tbody>';items.forEach((it,i)=>{const L=it.legendary||{};h+=`<tr><td>${i+1}</td><td class="clk-t" onclick="loadTicker('${it.ticker}')">${it.ticker}</td><td>${sPill(it.overall)}</td><td style="font-size:10px;color:var(--t3)">${it.style||''}</td><td>${sPill(it.scores?.value)}</td><td>${sPill(it.scores?.quality)}</td><td>${sPill(it.scores?.growth)}</td><td>${sPill(it.scores?.balance)}</td><td class="mono" style="font-size:10px">${fN(it.pe)}</td><td class="mono" style="font-size:10px">${it.roe!=null?fP(it.roe):'N/A'}</td><td>${sPL(L.buffett_filter||'Fail')}</td></tr>`;});return h+'</tbody></table>';}
 
-  } catch(e) {
-    document.getElementById('detailPanel').innerHTML = `<div class="empty-state"><div class="icon">⚠️</div><h3>Veri alinamadi: ${ticker}</h3><p>${e.message}</p></div>`;
-  }
-}
+// MACRO
+async function loadMacroMini(){try{if(!S.macro)S.macro=await api('/api/macro');const el=$('macMini');if(!el)return;const items=S.macro.items||[];el.innerHTML=items.map(m=>`<div class="mac-item"><div class="mac-sym">${m.name}</div><div class="mac-prc">${fN(m.price,m.category==='doviz'?4:2)}</div><div class="mac-chg" style="color:${chgC(m.change_pct)}">${chgS(m.change_pct)}%</div></div>`).join('');renderTickerBar(items);}catch(e){console.error('macro:',e);}}
+function renderTickerBar(items){const tb=$('tbar');const inner=items.map(m=>`<div class="tbar-item"><span class="sym">${m.key||m.name}</span><span class="prc">${fN(m.price,m.category==='doviz'?4:2)}</span><span style="color:${chgC(m.change_pct)};font-size:10px;">${chgS(m.change_pct)}%</span></div>`).join('');tb.innerHTML=`<div class="tbar-inner">${inner}${inner}</div>`;}
+async function loadMacroFull(){const pg=$('pg-makro');pg.innerHTML='<div class="ld"><div class="sp"></div><div class="ld-t">Makro veriler...</div></div>';try{if(!S.macro)S.macro=await api('/api/macro');const items=S.macro.items||[];const cats={borsa:[],doviz:[],emtia:[],global:[]};items.forEach(m=>cats[m.category]?.push(m));let h=`<h2 class="mono" style="font-size:15px;color:var(--blu);margin-bottom:16px;">Makro Radar</h2>`;for(const[cat,label]of[['borsa','🏛️ Borsa'],['doviz','💱 Döviz'],['emtia','🛢️ Emtia'],['global','🌍 Global']]){const list=cats[cat]||[];if(!list.length)continue;h+=`<h3 style="font-size:12px;color:var(--t3);margin:14px 0 8px;" class="mono">${label}</h3><div class="g4" style="margin-bottom:12px;">`;list.forEach(m=>{h+=`<div class="mac-item" style="padding:16px;"><div class="mac-sym" style="font-size:11px;">${m.name}</div><div class="mac-prc" style="font-size:20px;">${fN(m.price,m.category==='doviz'?4:2)}</div><div class="mac-chg" style="color:${chgC(m.change_pct)};font-size:13px;">${chgS(m.change_pct)}%</div></div>`;});h+='</div>';}pg.innerHTML=h;}catch(e){pg.innerHTML=`<div class="emp"><h3>Hata</h3><p>${e.message}</p></div>`;}}
 
-// ================================================================
-// RENDER DETAIL PANEL
-// ================================================================
-function renderDetail(ticker, r, tech) {
-  const s = r.scores;
-  const m = r.metrics;
-  const L = r.legendary;
+// SCAN
+async function startScan(){const btn=$('scanBtn');if(btn){btn.disabled=true;btn.textContent='⏳ TARANIYOR...';}try{const data=await api('/api/scan');S.scan=data;const dash=await api('/api/dashboard');S.dash=dash;updCnt(dash);renderHome();renderRadarPage();}catch(e){const t=$('hT');if(t)t.textContent='Scan Basarisiz: '+e.message;}if(btn){btn.disabled=false;btn.textContent='▶ SCAN BASLAT';}}
+function updCnt(d){if(!d)return;const c=d.counters||{};$('cnt-a').textContent=c.total_analyzed||0;$('cnt-s').textContent=c.cross_signals||0;$('cnt-c').textContent=c.cache_raw||0;if(d.asof)$('cnt-u').textContent=new Date(d.asof).toLocaleTimeString('tr-TR',{hour:'2-digit',minute:'2-digit'});}
 
-  const panel = document.getElementById('detailPanel');
-  panel.innerHTML = `
-    <div class="detail-header">
-      <div>
-        <div class="detail-ticker">${r.ticker} <span style="color:${scoreColor(r.overall)};font-size:20px;">${r.overall}/100</span></div>
-        <div class="detail-name">${r.name} · ${r.sector||''} · ${r.style}</div>
-        <div style="margin-top:6px;display:flex;gap:8px;flex-wrap:wrap;">
-          ${pillFor(L.buffett_filter, 'Buffett: '+L.buffett_filter)}
-          ${pillFor(L.graham_filter, 'Graham: '+L.graham_filter)}
-          <span class="pill pill-blue">Conf: ${r.confidence}</span>
-        </div>
-      </div>
-      <button class="detail-close" onclick="closeDetail()">✕</button>
-    </div>
-    <div class="detail-body">
-      <div class="detail-tabs">
-        <button class="detail-tab active" onclick="switchDetailTab(this,'overview')">Overview</button>
-        <button class="detail-tab" onclick="switchDetailTab(this,'scores')">Scores</button>
-        <button class="detail-tab" onclick="switchDetailTab(this,'valuation')">Valuation</button>
-        <button class="detail-tab" onclick="switchDetailTab(this,'quality')">Quality</button>
-        <button class="detail-tab" onclick="switchDetailTab(this,'technical')">Teknik</button>
-        <button class="detail-tab" onclick="switchDetailTab(this,'legendary')">Legendary</button>
-        <button class="detail-tab" onclick="switchDetailTab(this,'chart')">Chart</button>
-      </div>
+// BRIEFING
+async function loadBriefing(){const box=$('hSt');if(box)box.innerHTML='<div class="hero-strat" style="border-color:var(--prp);background:var(--prpd);color:var(--prp);">🤖 AI brifing yukleniyor...</div>';try{const d=await api('/api/briefing');if(d.briefing){box.innerHTML=`<div class="hero-strat">${d.briefing.replace(/\n/g,'<br>')}</div>`;}else{box.innerHTML=`<div class="hero-strat" style="border-color:var(--red);background:var(--redd);color:var(--red)">${d.error||'AI brifing alinamadi'}</div>`;}}catch(e){box.innerHTML=`<div class="hero-strat" style="border-color:var(--red);background:var(--redd);color:var(--red)">Hata: ${e.message}</div>`;}}
 
-      <!-- OVERVIEW -->
-      <div class="detail-section active" id="ds-overview">
-        <div class="grid-2" style="margin-bottom:20px;">
-          <div>
-            <div style="text-align:center;margin-bottom:16px;">
-              ${renderScoreRing(r.overall, 'OVERALL')}
-            </div>
-            <div class="metric-grid" style="grid-template-columns:repeat(2,1fr);">
-              ${metricBox('Fiyat', m.price ? fmtNum(m.price)+' '+r.currency : 'N/A')}
-              ${metricBox('Piyasa Deg.', fmtNum(m.market_cap))}
-              ${metricBox('P/E', fmtNum(m.pe))}
-              ${metricBox('P/B', fmtNum(m.pb))}
-              ${metricBox('ROE', fmtPct(m.roe))}
-              ${metricBox('FCF Yield', fmtPct(m.fcf_yield))}
-            </div>
-          </div>
-          <div>
-            ${renderScoreBars(s)}
-            <div style="margin-top:16px;">
-              <div style="margin-bottom:8px;">
-                ${r.positives.map(p => `<span class="driver-tag driver-pos">✓ ${p}</span>`).join('')}
-              </div>
-              <div>
-                ${r.negatives.map(n => `<span class="driver-tag driver-neg">✗ ${n}</span>`).join('')}
-              </div>
-            </div>
-          </div>
-        </div>
-        <div class="ai-box" id="aiBox-${ticker}">
-          <div class="ai-box-title">🤖 AI TRADER OZET</div>
-          <div class="ai-box-text" id="aiText-${ticker}">Yukleniyor...</div>
-        </div>
-      </div>
+// RADAR PAGE
+function renderRadarPage(){const pg=$('pg-radar');const sc=S.scan;if(!sc||!sc.items||!sc.items.length){pg.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;"><h2 class="mono" style="font-size:15px;color:var(--cyn)">BIST Radar</h2><button class="btn btn-grn" onclick="startScan()">▶ SCAN</button></div><div class="emp"><h3>Henuz taranmadi</h3></div>`;return;}pg.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;"><div><h2 class="mono" style="font-size:15px;color:var(--cyn)">BIST Radar — ${sc.items.length} Hisse</h2><p style="font-size:11px;color:var(--t3);margin-top:2px;">${sc.asof?new Date(sc.asof).toLocaleString('tr-TR'):''}</p></div><button class="btn btn-grn" onclick="startScan()">🔄 YENILE</button></div><div class="card"><div class="card-b" style="overflow-x:auto;">${renderRadarTbl(sc.items)}</div></div>`;}
 
-      <!-- SCORES -->
-      <div class="detail-section" id="ds-scores">
-        <div class="grid-4" style="margin-bottom:20px;">
-          ${Object.entries(s).map(([k,v])=>`
-            <div style="text-align:center;">
-              ${renderScoreRing(v, k.toUpperCase(), 80)}
-            </div>
-          `).join('')}
-        </div>
-        <div class="card"><div class="card-header"><span class="card-title">Score Weights (V5.1 EM-Adjusted)</span></div>
-        <div class="card-body">
-          <table class="data-table">
-            <tr><th>Dimension</th><th>Weight</th><th>Score</th></tr>
-            <tr><td>Value</td><td>20%</td><td>${scorePill(s.value)}</td></tr>
-            <tr><td>Quality</td><td>22%</td><td>${scorePill(s.quality)}</td></tr>
-            <tr><td>Growth</td><td>15%</td><td>${scorePill(s.growth)}</td></tr>
-            <tr><td>Balance</td><td>20%</td><td>${scorePill(s.balance)}</td></tr>
-            <tr><td>Earnings</td><td>10%</td><td>${scorePill(s.earnings)}</td></tr>
-            <tr><td>Moat</td><td>8%</td><td>${scorePill(s.moat)}</td></tr>
-            <tr><td>Capital</td><td>5%</td><td>${scorePill(s.capital)}</td></tr>
-          </table>
-        </div></div>
-      </div>
+// CROSS
+async function startCross(){const pg=$('pg-cross');pg.innerHTML='<div class="ld"><div class="sp"></div><div class="ld-t">Sinyal taraniyor...</div></div>';try{const d=await api('/api/cross');S.cross=d;$('cnt-s').textContent=d.summary?.total||0;const sigs=d.signals||[];const sm=d.summary||{};let h=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;"><div><h2 class="mono" style="font-size:15px;color:var(--orn)">Cross Hunter</h2></div><button class="btn btn-orn" onclick="startCross()">⚡ YENIDEN TARA</button></div><div style="display:flex;gap:8px;margin-bottom:16px;"><span class="pill p-blu">${sm.total||0} sinyal</span><span class="pill p-grn">🟢 ${sm.bullish||0}</span><span class="pill p-red">🔴 ${sm.bearish||0}</span></div>`;if(!sigs.length){h+='<div class="emp"><h3>Yeni sinyal yok</h3></div>';}else{h+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:10px;">';sigs.forEach(s=>{const cls=s.signal_type==='bullish'?'bull':s.signal_type==='bearish'?'bear':'';h+=`<div class="sigc ${cls}"><div style="display:flex;justify-content:space-between;"><span class="clk-t" style="font-size:15px;font-weight:700;" onclick="loadTicker('${s.ticker}')">${s.ticker}</span><span class="mono" style="font-size:13px;">${s.price?s.price.toFixed(2)+' TL':''}</span></div><div class="mono" style="font-size:12px;font-weight:600;margin-top:4px;color:${cls==='bull'?'var(--grn)':cls==='bear'?'var(--red)':'var(--ylw)'}">${s.signal}</div><div style="font-size:11px;color:var(--t2);font-style:italic;margin-top:3px;">${s.explanation||''}</div><div class="mono" style="font-size:10px;color:var(--t3);margin-top:4px;">RSI:${s.rsi?s.rsi.toFixed(0):'?'} | Tek:${s.tech_score?s.tech_score.toFixed(0):'?'} | Hcm:${s.vol_ratio?s.vol_ratio.toFixed(1)+'x':'?'}</div></div>`;});h+='</div>';}pg.innerHTML=h;}catch(e){pg.innerHTML=`<div class="emp"><h3>Hata</h3><p>${e.message}</p></div>`;}}
 
-      <!-- VALUATION -->
-      <div class="detail-section" id="ds-valuation">
-        <div class="metric-grid">
-          ${metricBox('P/E', fmtNum(m.pe))}
-          ${metricBox('P/B', fmtNum(m.pb))}
-          ${metricBox('EV/EBITDA', fmtNum(m.ev_ebitda))}
-          ${metricBox('PEG', L.peg)}
-          ${metricBox('FCF Yield', fmtPct(m.fcf_yield))}
-          ${metricBox('Graham FV', fmtNum(m.graham_fv))}
-          ${metricBox('Margin of Safety', L.graham_mos)}
-          ${metricBox('Div Yield', fmtPct(m.dividend_yield))}
-          ${metricBox('Piyasa Deg.', fmtNum(m.market_cap))}
-          ${metricBox('Beta', fmtNum(m.beta))}
-        </div>
-      </div>
+// LOAD TICKER
+async function loadTicker(t){t=t.replace('.IS','').toUpperCase();seenAdd(t);openD();$('dp').innerHTML=`<div class="ld"><div class="sp"></div><div class="ld-t">${t} yukleniyor...</div></div>`;try{const[r,tech]=await Promise.all([api(`/api/analyze/${t}`),api(`/api/technical/${t}`).catch(()=>null)]);renderDetail(t,r,tech);}catch(e){$('dp').innerHTML=`<div class="emp"><h3>Veri alinamadi: ${t}</h3><p>${e.message}</p></div>`;}}
 
-      <!-- QUALITY -->
-      <div class="detail-section" id="ds-quality">
-        <div class="metric-grid">
-          ${metricBox('ROE', fmtPct(m.roe))}
-          ${metricBox('ROA', fmtPct(m.roa))}
-          ${metricBox('ROIC', fmtPct(m.roic))}
-          ${metricBox('Gross Margin', fmtPct(m.gross_margin))}
-          ${metricBox('Op. Margin', fmtPct(m.operating_margin))}
-          ${metricBox('Net Margin', fmtPct(m.net_margin))}
-          ${metricBox('Revenue Growth', fmtPct(m.revenue_growth))}
-          ${metricBox('EPS Growth', fmtPct(m.eps_growth))}
-          ${metricBox('EBITDA Growth', fmtPct(m.ebitda_growth))}
-          ${metricBox('Gelir', fmtNum(m.revenue))}
-          ${metricBox('Net Gelir', fmtNum(m.net_income))}
-          ${metricBox('EBITDA', fmtNum(m.ebitda))}
-          ${metricBox('Isletme NK', fmtNum(m.operating_cf))}
-          ${metricBox('FCF', fmtNum(m.free_cf))}
-          ${metricBox('CFO/NI', fmtNum(m.cfo_to_ni))}
-          ${metricBox('FCF Margin', fmtPct(m.fcf_margin))}
-        </div>
-        <div style="margin-top:20px;">
-          <h4 style="font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--text-secondary);margin-bottom:12px;">BILANCO</h4>
-          <div class="metric-grid">
-            ${metricBox('Toplam Varlik', fmtNum(m.total_assets))}
-            ${metricBox('Toplam Borc', fmtNum(m.total_debt))}
-            ${metricBox('Nakit', fmtNum(m.cash))}
-            ${metricBox('Ozsermaye', fmtNum(m.equity))}
-            ${metricBox('Net Borc/EBITDA', fmtNum(m.net_debt_ebitda))}
-            ${metricBox('Borc/Ozsermaye', fmtNum(m.debt_equity))}
-            ${metricBox('Cari Oran', fmtNum(m.current_ratio))}
-            ${metricBox('Faiz Karsilama', fmtNum(m.interest_coverage))}
-          </div>
-        </div>
-      </div>
+function renderDetail(t,r,tech){
+const s=r.scores,m=r.metrics,L=r.legendary||{},inWL=S.wl.includes(t);
+$('dp').innerHTML=`<div class="dp-h"><div><div class="dp-tick">${r.ticker} <span style="color:${sC(r.overall)};font-size:18px;">${r.overall}/100</span></div><div class="dp-name">${r.name} · ${r.sector||''} · ${r.style}</div><div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap;">${sPL(L.buffett_filter||'Fail')} ${sPL(L.graham_filter||'Fail')} <span class="pill p-blu">Conf:${r.confidence}</span><button class="btn btn-sm ${inWL?'btn-orn':'btn-blu'}" onclick="toggleWL('${t}')">${inWL?'⭐ Cikar':'☆ Ekle'}</button></div></div><button class="dp-close" onclick="closeD()">✕</button></div>
+<div class="dp-body"><div class="dp-tabs"><button class="dp-tab on" onclick="dtab(this,'ov')">Overview</button><button class="dp-tab" onclick="dtab(this,'sc')">Scores</button><button class="dp-tab" onclick="dtab(this,'val')">Value</button><button class="dp-tab" onclick="dtab(this,'qua')">Quality</button><button class="dp-tab" onclick="dtab(this,'tek')">Teknik</button><button class="dp-tab" onclick="dtab(this,'leg')">Legendary</button><button class="dp-tab" onclick="dtab(this,'cht')">Chart</button></div>
+<div class="ds on" id="ds-ov"><div class="g2" style="margin-bottom:16px;"><div><div style="text-align:center;margin-bottom:12px;">${ring(r.overall,'OVERALL',110)}</div><div class="mg" style="grid-template-columns:repeat(2,1fr);">${mBox('Fiyat',m.price?fN(m.price)+' '+r.currency:'N/A')}${mBox('Piyasa',fN(m.market_cap))}${mBox('P/E',fN(m.pe))}${mBox('P/B',fN(m.pb))}${mBox('ROE',fP(m.roe))}${mBox('FCF Yield',fP(m.fcf_yield))}</div></div><div>${scoreBars(s)}<div style="margin-top:12px;">${(r.positives||[]).map(p=>`<span class="drv drv-p">✓ ${p}</span>`).join('')}${(r.negatives||[]).map(n=>`<span class="drv drv-n">✗ ${n}</span>`).join('')}</div></div></div><div class="aib"><div class="aib-t">🤖 AI TRADER ÖZET</div><div class="aib-tx" id="ai-${t}">Yükleniyor...</div></div></div>
+<div class="ds" id="ds-sc"><div class="g4" style="margin-bottom:16px;">${Object.entries(s).map(([k,v])=>`<div style="text-align:center;">${ring(v,k.toUpperCase(),80)}</div>`).join('')}</div><div class="card"><div class="card-h"><span class="card-t">Weights</span></div><div class="card-b"><table class="dtb"><tr><th>Dim</th><th>W</th><th>Score</th></tr><tr><td>Value</td><td>20%</td><td>${sPill(s.value)}</td></tr><tr><td>Quality</td><td>22%</td><td>${sPill(s.quality)}</td></tr><tr><td>Growth</td><td>15%</td><td>${sPill(s.growth)}</td></tr><tr><td>Balance</td><td>20%</td><td>${sPill(s.balance)}</td></tr><tr><td>Earnings</td><td>10%</td><td>${sPill(s.earnings)}</td></tr><tr><td>Moat</td><td>8%</td><td>${sPill(s.moat)}</td></tr><tr><td>Capital</td><td>5%</td><td>${sPill(s.capital)}</td></tr></table></div></div></div>
+<div class="ds" id="ds-val"><div class="mg">${mBox('P/E',fN(m.pe))}${mBox('P/B',fN(m.pb))}${mBox('EV/EBITDA',fN(m.ev_ebitda))}${mBox('PEG',L.peg||'N/A')}${mBox('FCF Yield',fP(m.fcf_yield))}${mBox('Graham FV',fN(m.graham_fv))}${mBox('MoS',L.graham_mos||'N/A')}${mBox('Div Yield',fP(m.dividend_yield))}${mBox('Market Cap',fN(m.market_cap))}${mBox('Beta',fN(m.beta))}</div></div>
+<div class="ds" id="ds-qua"><div class="mg">${mBox('ROE',fP(m.roe))}${mBox('ROA',fP(m.roa))}${mBox('ROIC',fP(m.roic))}${mBox('Gross',fP(m.gross_margin))}${mBox('Op',fP(m.operating_margin))}${mBox('Net',fP(m.net_margin))}${mBox('Rev Grw',fP(m.revenue_growth))}${mBox('EPS Grw',fP(m.eps_growth))}${mBox('EBITDA Grw',fP(m.ebitda_growth))}${mBox('Gelir',fN(m.revenue))}${mBox('Net Gelir',fN(m.net_income))}${mBox('EBITDA',fN(m.ebitda))}${mBox('Op CF',fN(m.operating_cf))}${mBox('FCF',fN(m.free_cf))}${mBox('CFO/NI',fN(m.cfo_to_ni))}</div><h4 class="mono" style="font-size:11px;color:var(--t3);margin:16px 0 10px;">BİLANÇO</h4><div class="mg">${mBox('Varlik',fN(m.total_assets))}${mBox('Borc',fN(m.total_debt))}${mBox('Nakit',fN(m.cash))}${mBox('Özsermaye',fN(m.equity))}${mBox('NB/EBITDA',fN(m.net_debt_ebitda))}${mBox('D/E',fN(m.debt_equity))}${mBox('Cari',fN(m.current_ratio))}${mBox('Faiz Krs',fN(m.interest_coverage))}</div></div>
+<div class="ds" id="ds-tek">${tech?renderTech(tech):'<div class="emp"><h3>Teknik veri yok</h3></div>'}</div>
+<div class="ds" id="ds-leg"><div class="mg" style="grid-template-columns:repeat(3,1fr);">${mBox('Piotroski F',L.piotroski||'N/A')}${mBox('Altman Z',L.altman||'N/A')}${mBox('Beneish M',L.beneish||'N/A')}${mBox('PEG',L.peg||'N/A')}${mBox('Graham MoS',L.graham_mos||'N/A')}${mBox('Buffett',L.buffett_filter||'N/A')}${mBox('Graham',L.graham_filter||'N/A')}</div><div style="margin-top:16px;padding:12px;background:var(--bg3);border:1px solid var(--bdr);border-radius:var(--rad);font-size:12px;color:var(--t2);line-height:1.6;"><b style="color:var(--t1);">Neden Öne Çıkıyor?</b><br>${(r.positives||[]).map(p=>`<span style="color:var(--grn)">✓</span> ${p}`).join('<br>')}<br><b style="color:var(--t1);">Dikkat:</b><br>${(r.negatives||[]).map(n=>`<span style="color:var(--red)">✗</span> ${n}`).join('<br>')}</div></div>
+<div class="ds" id="ds-cht"><img class="chart-img" src="/api/chart/${t}" alt="${t}" onerror="this.parentElement.innerHTML='<div class=\\'emp\\'><h3>Chart yuklenemedi</h3></div>'"></div>
+</div>`;
+api(`/api/ai-summary/${t}`).then(d=>{const el=$('ai-'+t);if(el)el.textContent=d.summary||'AI ozet alinamadi';}).catch(()=>{});}
 
-      <!-- TECHNICAL -->
-      <div class="detail-section" id="ds-technical">
-        ${tech ? renderTechnical(tech) : '<div class="empty-state"><div class="icon">📉</div><h3>Teknik veri alinamadi</h3></div>'}
-      </div>
+function renderTech(t){const comps=(t.components||[]).map(c=>{const col=c.score>=65?'var(--grn)':c.score>=40?'var(--ylw)':'var(--red)';return`<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--bdr);"><span class="mono" style="font-size:11px;color:var(--t2)">${c.name}</span><span class="mono" style="font-size:11px;color:${col}">${c.desc} (${c.score})</span></div>`;}).join('');return`<div class="g2"><div><div style="text-align:center;margin-bottom:16px;">${ring(t.tech_score,'TEKNIK',100)}</div><div class="mg" style="grid-template-columns:repeat(2,1fr);">${mBox('RSI',t.rsi?t.rsi.toFixed(1):'N/A')}${mBox('MACD',t.macd?t.macd.toFixed(4):'N/A')}${mBox('MA50',t.ma50?t.ma50.toFixed(2):'N/A')}${mBox('MA200',t.ma200?t.ma200.toFixed(2):'N/A')}${mBox('BB',t.bb_pos||'N/A')}${mBox('Hacim',t.vol_ratio?t.vol_ratio.toFixed(1)+'x':'N/A')}${mBox('52W H',t.high_52w?t.high_52w.toFixed(2):'N/A')}${mBox('52W L',t.low_52w?t.low_52w.toFixed(2):'N/A')}</div>${t.cross_signal?`<div style="margin-top:10px;"><span class="pill ${t.cross_signal==='GOLDEN_CROSS'?'p-grn':'p-red'}">${t.cross_signal.replace('_',' ')}</span></div>`:''}${t.macd_cross?`<div style="margin-top:6px;"><span class="pill ${t.macd_cross==='BULLISH'?'p-grn':'p-red'}">MACD ${t.macd_cross}</span></div>`:''}</div><div><div class="card"><div class="card-h"><span class="card-t">Components</span></div><div class="card-b">${comps}</div></div></div></div>`;}
 
-      <!-- LEGENDARY -->
-      <div class="detail-section" id="ds-legendary">
-        <div class="metric-grid" style="grid-template-columns:repeat(3,1fr);">
-          ${metricBox('Piotroski F-Score', L.piotroski)}
-          ${metricBox('Altman Z-Score', L.altman)}
-          ${metricBox('Beneish M-Score', L.beneish)}
-          ${metricBox('PEG Ratio', L.peg)}
-          ${metricBox('Graham MoS', L.graham_mos)}
-          ${metricBox('Buffett Filter', L.buffett_filter)}
-          ${metricBox('Graham Filter', L.graham_filter)}
-        </div>
-      </div>
+function toggleWL(t){if(S.wl.includes(t))wlRm(t);else wlAdd(t);loadTicker(t);}
+function dtab(btn,id){btn.closest('.dp-tabs').querySelectorAll('.dp-tab').forEach(t=>t.classList.remove('on'));btn.classList.add('on');btn.closest('.dp-body').querySelectorAll('.ds').forEach(s=>s.classList.remove('on'));$('ds-'+id).classList.add('on');}
+function openD(){$('ov').classList.add('open');document.body.style.overflow='hidden';}
+function closeD(){$('ov').classList.remove('open');document.body.style.overflow='';renderHome();}
 
-      <!-- CHART -->
-      <div class="detail-section" id="ds-chart">
-        <img class="chart-img" src="/api/chart/${ticker}" alt="${ticker} chart" onerror="this.parentElement.innerHTML='<div class=\\'empty-state\\'><div class=\\'icon\\'>📈</div><h3>Chart yuklenemedi</h3></div>'">
-      </div>
-    </div>
-  `;
-
-  // Load AI summary async
-  loadAI(ticker);
-}
-
-function switchDetailTab(btn, section) {
-  btn.closest('.detail-tabs').querySelectorAll('.detail-tab').forEach(t => t.classList.remove('active'));
-  btn.classList.add('active');
-  btn.closest('.detail-body').querySelectorAll('.detail-section').forEach(s => s.classList.remove('active'));
-  document.getElementById('ds-'+section).classList.add('active');
-}
-
-async function loadAI(ticker) {
-  try {
-    const data = await api(`/api/ai-summary/${ticker}`);
-    const el = document.getElementById('aiText-'+ticker);
-    if (el) el.textContent = data.summary;
-  } catch(e) {
-    const el = document.getElementById('aiText-'+ticker);
-    if (el) el.textContent = 'AI ozet alinamadi. OpenAI key kontrol edin.';
-  }
-}
-
-function renderScoreRing(value, label, size=120) {
-  const r = (size/2) - 8;
-  const circ = 2 * Math.PI * r;
-  const pct = (value || 0) / 100;
-  const offset = circ * (1 - pct);
-  const color = scoreColor(value);
-  return `
-    <div class="score-ring" style="width:${size}px;height:${size}px;">
-      <svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
-        <circle cx="${size/2}" cy="${size/2}" r="${r}" fill="none" stroke="var(--border)" stroke-width="4"/>
-        <circle cx="${size/2}" cy="${size/2}" r="${r}" fill="none" stroke="${color}" stroke-width="4"
-          stroke-dasharray="${circ}" stroke-dashoffset="${offset}" stroke-linecap="round"
-          style="transition:stroke-dashoffset 1s ease;"/>
-      </svg>
-      <span class="value" style="color:${color};font-size:${size>90?28:18}px;">${value != null ? value.toFixed(0) : '?'}</span>
-      <span class="label" style="bottom:${size>90?20:10}px;font-size:${size>90?10:8}px;">${label}</span>
-    </div>
-  `;
-}
-
-function renderScoreBars(scores) {
-  const dims = [
-    {key:'value',label:'Value',w:0.20},
-    {key:'quality',label:'Quality',w:0.22},
-    {key:'growth',label:'Growth',w:0.15},
-    {key:'balance',label:'Balance',w:0.20},
-    {key:'earnings',label:'Earnings',w:0.10},
-    {key:'moat',label:'Moat',w:0.08},
-    {key:'capital',label:'Capital',w:0.05},
-  ];
-  return dims.map(d => {
-    const v = scores[d.key];
-    const c = scoreColor(v);
-    return `
-      <div class="score-bar-wrap">
-        <div class="score-bar-label">
-          <span class="name">${d.label} (${(d.w*100).toFixed(0)}%)</span>
-          <span class="val" style="color:${c}">${v != null ? v.toFixed(0) : '?'}</span>
-        </div>
-        <div class="score-bar">
-          <div class="score-bar-fill" style="width:${v||0}%;background:${c};"></div>
-        </div>
-      </div>
-    `;
-  }).join('');
-}
-
-function metricBox(label, value) {
-  return `
-    <div class="metric-item">
-      <div class="metric-label">${label}</div>
-      <div class="metric-value">${value}</div>
-    </div>
-  `;
-}
-
-function renderTechnical(tech) {
-  const comps = (tech.components||[]).map(c => {
-    const color = c.score >= 65 ? 'var(--accent-green)' : c.score >= 40 ? 'var(--accent-yellow)' : 'var(--accent-red)';
-    return `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);">
-      <span style="font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--text-secondary);">${c.name}</span>
-      <span style="font-family:'JetBrains Mono',monospace;font-size:12px;color:${color};">${c.desc} (${c.score})</span>
-    </div>`;
-  }).join('');
-
-  return `
-    <div class="grid-2">
-      <div>
-        <div style="text-align:center;margin-bottom:20px;">
-          ${renderScoreRing(tech.tech_score, 'TEKNIK')}
-        </div>
-        <div class="metric-grid" style="grid-template-columns:repeat(2,1fr);">
-          ${metricBox('RSI(14)', tech.rsi ? tech.rsi.toFixed(1) : 'N/A')}
-          ${metricBox('MACD', tech.macd ? tech.macd.toFixed(4) : 'N/A')}
-          ${metricBox('MA50', tech.ma50 ? tech.ma50.toFixed(2) : 'N/A')}
-          ${metricBox('MA200', tech.ma200 ? tech.ma200.toFixed(2) : 'N/A')}
-          ${metricBox('BB Position', tech.bb_pos || 'N/A')}
-          ${metricBox('Hacim', tech.vol_ratio ? tech.vol_ratio.toFixed(1)+'x' : 'N/A')}
-          ${metricBox('52W High', tech.high_52w ? tech.high_52w.toFixed(2) : 'N/A')}
-          ${metricBox('52W Low', tech.low_52w ? tech.low_52w.toFixed(2) : 'N/A')}
-          ${metricBox("High'a Mesafe", tech.pct_from_high ? tech.pct_from_high.toFixed(1)+'%' : 'N/A')}
-          ${metricBox("Low'dan Mesafe", tech.pct_from_low ? '+'+tech.pct_from_low.toFixed(1)+'%' : 'N/A')}
-        </div>
-        ${tech.cross_signal ? `<div style="margin-top:12px;"><span class="pill ${tech.cross_signal==='GOLDEN_CROSS'?'pill-green':'pill-red'}">${tech.cross_signal.replace('_',' ')}</span></div>` : ''}
-        ${tech.macd_cross ? `<div style="margin-top:8px;"><span class="pill ${tech.macd_cross==='BULLISH'?'pill-green':'pill-red'}">MACD ${tech.macd_cross} Cross</span></div>` : ''}
-      </div>
-      <div>
-        <div class="card">
-          <div class="card-header"><span class="card-title">Components</span></div>
-          <div class="card-body">${comps}</div>
-        </div>
-      </div>
-    </div>
-  `;
-}
-
-// ================================================================
-// DETAIL OVERLAY
-// ================================================================
-function openDetail() {
-  document.getElementById('detailOverlay').classList.add('open');
-  document.body.style.overflow = 'hidden';
-}
-function closeDetail() {
-  document.getElementById('detailOverlay').classList.remove('open');
-  document.body.style.overflow = '';
-}
-
-// ================================================================
-// SCAN (RADAR)
-// ================================================================
-async function startScan() {
-  const btn = document.getElementById('scanBtn');
-  btn.disabled = true;
-  btn.textContent = '⏳ TARANIYOR...';
-  document.getElementById('radarContent').innerHTML = '<div class="loading"><div class="spinner"></div><div class="loading-text">40 hisse taraniyor — yfinance canli veri (1-2 dk)...</div></div>';
-
-  try {
-    const data = await api('/api/scan');
-    state.scanData = data;
-    renderRadar(data);
-  } catch(e) {
-    document.getElementById('radarContent').innerHTML = `<div class="empty-state"><div class="icon">⚠️</div><h3>Scan basarisiz</h3><p>${e.message}</p></div>`;
-  }
-  btn.disabled = false;
-  btn.textContent = '▶ SCAN BASLAT';
-}
-
-function renderRadar(data) {
-  if (!data.items || data.items.length === 0) {
-    document.getElementById('radarContent').innerHTML = '<div class="empty-state"><div class="icon">📡</div><h3>Sonuc yok</h3></div>';
-    return;
-  }
-  document.getElementById('radarInfo').textContent = `${data.items.length} hisse bulundu — ${data.asof ? new Date(data.asof).toLocaleString('tr-TR') : ''}`;
-
-  let html = '<div class="card"><div class="card-body" style="overflow-x:auto;"><table class="data-table"><thead><tr>';
-  html += '<th>#</th><th>Ticker</th><th>Skor</th><th>Stil</th><th>Value</th><th>Quality</th><th>Growth</th><th>Balance</th><th>Moat</th><th>P/E</th><th>ROE</th><th>Buffett</th><th>Graham</th>';
-  html += '</tr></thead><tbody>';
-
-  data.items.forEach((item, i) => {
-    html += `<tr>
-      <td>${i+1}</td>
-      <td class="clickable" onclick="loadTicker('${item.ticker}')" style="font-weight:700;color:var(--accent-cyan);">${item.ticker}</td>
-      <td>${scorePill(item.overall)}</td>
-      <td style="font-size:11px;color:var(--text-secondary);">${item.style}</td>
-      <td>${scorePill(item.scores?.value)}</td>
-      <td>${scorePill(item.scores?.quality)}</td>
-      <td>${scorePill(item.scores?.growth)}</td>
-      <td>${scorePill(item.scores?.balance)}</td>
-      <td>${scorePill(item.scores?.moat)}</td>
-      <td style="font-family:'JetBrains Mono',monospace;font-size:11px;">${fmtNum(item.pe)}</td>
-      <td style="font-family:'JetBrains Mono',monospace;font-size:11px;">${item.roe != null ? fmtPct(item.roe) : 'N/A'}</td>
-      <td>${item.legendary ? pillFor(item.legendary.buffett_filter, item.legendary.buffett_filter) : ''}</td>
-      <td>${item.legendary ? pillFor(item.legendary.graham_filter, item.legendary.graham_filter) : ''}</td>
-    </tr>`;
-  });
-
-  html += '</tbody></table></div></div>';
-  document.getElementById('radarContent').innerHTML = html;
-}
-
-// ================================================================
-// CROSS HUNTER
-// ================================================================
-async function startCross() {
-  document.getElementById('crossContent').innerHTML = '<div class="loading"><div class="spinner"></div><div class="loading-text">40 hissede teknik sinyal taraniyor...</div></div>';
-
-  try {
-    const data = await api('/api/cross');
-    state.crossData = data;
-    renderCross(data);
-  } catch(e) {
-    document.getElementById('crossContent').innerHTML = `<div class="empty-state"><div class="icon">⚠️</div><h3>Cross Hunter hatasi</h3><p>${e.message}</p></div>`;
-  }
-}
-
-function renderCross(data) {
-  const signals = data.signals || [];
-  if (signals.length === 0) {
-    document.getElementById('crossContent').innerHTML = `
-      <div class="empty-state">
-        <div class="icon">✅</div>
-        <h3>Yeni sinyal yok</h3>
-        <p>${data.summary?.scanned || 0} hisse tarandi — su anda yeni cross/RSI/MACD sinyali bulunamadi.</p>
-      </div>`;
-    return;
-  }
-
-  const summary = data.summary || {};
-  let html = `
-    <div style="display:flex;gap:12px;margin-bottom:16px;">
-      <span class="pill pill-blue">${summary.total} sinyal</span>
-      <span class="pill pill-green">🟢 ${summary.bullish} bullish</span>
-      <span class="pill pill-red">🔴 ${summary.bearish} bearish</span>
-      <span class="pill pill-blue">${summary.scanned} hisse tarandi</span>
-    </div>
-    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px;">
-  `;
-
-  signals.forEach(s => {
-    const type = s.signal_type || 'neutral';
-    html += `
-      <div class="signal-card ${type}">
-        <div style="display:flex;justify-content:space-between;align-items:center;">
-          <span class="signal-ticker" onclick="loadTicker('${s.ticker}')">${s.ticker}</span>
-          <span style="font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:600;color:var(--text-primary);">${s.price ? s.price.toFixed(2)+' TL' : ''}</span>
-        </div>
-        <div class="signal-name" style="color:${type==='bullish'?'var(--accent-green)':type==='bearish'?'var(--accent-red)':'var(--accent-yellow)'};">${s.signal}</div>
-        <div class="signal-explain">${s.explanation || ''}</div>
-        <div class="signal-meta">
-          RSI: ${s.rsi?s.rsi.toFixed(0):'?'} | Teknik: ${s.tech_score?s.tech_score.toFixed(0):'?'} | Hacim: ${s.vol_ratio?s.vol_ratio.toFixed(1)+'x':'?'} | 52W: ${s.pct_from_high?s.pct_from_high.toFixed(0)+'%':'?'}
-        </div>
-      </div>
-    `;
-  });
-
-  html += '</div>';
-  document.getElementById('crossContent').innerHTML = html;
-}
-
-// ================================================================
-// ANALIZ PAGE SUMMARY
-// ================================================================
-function renderAnalizSummary(r, tech) {
-  const s = r.scores;
-  const m = r.metrics;
-  let html = `
-    <div class="grid-2">
-      <div class="card">
-        <div class="card-header">
-          <span class="card-title">${r.ticker} — ${r.overall}/100</span>
-          <span class="pill pill-blue">${r.style}</span>
-        </div>
-        <div class="card-body">
-          <div style="text-align:center;">${renderScoreRing(r.overall, 'OVERALL')}</div>
-          ${renderScoreBars(s)}
-          <div style="margin-top:12px;">
-            ${r.positives.map(p=>`<span class="driver-tag driver-pos">✓ ${p}</span>`).join('')}
-            ${r.negatives.map(n=>`<span class="driver-tag driver-neg">✗ ${n}</span>`).join('')}
-          </div>
-        </div>
-      </div>
-      <div class="card">
-        <div class="card-header"><span class="card-title">Key Metrics</span></div>
-        <div class="card-body">
-          <div class="metric-grid" style="grid-template-columns:repeat(2,1fr);">
-            ${metricBox('Fiyat', m.price?fmtNum(m.price)+' '+r.currency:'N/A')}
-            ${metricBox('Piyasa Deg.', fmtNum(m.market_cap))}
-            ${metricBox('P/E', fmtNum(m.pe))}
-            ${metricBox('P/B', fmtNum(m.pb))}
-            ${metricBox('ROE', fmtPct(m.roe))}
-            ${metricBox('Net Margin', fmtPct(m.net_margin))}
-            ${metricBox('Rev Growth', fmtPct(m.revenue_growth))}
-            ${metricBox('Net Borc/EBITDA', fmtNum(m.net_debt_ebitda))}
-          </div>
-        </div>
-      </div>
-    </div>
-    <div style="margin-top:16px;text-align:center;">
-      <button class="scan-btn" onclick="loadTicker('${r.ticker}')">📊 DETAY GOSTER</button>
-    </div>
-  `;
-  document.getElementById('analizContent').innerHTML = html;
-}
-
-// ================================================================
-// QUANTUM PAGE — AI
-// ================================================================
-// Gets triggered from search — shows in detail panel
-
-// ================================================================
-// TAKAS PAGE
-// ================================================================
-function renderTakas() {
-  const UNIVERSE = ['ASELS','THYAO','BIMAS','KCHOL','SISE','EREGL','TUPRS','AKBNK','ISCTR','YKBNK',
-    'GARAN','SAHOL','MGROS','FROTO','TOASO','TCELL','KRDMD','PETKM','ENKAI','TAVHL',
-    'PGSUS','EKGYO','KOZAL','TTKOM','ARCLK','VESTL','DOHOL','AYGAZ','LOGO','SOKM',
-    'TKFEN','KONTR','ODAS','GUBRF','SASA','ISMEN','OYAKC','CIMSA','MPARK','AKSEN'];
-
-  let html = '<div class="card"><div class="card-body" style="overflow-x:auto;"><table class="data-table"><thead><tr>';
-  html += '<th>#</th><th>Ticker</th><th>Analiz</th>';
-  html += '</tr></thead><tbody>';
-  UNIVERSE.forEach((t, i) => {
-    html += `<tr>
-      <td>${i+1}</td>
-      <td class="clickable" onclick="loadTicker('${t}')" style="font-weight:700;color:var(--accent-cyan);">${t}</td>
-      <td><button class="scan-btn" style="padding:4px 12px;font-size:10px;" onclick="loadTicker('${t}')">ANALIZ</button></td>
-    </tr>`;
-  });
-  html += '</tbody></table></div></div>';
-  document.getElementById('takasContent').innerHTML = html;
-}
-
-// ================================================================
 // INIT
-// ================================================================
-(async () => {
-  // Health check first
-  try {
-    const h = await api('/api/health');
-    console.log('BistBull Health:', h);
-    document.getElementById('radarInfo').textContent =
-      `${h.universe} hisse universe — AI: ${h.ai?'ON':'OFF'} | Chart: ${h.chart?'ON':'OFF'} | Cache: ${h.cache?.raw||0} raw`;
-  } catch(e) {
-    console.error('Health check failed:', e);
-    document.getElementById('radarInfo').textContent = 'API baglantisi kurulamadi — Railway loglarini kontrol edin';
-  }
-
-  // Try loading existing scan data
-  try {
-    const data = await api('/api/top10');
-    if (data.items && data.items.length > 0) {
-      state.scanData = data;
-      renderRadar(data);
-    }
-  } catch(e) {
-    console.log('No cached scan data yet');
-  }
-
-  // Render Takas
-  renderTakas();
+(async()=>{
+renderHome();
+try{const h=await api('/api/health');console.log('BistBull:',h);}catch(e){console.error(e);}
+try{const d=await api('/api/top10');if(d.items&&d.items.length>0){S.scan=d;const dash=await api('/api/dashboard');S.dash=dash;updCnt(dash);renderHome();renderRadarPage();}}catch(e){}
+try{const c=await api('/api/cross');if(c.signals)S.cross=c;}catch(e){}
+renderHome();
 })();
 </script>
 </body>
