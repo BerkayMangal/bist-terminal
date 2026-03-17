@@ -156,11 +156,8 @@ async function callAPI(system, userMsg){
 let mbar=null;
 async function loadMbar(){
   try{
-    mbar=await callAPI(
-      'Piyasa veri servisisin. SADECE JSON döndür, markdown yok, açıklama yok.',
-      `Güncel fiyatlar bul: XU030, XU100, USD/TRY, EUR/TRY, Brent, Gram Altın TRY, XBANK, BTC/USD
-{"xu030":{"p":0,"c":0},"xu100":{"p":0,"c":0},"usdtry":{"p":0,"c":0},"eurtry":{"p":0,"c":0},"brent":{"p":0,"c":0},"gold":{"p":0,"c":0},"xbank":{"p":0,"c":0},"btc":{"p":0,"c":0},"ts":"HH:MM"}`
-    );
+    const r=await fetch('/api/marketbar',{method:'POST'});
+    mbar=await r.json();
   }catch(e){console.error('Mbar:',e)}
   renderMbar();
 }
@@ -275,9 +272,8 @@ function radarHTML(){
 async function loadRadar(){
   radarD='loading';render();
   try{
-    radarD=await callAPI('BIST piyasa uzmanısın. SADECE JSON, markdown yok.',
-      `BIST güncel piyasa radarı. En sıcak 5 hisse, piyasa modu, trend, hacim durumu.
-{"piyasa_modu":"YÜKSELİŞ|DÜŞÜŞ|YATAY","fear_greed":50,"hacim":"Düşük|Normal|Yüksek","trend":"Boğa|Ayı|Kararsız","sicak":[{"t":"THYAO","chg":2.5,"why":"kısa sebep","sig":"AL|SAT|NÖTR"}],"ozet":"2-3 cümle piyasa özeti"}`);
+    const r=await fetch('/api/radar',{method:'POST'});
+    radarD=await r.json();
   }catch(e){radarD={error:e.message}}
   render();
 }
@@ -367,14 +363,10 @@ async function analizRun(){
   const t=document.getElementById('aTicker')?.value?.trim().toUpperCase();
   if(!t)return;analizD='loading';render();
   try{
-    analizD=await callAPI('BIST uzmanısın. Kapsamlı hisse analizi yap. SADECE JSON, markdown yok.',
-      `${t} analizi yap:
-{"ticker":"${t}","ad":"","fiyat":0,"chg":0,"karar":"AL|TUT|SAT",
-"pio":{"s":0,"y":""},"alt":{"z":0,"r":"Düşük|Orta|Yüksek","y":""},
-"gra":{"iv":0,"mos":0,"y":""},"tek":{"rsi":0,"sig":"AL|SAT|NÖTR","tr":"Yükseliş|Düşüş|Yatay","sup":0,"res":0,"y":""},
-"hab":{"sen":"Pozitif|Negatif|Nötr","sk":0,"news":["haber1","haber2"]},
-"vio":{"oi":"","baz":0,"y":""},"dcf":{"hp":0,"pot":0,"tav":"AL|TUT|SAT","y":""},
-"rak":[{"t":"","fk":0,"pd":0,"ytd":0}],"ozet":"genel değerlendirme"}`);
+    const r=await fetch('/api/analiz',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ticker:t})});
+    const d=await r.json();
+    if(d.error) throw new Error(d.error);
+    analizD=d;
   }catch(e){analizD={error:e.message}}
   render();
 }
@@ -412,11 +404,11 @@ function crossHTML(){
 }
 async function crossRun(){
   crossD='loading';render();
-  const tickers=STOCKS.map(s=>s.t).join(',');
   try{
-    crossD=await callAPI('Teknik analiz uzmanısın. SADECE JSON, markdown yok.',
-      `${tickers} hisselerinde aktif çapraz sinyaller (son 5 gün): EMA5/20, EMA20/50, EMA50/200 kesişimi, RSI<30 veya RSI>70, MACD cross.
-{"sigs":[{"t":"THYAO","tip":"EMA5_20|EMA20_50|EMA50_200|RSI|MACD","d":"AL|SAT","g":8,"a":"kısa açıklama"}],"al":0,"sat":0}`);
+    const r=await fetch('/api/cross',{method:'POST'});
+    const d=await r.json();
+    if(d.error) throw new Error(d.error);
+    crossD=d;
   }catch(e){crossD={error:e.message}}
   render();
 }
@@ -453,11 +445,11 @@ function quantumHTML(){
 }
 async function qRun(){
   qD='loading';render();
-  const tickers=STOCKS.map(s=>s.t).join(',');
   try{
-    qD=await callAPI('Kantitatif finans uzmanısın. SADECE JSON, markdown yok.',
-      `${tickers} hisselerine 0-100 skor: vs(değer),ms(momentum),ts(teknik),fs(temel),fls(akış),ks(kangal genel).
-{"stocks":[{"t":"THYAO","p":280,"chg":1.5,"vs":70,"ms":65,"ts":80,"fs":60,"fls":55,"ks":72,"rej":"TREND|RANGE|BREAKOUT|VOLATILE","sig":"AL|SAT|NÖTR"}]}`);
+    const r=await fetch('/api/quantum',{method:'POST'});
+    const d=await r.json();
+    if(d.error) throw new Error(d.error);
+    qD=d;
   }catch(e){qD={error:e.message}}
   render();
 }
@@ -511,9 +503,10 @@ async function takRun(){
   const t=document.getElementById('tTicker')?.value?.trim().toUpperCase();
   if(!t)return;takD='loading';render();
   try{
-    takD=await callAPI('BIST takas uzmanısın. SADECE JSON, markdown yok.',
-      `${t} takas analizi: aracı kurum alım/satım, yabancı takas, kim topluyor.
-{"ticker":"${t}","yab":0,"ytrend":"Artış|Azalış|Sabit","ilgi":"Yüksek|Orta|Düşük","kim":"açıklama","kurumlar":[{"ad":"İş Yatırım","lot":5000,"yon":"ALICI|SATICI"}]}`);
+    const r=await fetch('/api/takas',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ticker:t})});
+    const d=await r.json();
+    if(d.error) throw new Error(d.error);
+    takD=d;
   }catch(e){takD={error:e.message}}
   render();
 }
