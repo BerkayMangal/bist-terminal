@@ -147,7 +147,11 @@ h+=`<div class="card" style="margin-bottom:14px"><div class="card-h"><span class
 
 pg.innerHTML=h;
 if(!S.macro)loadMacro();
-loadQuote();loadLiveStats();loadBook();loadHeatmap();
+// Loaders only once — not on every renderHome
+if(!S._quoteLoaded){S._quoteLoaded=true;loadQuote();}
+if(!S._statsLoaded){S._statsLoaded=true;loadLiveStats();}
+if(!S._bookLoaded){S._bookLoaded=true;loadBook();}
+if(!S._heatLoaded){S._heatLoaded=true;loadHeatmap();}
 }
 
 // SECTOR CARDS from hero data
@@ -211,14 +215,14 @@ async function loadHeatmap(){
   try{
     const d=await api('/api/heatmap');
     if(!d.sectors||!d.sectors.length){box.innerHTML='<p style="color:var(--t3);font-size:12px">Veri bekleniyor — once scan yapin</p>';return;}
-    let h='<div style="display:flex;flex-wrap:wrap;gap:3px">';
+    let h='<div style="display:flex;flex-wrap:wrap;gap:3px;overflow-x:auto">';
     const maxMcap=Math.max(...d.sectors.flatMap(s=>s.stocks.map(st=>st.market_cap||1)));
     d.sectors.forEach(sec=>{
       sec.stocks.forEach(st=>{
         const chg=st.change_pct||0;
         const bg=chg>=2?'#00c853':chg>=0.5?'#2e7d32':chg>=-0.5?'#37474f':chg>=-2?'#c62828':'#b71c1c';
-        const sz=Math.max(50,Math.min(120,Math.sqrt((st.market_cap||1)/maxMcap)*140));
-        h+=`<div onclick="loadTicker('${st.ticker}')" style="width:${sz}px;height:${sz*0.7}px;background:${bg};border-radius:4px;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;border:1px solid rgba(255,255,255,.05);transition:.15s" onmouseenter="this.style.opacity='0.8'" onmouseleave="this.style.opacity='1'">`;
+        const sz=Math.max(44,Math.min(100,Math.sqrt((st.market_cap||1)/maxMcap)*120));
+        h+=`<div onclick="loadTicker('${st.ticker}')" style="width:${sz}px;height:${Math.round(sz*0.65)}px;background:${bg};border-radius:4px;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;border:1px solid rgba(255,255,255,.05);flex-shrink:0">`;
         h+=`<div style="font-family:'JetBrains Mono',monospace;font-size:${sz>80?11:9}px;font-weight:700;color:#fff">${st.ticker}</div>`;
         h+=`<div style="font-family:'JetBrains Mono',monospace;font-size:${sz>80?12:10}px;font-weight:700;color:${chg>=0?'#b9f6ca':'#ffcdd2'}">${chg>=0?'+':''}${chg.toFixed(1)}%</div>`;
         h+=`</div>`;
@@ -246,7 +250,7 @@ const pg=$('pg-portfoy');const pf=getPF();
 let h=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px"><div><h2 style="font-family:'JetBrains Mono',monospace;font-size:15px;color:var(--gold)">📒 Dedenin Not Defteri</h2><p style="font-size:11px;color:var(--t3);margin-top:2px">Sanal portfoyunuz — veriler localStorage'da saklanir</p></div><div style="display:flex;gap:6px"><button class="btn btn-sm btn-grn" onclick="showAddPF()">+ HISSE EKLE</button><button class="btn btn-sm btn-blu" onclick="askDedePortfoy()">☕ DEDE'YE SOR</button></div></div>`;
 
 // Add form (hidden by default)
-h+=`<div id="pfAddForm" style="display:none;margin-bottom:14px;padding:14px;background:var(--bg3);border:1px solid var(--bdr);border-radius:var(--rad)"><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end"><div><div style="font-size:10px;color:var(--t3);margin-bottom:3px">TICKER</div><input id="pfTicker" type="text" placeholder="THYAO" style="font-family:'JetBrains Mono',monospace;font-size:13px;padding:6px 10px;background:var(--bg0);border:1px solid var(--bdr);border-radius:var(--rad);color:var(--t1);outline:0;width:100px;text-transform:uppercase"></div><div><div style="font-size:10px;color:var(--t3);margin-bottom:3px">LOT</div><input id="pfLot" type="number" placeholder="100" style="font-family:'JetBrains Mono',monospace;font-size:13px;padding:6px 10px;background:var(--bg0);border:1px solid var(--bdr);border-radius:var(--rad);color:var(--t1);outline:0;width:80px"></div><div><div style="font-size:10px;color:var(--t3);margin-bottom:3px">MALIYET (TL)</div><input id="pfAvg" type="number" step="0.01" placeholder="45.50" style="font-family:'JetBrains Mono',monospace;font-size:13px;padding:6px 10px;background:var(--bg0);border:1px solid var(--bdr);border-radius:var(--rad);color:var(--t1);outline:0;width:100px"></div><button class="btn btn-grn btn-sm" onclick="doAddPF()">EKLE</button><button class="btn btn-sm" style="background:var(--bg2);color:var(--t3)" onclick="$('pfAddForm').style.display='none'">IPTAL</button></div></div>`;
+h+=`<div id="pfAddForm" style="display:none;margin-bottom:14px;padding:14px;background:var(--bg3);border:1px solid var(--bdr);border-radius:var(--rad)"><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end"><div style="flex:1;min-width:80px"><div style="font-size:10px;color:var(--t3);margin-bottom:3px">TICKER</div><input id="pfTicker" type="text" placeholder="THYAO" style="font-family:'JetBrains Mono',monospace;font-size:13px;padding:6px 10px;background:var(--bg0);border:1px solid var(--bdr);border-radius:var(--rad);color:var(--t1);outline:0;width:100%;text-transform:uppercase"></div><div style="flex:1;min-width:60px"><div style="font-size:10px;color:var(--t3);margin-bottom:3px">LOT</div><input id="pfLot" type="number" placeholder="100" style="font-family:'JetBrains Mono',monospace;font-size:13px;padding:6px 10px;background:var(--bg0);border:1px solid var(--bdr);border-radius:var(--rad);color:var(--t1);outline:0;width:100%"></div><div style="flex:1;min-width:80px"><div style="font-size:10px;color:var(--t3);margin-bottom:3px">MALIYET (TL)</div><input id="pfAvg" type="number" step="0.01" placeholder="45.50" style="font-family:'JetBrains Mono',monospace;font-size:13px;padding:6px 10px;background:var(--bg0);border:1px solid var(--bdr);border-radius:var(--rad);color:var(--t1);outline:0;width:100%"></div><button class="btn btn-grn btn-sm" onclick="doAddPF()">EKLE</button><button class="btn btn-sm" style="background:var(--bg2);color:var(--t3)" onclick="$('pfAddForm').style.display='none'">IPTAL</button></div></div>`;
 
 // Dede comment box
 h+=`<div id="pfDedeBox" style="display:none;margin-bottom:14px"></div>`;
@@ -281,18 +285,22 @@ async function askDedePortfoy(){const pf=getPF();if(!pf.length){alert('Once port
 
 // INIT — staggered for fast first paint
 (async()=>{
-renderHome();
-const [,] = await Promise.all([loadMacro(), api('/api/health').catch(()=>null)]);
-renderHome();
+renderHome(); // skeleton
+// Phase 1: macro + health parallel
+await Promise.all([loadMacro(), api('/api/health').catch(()=>null)]);
+// Phase 2: scan data
 try{
   const d=await api('/api/top10');
   if(d.items&&d.items.length>0){
-    S.scan=d; renderHome();
+    S.scan=d;
     const [dashR,heroR]=await Promise.all([api('/api/dashboard').catch(()=>null),api('/api/hero-summary').catch(()=>null)]);
-    if(dashR)S.dash=dashR;if(heroR)S.hero=heroR;updCnt(S.dash);renderHome();
-  }else{startScan();}
-}catch(e){startScan();}
-api('/api/cross').then(d=>{S.cross=d;if(S.page==='home')renderHome();}).catch(()=>{});
+    if(dashR)S.dash=dashR;if(heroR)S.hero=heroR;updCnt(S.dash);
+  }else{await startScan();}
+}catch(e){await startScan();}
+// Phase 3: cross (background)
+api('/api/cross').then(d=>{S.cross=d;}).catch(()=>{});
+// Final render — everything loaded
+renderHome();
 })();
 
 // BORSADEDE AGENT
