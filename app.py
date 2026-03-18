@@ -936,7 +936,7 @@ def _analyze_safe(ticker):
 
 def scan_universe_blocking():
     ranked = []
-    with ThreadPoolExecutor(max_workers=6) as pool:
+    with ThreadPoolExecutor(max_workers=10) as pool:
         futures = {pool.submit(_analyze_safe, t): t for t in UNIVERSE}
         for future in as_completed(futures):
             r = future.result()
