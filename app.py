@@ -1338,6 +1338,11 @@ async def api_briefing():
         text = await asyncio.to_thread(ai_call, prompt, 400)
         result = {"briefing": text, "generated": True, "timestamp": dt.datetime.now(dt.timezone.utc).isoformat()}
         BRIEFING_CACHE[cache_key] = result
+        # Save to history
+        hour = dt.datetime.now().hour
+        period = "sabah" if hour < 12 else "oglen" if hour < 17 else "aksam"
+        BRIEFING_HISTORY.append({"text": text, "period": period, "timestamp": result["timestamp"]})
+        if len(BRIEFING_HISTORY) > 10: BRIEFING_HISTORY.pop(0)
         return result
     except Exception as e:
         log.warning(f"briefing: {e}")
@@ -1635,6 +1640,139 @@ async def api_agent(q: str = ""):
     except Exception as e:
         log.warning(f"agent: {e}")
         return {"answer": f"Hata: {str(e)}", "error": True}
+
+# ================================================================
+# HERO SUMMARY — AI-powered market intelligence for dashboard hero
+# ================================================================
+HERO_CACHE = TTLCache(maxsize=5, ttl=1800)  # 30 min cache
+
+@app.get("/api/hero-summary")
+async def api_hero_summary():
+    """Market mode, main story, opportunity, risk, bot commentary, watch list"""
+    cache_key = "hero"
+    if cache_key in HERO_CACHE:
+        return HERO_CACHE[cache_key]
+
+    items = TOP10_CACHE.get("items", [])
+    macro_data = MACRO_CACHE.get("macro_all", {})
+    cross_data = cross_hunter.last_results or []
+
+    # Basic stats without AI
+    bullish_count = sum(1 for r in items if r["overall"] >= 65)
+    bearish_count = sum(1 for r in items if r["overall"] < 40)
+    total = len(items)
+
+    # Market mode from data
+    if bullish_count > total * 0.6: mode = "POZITIF"
+    elif bearish_count > total * 0.4: mode = "RISKLI"
+    elif bullish_count > bearish_count: mode = "TEMKINLI_POZITIF"
+    else: mode = "NOTR"
+
+    mode_color = {"POZITIF": "green", "TEMKINLI_POZITIF": "green", "NOTR": "yellow", "RISKLI": "red"}.get(mode, "yellow")
+    mode_label = {"POZITIF": "Pozitif", "TEMKINLI_POZITIF": "Temkinli Pozitif", "NOTR": "Notr", "RISKLI": "Riskli"}.get(mode, "Notr")
+
+    # Top opportunity & risk from scan
+    opp = None
+    risk_item = None
+    if items:
+        best = max(items, key=lambda x: x["scores"].get("value", 0) + x["scores"].get("growth", 0))
+        opp = {"ticker": best["ticker"], "name": best["name"], "overall": best["overall"], "reason": best["positives"][0] if best["positives"] else ""}
+        worst = min(items, key=lambda x: x["overall"])
+        risk_item = {"ticker": worst["ticker"], "name": worst["name"], "overall": worst["overall"], "reason": worst["negatives"][0] if worst["negatives"] else ""}
+
+    # Sector strength from scan
+    sec_map = defaultdict(lambda: {"total": 0, "count": 0})
+    for r in items:
+        s = r.get("sector") or "Diger"
+        sec_map[s]["total"] += r["overall"]
+        sec_map[s]["count"] += 1
+    strong_sectors = sorted([(k, v["total"]/v["count"]) for k, v in sec_map.items() if v["count"] >= 2], key=lambda x: -x[1])[:3]
+    weak_sectors = sorted([(k, v["total"]/v["count"]) for k, v in sec_map.items() if v["count"] >= 2], key=lambda x: x[1])[:2]
+
+    # Watch list
+    watch = []
+    if strong_sectors: watch.append(f"{strong_sectors[0][0]} sektoru guclu")
+    macro_items = macro_data.get("items", [])
+    for mi in macro_items:
+        if mi.get("key") == "VIX" and mi.get("change_pct", 0) > 3: watch.append("VIX yukseliyor — dikkat")
+        if mi.get("key") == "DXY" and mi.get("change_pct", 0) > 0.5: watch.append("DXY yukseliste — TL baskisi")
+    if cross_data: watch.append(f"{len(cross_data)} teknik sinyal aktif")
+    if not watch: watch = ["Piyasa sakin, secici izle"]
+
+    # AI-powered story + commentary
+    story = None
+    bot_says = None
+    if AI_AVAILABLE and items:
+        try:
+            top3 = [f"{r['ticker']}({r['overall']})" for r in items[:3]]
+            bot3 = [f"{r['ticker']}({r['overall']})" for r in items[-3:]]
+            macro_str = ", ".join([f"{m['name']}:{m.get('change_pct',0):+.1f}%" for m in macro_items[:6]])
+            prompt = (
+                "Sen BistBull Terminal'in piyasa editoru ve stratejistisin. Turkce yaz.\n"
+                f"Piyasa modu: {mode_label}. {total} hisse tarandi, {bullish_count} pozitif, {bearish_count} zayif.\n"
+                f"En iyiler: {', '.join(top3)}. En zayiflar: {', '.join(bot3)}.\n"
+                f"Makro: {macro_str}\n"
+                f"Guclu sektorler: {', '.join([s[0] for s in strong_sectors])}\n"
+                f"Cross sinyal: {len(cross_data)} adet\n\n"
+                "Asagidaki 3 seyi yaz, HER BIRINI AYRI SATIRDA, baska hic birsey yazma:\n"
+                "HIKAYE: 2 cumle ile bugunun ana piyasa hikayesi\n"
+                "YORUM: 2 cumle ile bot yorumu ve strateji onerisi\n"
+                "FIRSAT: 1 cumle ile en buyuk firsat"
+            )
+            text = await asyncio.to_thread(ai_call, prompt, 300)
+            if text:
+                for line in text.split("\n"):
+                    line = line.strip()
+                    if line.upper().startswith("HIKAYE:"): story = line[7:].strip()
+                    elif line.upper().startswith("YORUM:"): bot_says = line[6:].strip()
+                    elif line.upper().startswith("FIRSAT:") and opp: opp["ai_reason"] = line[7:].strip()
+                if not story: story = text[:200]
+                if not bot_says: bot_says = text[200:400] if len(text) > 200 else None
+        except Exception as e:
+            log.warning(f"hero AI: {e}")
+
+    result = {
+        "mode": mode, "mode_label": mode_label, "mode_color": mode_color,
+        "story": story or f"{total} hisse tarandi. {bullish_count} hisse pozitif bolgede, {bearish_count} hisse zayif.",
+        "opportunity": clean_for_json(opp),
+        "risk": clean_for_json(risk_item),
+        "bot_says": bot_says or f"Piyasa {mode_label.lower()} modda. {'Secici al stratejisi uygun.' if mode != 'RISKLI' else 'Defansif pozisyon onerilir.'}",
+        "watch": watch[:4],
+        "strong_sectors": [{"name": s[0], "score": round(s[1], 1)} for s in strong_sectors],
+        "weak_sectors": [{"name": s[0], "score": round(s[1], 1)} for s in weak_sectors],
+        "stats": {"total": total, "bullish": bullish_count, "bearish": bearish_count, "signals": len(cross_data)},
+        "timestamp": dt.datetime.now(dt.timezone.utc).isoformat(),
+    }
+    HERO_CACHE[cache_key] = result
+    return result
+
+# ================================================================
+# LIVE STATS — system activity counters
+# ================================================================
+SYSTEM_STATS = {"news_processed": 0, "scans_done": 0, "signals_total": 0, "start_time": dt.datetime.now(dt.timezone.utc).isoformat()}
+
+@app.get("/api/live/stats")
+async def api_live_stats():
+    uptime_seconds = (dt.datetime.now(dt.timezone.utc) - dt.datetime.fromisoformat(SYSTEM_STATS["start_time"])).total_seconds()
+    return {
+        "scans_done": len(ANALYSIS_CACHE),
+        "signals_total": len(cross_hunter.last_results),
+        "macro_tracked": len(MACRO_CACHE.get("macro_all", {}).get("items", [])),
+        "cache_raw": len(RAW_CACHE),
+        "cache_tech": len(TECH_CACHE),
+        "uptime_hours": round(uptime_seconds / 3600, 1),
+        "last_scan": TOP10_CACHE["asof"].isoformat() if TOP10_CACHE.get("asof") else None,
+        "universe": len(UNIVERSE),
+    }
+
+# ================================================================
+# BRIEFING HISTORY — store and retrieve past briefings
+# ================================================================
+BRIEFING_HISTORY = []  # in-memory list, max 10
+
+@app.get("/api/briefings/history")
+async def api_briefings_history():
+    return {"briefings": BRIEFING_HISTORY[-10:]}
 
 # ================================================================
 # QUICK ANALYZE — batch analyze multiple tickers at once
