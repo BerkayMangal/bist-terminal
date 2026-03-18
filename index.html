@@ -89,12 +89,13 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg0);color:var(
 <div class="page" id="pg-cross" data-page="cross"></div>
 <div class="page" id="pg-makro" data-page="makro"></div>
 <div class="page" id="pg-takas" data-page="takas"></div>
+<div class="page" id="pg-sosyal" data-page="sosyal"></div>
 </div>
 <div class="ov" id="ov" onclick="if(event.target===this)closeD()"><div class="dp" id="dp"></div></div>
 <script>
-const S={page:'home',scan:null,cross:null,macro:null,dash:null,takas:null,wl:JSON.parse(localStorage.getItem('bb_wl')||'[]'),seen:JSON.parse(localStorage.getItem('bb_seen')||'[]')};
+const S={page:'home',scan:null,cross:null,macro:null,dash:null,takas:null,social:null,wl:JSON.parse(localStorage.getItem('bb_wl')||'[]'),seen:JSON.parse(localStorage.getItem('bb_seen')||'[]')};
 const QT=['ASELS','THYAO','BIMAS','KCHOL','TUPRS','AKBNK','GARAN','FROTO','TOASO','PGSUS'];
-const PAGES=[{id:'home',label:'Home'},{id:'radar',label:'Radar'},{id:'cross',label:'Cross'},{id:'makro',label:'Makro'},{id:'takas',label:'Takas'}];
+const PAGES=[{id:'home',label:'Home'},{id:'radar',label:'Radar'},{id:'cross',label:'Cross'},{id:'makro',label:'Makro'},{id:'takas',label:'Takas'},{id:'sosyal',label:'Sosyal'}];
 const $=s=>document.getElementById(s);
 const fN=(x,d=2)=>{if(x==null)return'N/A';if(Math.abs(x)>=1e9)return(x/1e9).toFixed(2)+'B';if(Math.abs(x)>=1e6)return(x/1e6).toFixed(2)+'M';if(Math.abs(x)>=1e3)return x.toLocaleString('en',{maximumFractionDigits:0});return x.toFixed(d);};
 const fP=(x,d=1)=>x==null?'N/A':(x*100).toFixed(d)+'%';
@@ -108,7 +109,7 @@ setInterval(()=>{$('clk').textContent=new Date().toLocaleTimeString('tr-TR',{hou
 
 // NAV
 const nav=$('nav');PAGES.forEach(p=>{const b=document.createElement('button');b.className='nav-b'+(p.id==='home'?' on':'');b.textContent=p.label;b.dataset.p=p.id;b.onclick=()=>goPage(p.id);nav.appendChild(b);});
-function goPage(id){S.page=id;nav.querySelectorAll('.nav-b').forEach(b=>b.classList.toggle('on',b.dataset.p===id));document.querySelectorAll('.page').forEach(p=>p.classList.toggle('on',p.dataset.page===id));if(id==='home')renderHome();if(id==='radar')renderRadarPage();if(id==='cross')renderCrossPage();if(id==='makro')renderMakroPage();if(id==='takas')renderTakasPage();}
+function goPage(id){S.page=id;nav.querySelectorAll('.nav-b').forEach(b=>b.classList.toggle('on',b.dataset.p===id));document.querySelectorAll('.page').forEach(p=>p.classList.toggle('on',p.dataset.page===id));if(id==='home')renderHome();if(id==='radar')renderRadarPage();if(id==='cross')renderCrossPage();if(id==='makro')renderMakroPage();if(id==='takas')renderTakasPage();if(id==='sosyal')renderSosyalPage();}
 
 // QUICK TICKERS + SEARCH
 const qtEl=$('qticks');QT.forEach(t=>{const d=document.createElement('div');d.className='qtk';d.textContent=t;d.onclick=()=>loadTicker(t);qtEl.appendChild(d);});
@@ -171,6 +172,22 @@ function renderTakasPage(){const pg=$('pg-takas');if(!S.takas){pg.innerHTML='<di
 if(S.takas.error){h+=`<div class="aib" style="border-color:var(--ylw);margin-bottom:14px"><div class="aib-t" style="color:var(--ylw)">Uyari</div><div class="aib-tx" style="color:var(--ylw)">${S.takas.error}</div></div>`;}
 if(items.length){h+=`<div class="card"><div class="card-b" style="overflow-x:auto"><table class="dtb"><thead><tr><th>#</th><th>Ticker</th><th>Yabanci %</th><th>Fiyat</th><th>Bar</th></tr></thead><tbody>`;items.slice(0,40).forEach((it,i)=>{const pct=it.foreign_pct||0;const barW=Math.min(pct,100);const barCol=pct>50?'var(--grn)':pct>20?'var(--ylw)':'var(--red)';h+=`<tr><td style="color:var(--t3)">${i+1}</td><td class="clk-t" onclick="loadTicker('${it.ticker}')">${it.ticker}</td><td style="color:var(--t1);font-weight:700">${pct.toFixed(1)}%</td><td style="color:var(--t1)">${it.price?fN(it.price):'—'}</td><td style="width:120px"><div class="tk-bar"><div class="tk-fill" style="width:${barW}%;background:${barCol};color:#000">${pct>10?pct.toFixed(0)+'%':''}</div></div></td></tr>`;});h+='</tbody></table></div></div>';}else{h+='<div class="emp"><h3 style="color:var(--t2)">Takas verisi alinamadi</h3><p style="color:var(--t3)">Railway network ayarlarindan isyatirim.com.tr domain\'ini ekleyin</p></div>';}pg.innerHTML=h;}
 async function loadTakas(){try{S.takas=await api('/api/takas');renderTakasPage();}catch(e){S.takas={items:[],error:e.message};renderTakasPage();}}
+
+// SOSYAL PAGE
+function renderSosyalPage(){const pg=$('pg-sosyal');if(!S.social){pg.innerHTML='<div class="ld"><div class="sp"></div><div class="ld-t">X/Twitter sentiment yukleniyor...</div></div>';loadSocial();return;}
+let h=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px"><div><h2 style="font-family:'JetBrains Mono',monospace;font-size:15px;color:var(--prp)">𝕏 Sosyal Medya Sentiment</h2><p style="font-size:11px;color:var(--t3);margin-top:2px">Kaynak: ${S.social.source==='grok_ai'?'Grok AI (X/Twitter verisi)':'—'}</p></div><button class="btn btn-sm btn-blu" onclick="S.social=null;renderSosyalPage()">🔄</button></div>`;
+if(S.social.error){h+=`<div class="aib" style="border-color:var(--ylw);margin-bottom:14px"><div class="aib-t" style="color:var(--ylw)">Uyari</div><div class="aib-tx" style="color:var(--ylw)">${S.social.error}</div></div>`;}
+// Summary
+if(S.social.summary){h+=`<div class="aib" style="margin-bottom:14px"><div class="aib-t">📊 Genel Sentiment: <span style="color:${S.social.overall_sentiment?.includes('bull')?'var(--grn)':S.social.overall_sentiment?.includes('bear')?'var(--red)':'var(--ylw)'};text-transform:uppercase">${S.social.overall_sentiment||'—'}</span></div><div class="aib-tx">${S.social.summary}</div></div>`;}
+// Hot Topics
+if(S.social.hot_topics&&S.social.hot_topics.length){h+=`<div style="margin-bottom:14px;display:flex;gap:6px;flex-wrap:wrap">`;S.social.hot_topics.forEach(t=>{h+=`<span class="pill p-blu">#${t}</span>`;});h+=`</div>`;}
+// Trending Stocks
+const trends=S.social.trending||[];
+if(trends.length){h+=`<div class="card"><div class="card-h"><span class="card-t">🔥 X'te En Cok Konusulan Hisseler</span></div><div class="card-b"><table class="dtb"><thead><tr><th>#</th><th>Ticker</th><th>Sentiment</th><th>Skor</th><th>Neden</th></tr></thead><tbody>`;
+trends.forEach((t,i)=>{const sentCol=t.sentiment==='bullish'?'var(--grn)':t.sentiment==='bearish'?'var(--red)':'var(--ylw)';h+=`<tr><td style="color:var(--t3)">${i+1}</td><td class="clk-t" onclick="loadTicker('${t.ticker}')">${t.ticker}</td><td style="color:${sentCol};font-weight:700;text-transform:uppercase">${t.sentiment||'—'}</td><td>${sPill(t.score)}</td><td style="color:var(--t2);font-size:10px">${t.reason||''}</td></tr>`;});
+h+=`</tbody></table></div></div>`;}
+pg.innerHTML=h;}
+async function loadSocial(){try{S.social=await api('/api/social');renderSosyalPage();}catch(e){S.social={trending:[],summary:'Hata: '+e.message,error:e.message};renderSosyalPage();}}
 
 // SCAN
 async function startScan(){const btn=$('scanBtn');if(btn){btn.disabled=true;btn.textContent='⏳ TARANIYOR...';}try{S.scan=await api('/api/scan');S.dash=await api('/api/dashboard');updCnt(S.dash);renderHome();}catch(e){const t=$('hT');if(t){t.textContent='Scan Basarisiz';t.style.color='var(--red)';}}if(btn){btn.disabled=false;btn.textContent='🔄 YENİLE';}}

@@ -31,10 +31,12 @@ try:
 except ImportError:
     CHART_AVAILABLE = False
 
-# AI — OpenAI preferred (cheaper + working), Anthropic as fallback
-AI_PROVIDERS = []  # ordered list of available providers
+# AI — Grok preferred (X/Twitter data), OpenAI fallback, Anthropic last
+AI_PROVIDERS = []  # ordered list
 try:
-    from openai import OpenAI as _OpenAI
+    from openai import OpenAI as _OpenAI  # Grok uses OpenAI-compatible API
+    if os.environ.get("XAI_API_KEY") or os.environ.get("GROK_API_KEY"):
+        AI_PROVIDERS.append("grok")
     if os.environ.get("OPENAI_KEY") or os.environ.get("OPENAI_API_KEY"):
         AI_PROVIDERS.append("openai")
 except ImportError:
@@ -55,15 +57,25 @@ CONFIDENCE_MIN = 55
 # ================================================================
 # ENV VARS
 # ================================================================
-ANTHROPIC_KEY = os.environ.get("ANTHROPIC_API_KEY", "") or os.environ.get("ANTHROPIC_KEY", "")
+GROK_KEY = os.environ.get("XAI_API_KEY", "") or os.environ.get("GROK_API_KEY", "")
+GROK_MODEL = os.environ.get("GROK_MODEL", "grok-3-mini-fast")
 OPENAI_KEY = os.environ.get("OPENAI_KEY", "") or os.environ.get("OPENAI_API_KEY", "")
-AI_MODEL_ANTHROPIC = os.environ.get("AI_MODEL", "claude-sonnet-4-20250514")
-AI_MODEL_OPENAI = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
+OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
+ANTHROPIC_KEY = os.environ.get("ANTHROPIC_API_KEY", "") or os.environ.get("ANTHROPIC_KEY", "")
+ANTHROPIC_MODEL = os.environ.get("AI_MODEL", "claude-sonnet-4-20250514")
+
+def _call_grok(prompt, max_tokens):
+    client = _OpenAI(api_key=GROK_KEY, base_url="https://api.x.ai/v1")
+    resp = client.chat.completions.create(
+        model=GROK_MODEL, max_tokens=max_tokens, temperature=0.4,
+        messages=[{"role": "user", "content": prompt}]
+    )
+    return resp.choices[0].message.content.strip()
 
 def _call_openai(prompt, max_tokens):
     client = _OpenAI(api_key=OPENAI_KEY)
     resp = client.chat.completions.create(
-        model=AI_MODEL_OPENAI, max_tokens=max_tokens, temperature=0.4,
+        model=OPENAI_MODEL, max_tokens=max_tokens, temperature=0.4,
         messages=[{"role": "user", "content": prompt}]
     )
     return resp.choices[0].message.content.strip()
@@ -71,16 +83,18 @@ def _call_openai(prompt, max_tokens):
 def _call_anthropic(prompt, max_tokens):
     client = _anthropic.Anthropic(api_key=ANTHROPIC_KEY)
     resp = client.messages.create(
-        model=AI_MODEL_ANTHROPIC, max_tokens=max_tokens,
+        model=ANTHROPIC_MODEL, max_tokens=max_tokens,
         messages=[{"role": "user", "content": prompt}]
     )
     return resp.content[0].text.strip()
 
 def ai_call(prompt, max_tokens=200):
-    """Try each AI provider in order, fallback if one fails"""
+    """Try each AI provider in order: Grok → OpenAI → Anthropic"""
     for provider in AI_PROVIDERS:
         try:
-            if provider == "openai":
+            if provider == "grok":
+                return _call_grok(prompt, max_tokens)
+            elif provider == "openai":
                 return _call_openai(prompt, max_tokens)
             elif provider == "anthropic":
                 return _call_anthropic(prompt, max_tokens)
@@ -1471,6 +1485,84 @@ async def api_takas():
     except Exception as e:
         log.error(f"takas: {e}")
         raise HTTPException(status_code=500, detail="Takas verisi alinamadi")
+
+# ================================================================
+# SOSYAL MEDYA — X/Twitter sentiment via Grok + twscrape ready
+# ================================================================
+SOCIAL_CACHE = TTLCache(maxsize=10, ttl=1800)  # 30 min
+
+@app.get("/api/social")
+async def api_social():
+    """X/Twitter BIST sentiment — uses Grok AI (has X data) or twscrape"""
+    cache_key = "social_sentiment"
+    if cache_key in SOCIAL_CACHE:
+        return SOCIAL_CACHE[cache_key]
+
+    # Method 1: Grok AI — ask about current BIST sentiment on X
+    if AI_AVAILABLE and "grok" in AI_PROVIDERS:
+        try:
+            prompt = (
+                "Sen bir BIST sosyal medya analistisin. X (Twitter) uzerindeki BIST hisse senedi tartismalarini analiz et.\n"
+                "Su anda X'te en cok konusulan BIST hisseleri hangileri? Genel sentiment nedir?\n"
+                "Asagidaki formatta JSON olarak cevap ver, SADECE JSON, baska birsey yazma:\n"
+                '{"trending": [{"ticker": "THYAO", "sentiment": "bullish", "score": 78, "reason": "Yolcu rekoru haberleri"}, ...], '
+                '"overall_sentiment": "cautious_bullish", '
+                '"summary": "BIST\'te genel hava temkinli pozitif...", '
+                '"hot_topics": ["faiz kararı", "enflasyon verisi", "yabancı girişi"]}\n'
+                "En az 5 hisse, en fazla 10 hisse. score 0-100 arasi. sentiment: bullish/bearish/neutral.\n"
+                "Gercekci ol, sallama."
+            )
+            text = await asyncio.to_thread(ai_call, prompt, 500)
+            if text:
+                # Try to parse JSON from response
+                import json as _json
+                # Clean potential markdown fences
+                clean = text.strip()
+                if clean.startswith("```"): clean = clean.split("\n", 1)[1] if "\n" in clean else clean[3:]
+                if clean.endswith("```"): clean = clean[:-3]
+                clean = clean.strip()
+                if clean.startswith("json"): clean = clean[4:].strip()
+                try:
+                    data = _json.loads(clean)
+                    result = {
+                        "timestamp": dt.datetime.now(dt.timezone.utc).isoformat(),
+                        "source": "grok_ai",
+                        "trending": data.get("trending", []),
+                        "overall_sentiment": data.get("overall_sentiment", "neutral"),
+                        "summary": data.get("summary", ""),
+                        "hot_topics": data.get("hot_topics", []),
+                    }
+                    SOCIAL_CACHE[cache_key] = result
+                    return result
+                except _json.JSONDecodeError:
+                    # Grok didn't return valid JSON — return text as summary
+                    result = {
+                        "timestamp": dt.datetime.now(dt.timezone.utc).isoformat(),
+                        "source": "grok_ai",
+                        "trending": [],
+                        "overall_sentiment": "unknown",
+                        "summary": text[:500],
+                        "hot_topics": [],
+                    }
+                    SOCIAL_CACHE[cache_key] = result
+                    return result
+        except Exception as e:
+            log.warning(f"social grok: {e}")
+
+    # Method 2: twscrape (when credentials are set)
+    # TODO: X_USERNAME and X_PASSWORD env vars ile twscrape entegrasyonu
+    # twscrape kurulumu: pip install twscrape
+    # await api.pool.add_account(username, password, email, email_password)
+
+    return {
+        "timestamp": dt.datetime.now(dt.timezone.utc).isoformat(),
+        "source": None,
+        "trending": [],
+        "overall_sentiment": "unavailable",
+        "summary": "Sosyal medya verisi icin XAI_API_KEY (Grok) ekleyin. Grok, X/Twitter verisine erisim saglar.",
+        "hot_topics": [],
+        "error": "XAI_API_KEY gerekli"
+    }
 
 # ================================================================
 # QUICK ANALYZE — batch analyze multiple tickers at once
