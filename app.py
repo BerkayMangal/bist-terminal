@@ -18,6 +18,10 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 from contextlib import asynccontextmanager
 
+# Fix yfinance TzCache warning on Railway
+os.makedirs("/tmp/yf-cache", exist_ok=True)
+yf.set_tz_cache_location("/tmp/yf-cache")
+
 try:
     import matplotlib
     matplotlib.use("Agg")
@@ -49,7 +53,7 @@ SCORING_MODEL = os.environ.get("SCORING_MODEL", "gpt-4o-mini")
 UNIVERSE = [
     "ASELS","THYAO","BIMAS","KCHOL","SISE","EREGL","TUPRS","AKBNK","ISCTR","YKBNK",
     "GARAN","SAHOL","MGROS","FROTO","TOASO","TCELL","KRDMD","PETKM","ENKAI","TAVHL",
-    "PGSUS","EKGYO","KOZAL","TTKOM","ARCLK","VESTL","DOHOL","AYGAZ","LOGO","SOKM",
+    "PGSUS","EKGYO","INDES","TTKOM","ARCLK","VESTL","DOHOL","AYGAZ","LOGO","SOKM",
     "TKFEN","KONTR","ODAS","GUBRF","SASA","ISMEN","OYAKC","CIMSA","MPARK","AKSEN",
 ]
 
