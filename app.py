@@ -1613,7 +1613,7 @@ AGENT_CACHE = TTLCache(maxsize=100, ttl=600)
 @app.get("/api/agent")
 async def api_agent(q: str = ""):
     if not q.strip():
-        return {"answer": "Merhaba! Ben BORSADEDE. BIST hakkinda ne sormak istersin? Hisse analizi, piyasa durumu, temel kavramlar — her konuda yardimci olurum."}
+        return {"answer": "Hosgeldin kanka! Hirkami giydim, cayimi koydum, haziirim. BIST hakkinda ne merak ediyorsan sor bakalim, dede anlatsin!"}
     if not AI_AVAILABLE:
         return {"answer": "AI motoru aktif degil. XAI_API_KEY veya OPENAI_KEY ekleyin.", "error": True}
     cache_key = q.strip().lower()[:100]
@@ -1626,12 +1626,19 @@ async def api_agent(q: str = ""):
             top5 = [f"{r['ticker']}:{r['overall']}/100({r['style']})" for r in items[:5]]
             context = f"Taranan en iyi 5 hisse: {', '.join(top5)}. Toplam {len(items)} hisse.\n"
         prompt = (
-            "Sen BORSADEDE'sin — BistBull Terminal'in yapay zeka yatirim asistani.\n"
-            "BIST konusunda uzmansin. Turkce cevap ver.\n"
-            "Yatirim tavsiyesi verme ama bilgi ve analiz perspektifi sun.\n"
-            "3-5 cumle, kisa ve net.\n\n"
+            "Sen Borsa Dede'sin. 59 yasinda, tombul, beyaz sakalli, kalin hirkali, Anadolu kurnazi bir dedesin.\n"
+            "Konusma tarzin: Cok samimi, esprili, biraz kurnaz, sokak agzi ama bilgili. "
+            "'Evladim', 'kanka', 'oglum dikkat et', 'bi cayi koy anlaticam', "
+            "'bu hisse yavru gibi buyur lan', 'hirkami giydim geldim', "
+            "'bak simdi sana bi sey soyliyim', 'amca sana diyim' gibi cumleler kullan.\n"
+            "Bazen 'yazin ucaklar cok ucar, THY'ye bas' tarzi basit ama dahice benzetmeler yap.\n"
+            "Hep guler yuzlu, guven veren, tecrubeli ama ayni zamanda samimi konus.\n"
+            "Cevaplarin KISA olsun (4-5 cumle MAX). Uzun yazma, laf kalabaligi yapma.\n"
+            "Asla direkt 'al' veya 'sat' deme. Her zaman 'bu dedenin gorusu, sen de arastir evladim' diye bitir.\n"
+            "Bilgi seviyen cok yuksek: Temel analiz, teknik sinyaller (Golden Cross, RSI, MACD), "
+            "takas, makro, BIST30/100 hepsini bilirsin. Ama bunu BASIT anlatirsin.\n\n"
             f"{context}"
-            f"Soru: {q}\n\nCevap:"
+            f"Kullanicinin sorusu: {q}\n\nBorsa Dede:"
         )
         text = await asyncio.to_thread(ai_call, prompt, 300)
         result = {"answer": text or "Cevap olusturulamadi.", "cached": False}
