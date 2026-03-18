@@ -66,7 +66,7 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg0);color:var(
 </div>
 <div class="ov" id="ov" onclick="if(event.target===this)closeD()"><div class="dp" id="dp"></div></div>
 <script>
-const S={page:'home',scan:null,cross:null,macro:null,dash:null,takas:null,social:null,hero:null,wl:JSON.parse(localStorage.getItem('bb_wl')||'[]'),seen:JSON.parse(localStorage.getItem('bb_seen')||'[]')};
+const S={page:'home',scan:null,cross:null,macro:null,dash:null,takas:null,social:null,hero:null,quote:null,book:null,wl:JSON.parse(localStorage.getItem('bb_wl')||'[]'),seen:JSON.parse(localStorage.getItem('bb_seen')||'[]')};
 const QT=['ASELS','THYAO','BIMAS','KCHOL','TUPRS','AKBNK','GARAN','FROTO','TOASO','PGSUS'];
 const PAGES=[{id:'home',label:'Home'},{id:'radar',label:'Radar'},{id:'cross',label:'Cross'},{id:'makro',label:'Makro'},{id:'takas',label:'Takas'},{id:'sosyal',label:'Sosyal'},{id:'portfoy',label:'Portfoy'}];
 const $=s=>document.getElementById(s);
@@ -97,13 +97,15 @@ const hasSc=sc&&sc.items&&sc.items.length>0;const hasD=d&&d.top3&&d.top3.length>
 let h='';
 
 // ========== 1. OZLU SOZ — EN USTE ==========
-h+=`<div id="quoteBox" style="margin-bottom:14px;padding:12px 16px;background:var(--bg3);border-left:3px solid var(--gold);border-radius:0 var(--rad) var(--rad) 0;font-style:italic;color:var(--t2);font-size:13px;line-height:1.5"><span id="quoteText">...</span> — <span id="quoteAuthor" style="color:var(--gold);font-style:normal;font-weight:600;font-size:12px">...</span></div>`;
+if(S.quote){h+=`<div style="margin-bottom:14px;padding:12px 16px;background:var(--bg3);border-left:3px solid var(--gold);border-radius:0 var(--rad) var(--rad) 0;font-style:italic;color:var(--t2);font-size:13px;line-height:1.5">"${S.quote.text}" — <span style="color:var(--gold);font-style:normal;font-weight:600;font-size:12px">${S.quote.author}</span></div>`;}
+else{h+=`<div id="quoteBox" style="margin-bottom:14px;padding:12px 16px;background:var(--bg3);border-left:3px solid var(--gold);border-radius:0 var(--rad) var(--rad) 0;font-style:italic;color:var(--t4);font-size:12px">Gunun sozu yukleniyor...</div>`;}
 
 // ========== 2. NASIL CALISIR ==========
 h+=`<div class="card" style="margin-bottom:14px"><div class="card-h"><span class="card-t">🐂 BistBull Nasil Calisir?</span></div><div class="card-b" style="font-size:12px;color:var(--t2);line-height:1.7"><b style="color:var(--cyn)">7 boyutlu temel analiz</b> (Piotroski F-Score, Altman Z-Score, Beneish M-Score, Graham Degerleme) + <b style="color:var(--cyn)">6 teknik gosterge</b> (RSI, MACD, MA50/200, Bollinger Bantlari). Her hisse <b style="color:var(--cyn)">100 puan</b> uzerinden skorlanir. <span style="color:var(--grn)">75+</span> guclu, <span style="color:var(--ylw)">55-74</span> orta, <span style="color:var(--red)">55 alti</span> zayif. 40 hisselik BIST universe otomatik taranir. <b style="color:var(--prp)">AI destekli yatirim tezi</b> ve <b style="color:var(--prp)">Eyyay Dede</b> yatirim asistani ile profesyonel analiz herkesin erisiminde.</div></div>`;
 
 // ========== 3. GUNUN KITABI ==========
-h+=`<div class="card" style="margin-bottom:14px"><div class="card-h"><span class="card-t">📚 Gunun Finans Kitabi</span></div><div class="card-b" id="bookBox"><div style="color:var(--t3);font-size:12px">Yukleniyor...</div></div></div>`;
+if(S.book){h+=`<div class="card" style="margin-bottom:14px"><div class="card-h"><span class="card-t">📚 Gunun Finans Kitabi</span></div><div class="card-b"><div style="display:flex;gap:14px;align-items:flex-start"><div style="font-size:36px;flex-shrink:0">📖</div><div><div style="font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:700;color:var(--cyn);margin-bottom:4px">${S.book.title}</div><div style="font-size:12px;color:var(--gold);margin-bottom:6px">${S.book.author}</div><div style="font-size:12px;color:var(--t2);line-height:1.5">${S.book.description}</div><div style="margin-top:8px;font-size:10px;color:var(--t3)">Seviye: <span style="color:var(--grn)">${S.book.level||'Herkes'}</span></div></div></div></div></div>`;}
+else{h+=`<div class="card" style="margin-bottom:14px"><div class="card-h"><span class="card-t">📚 Gunun Finans Kitabi</span></div><div class="card-b"><div style="color:var(--t4);font-size:12px">Yukleniyor...</div></div></div>`;}
 
 // ========== 4. HERO — "Bugün Ne Oluyor?" ==========
 h+=`<div class="hero-wrap"><div class="hero-tag">📡 BUGÜN NE OLUYOR?</div>`;
@@ -134,7 +136,7 @@ if(hasD){h+=`<div class="g3" style="margin-bottom:14px"><div class="card"><div c
 h+=`<div class="g2" style="margin-bottom:14px"><div class="card"><div class="card-h"><span class="card-t">🌍 Makro Radar</span><button class="btn btn-sm btn-blu" onclick="goPage('makro')">DETAY →</button></div><div class="card-b"><div class="g4" id="macMini">${S.macro?renderMacMini(S.macro.items||[]):'<div class="ld"><div class="sp"></div><div class="ld-t">Macro...</div></div>'}</div></div></div><div class="card"><div class="card-h"><span class="card-t">🏢 Sektor</span></div><div class="card-b">${hr&&hr.strong_sectors?renderSectorCards(hr):(hasD&&d.sectors?renderSectors(d.sectors):'<p style="color:var(--t3);font-size:12px">Scan sonrasi</p>')}</div></div></div>`;
 
 // ========== 6.5 HEATMAP ==========
-h+=`<div class="card" style="margin-bottom:14px"><div class="card-h"><span class="card-t">🔥 Sektorel Isi Haritasi</span><button class="btn btn-sm btn-orn" onclick="loadHeatmap()">🔄</button></div><div class="card-b" id="heatmapBox"><div style="color:var(--t3);font-size:12px">Yukleniyor...</div></div></div>`;
+h+=`<div class="card" style="margin-bottom:14px"><div class="card-h"><span class="card-t">🔥 Sektorel Isi Haritasi</span><button class="btn btn-sm btn-orn" onclick="S._heatLoaded=false;loadHeatmap()">🔄</button></div><div class="card-b">${S.heatmapHtml||'<div style="color:var(--t4);font-size:12px">Yukleniyor...</div>'}</div></div>`;
 
 // ========== 7. TOOLS — WL + Seen + Signals ==========
 h+=`<div class="g3" style="margin-bottom:14px"><div class="card"><div class="card-h"><span class="card-t">⭐ Watchlist</span></div><div class="card-b">${S.wl.length?S.wl.map(t=>`<div class="wl-item"><span class="wl-tick" onclick="loadTicker('${t}')">${t}</span><button class="wl-rm" onclick="wlRm('${t}');renderHome();">✕</button></div>`).join(''):'<p style="color:var(--t3);font-size:12px">Hisse detayinda ⭐ ile ekleyin</p>'}</div></div><div class="card"><div class="card-h"><span class="card-t">🕐 Son Baktiklariniz</span></div><div class="card-b">${S.seen.length?S.seen.map(t=>`<span class="ls-item" onclick="loadTicker('${t}')">${t}</span>`).join(''):'<p style="color:var(--t3);font-size:12px">Henuz hisse incelemediniz</p>'}</div></div><div class="card"><div class="card-h"><span class="card-t">⚡ Sinyaller</span><button class="btn btn-sm btn-orn" onclick="goPage('cross')">TUMU →</button></div><div class="card-b">${S.cross&&S.cross.signals?S.cross.signals.slice(0,4).map(s=>`<div class="sigc ${s.signal_type==='bullish'?'bull':s.signal_type==='bearish'?'bear':''}"><div style="display:flex;justify-content:space-between"><span class="clk-t" style="font-size:12px" onclick="loadTicker('${s.ticker}')">${s.ticker}</span><span style="color:var(--t3);font-size:10px;font-family:'JetBrains Mono',monospace">${s.signal}</span></div></div>`).join(''):'<p style="color:var(--t3);font-size:12px">Cross → sinyal tara</p>'}</div></div></div>`;
@@ -143,15 +145,11 @@ h+=`<div class="g3" style="margin-bottom:14px"><div class="card"><div class="car
 if(hasSc){h+=`<div class="card" style="margin-bottom:14px"><div class="card-h"><span class="card-t">📊 Top 10 — Uzun Vadeli Temel Analiz</span><button class="btn btn-sm btn-grn" onclick="goPage('radar')">TUMU →</button></div><div style="padding:6px 14px;background:var(--bg3);border-bottom:1px solid var(--bdr);font-size:10px;color:var(--t3)">⚠️ Uzun vadeli temel analiz — gunluk al-sat sinyali DEGILDIR</div><div class="card-b" style="overflow-x:auto">${renderRadarTbl(sc.items.slice(0,10))}</div></div>`;}
 
 // ========== 9. SISTEM STATS ==========
-h+=`<div class="card" style="margin-bottom:14px"><div class="card-h"><span class="card-t">📡 Sistem</span></div><div class="card-b"><div class="g4" id="liveStats"><div class="live-stat"><div class="live-num" id="ls-scans">—</div><div class="live-label">Analiz</div></div><div class="live-stat"><div class="live-num" id="ls-signals">—</div><div class="live-label">Sinyal</div></div><div class="live-stat"><div class="live-num" id="ls-macro">—</div><div class="live-label">Makro</div></div><div class="live-stat"><div class="live-num" id="ls-uptime">—</div><div class="live-label">Uptime</div></div></div></div></div>`;
+const ls=S.liveStats||{};
+h+=`<div class="card" style="margin-bottom:14px"><div class="card-h"><span class="card-t">📡 Sistem</span></div><div class="card-b"><div class="g4"><div class="live-stat"><div class="live-num">${ls.scans_done||'—'}</div><div class="live-label">Analiz</div></div><div class="live-stat"><div class="live-num">${ls.signals_total||'—'}</div><div class="live-label">Sinyal</div></div><div class="live-stat"><div class="live-num">${ls.macro_tracked||'—'}</div><div class="live-label">Makro</div></div><div class="live-stat"><div class="live-num">${ls.uptime_hours||'—'}</div><div class="live-label">Uptime</div></div></div></div></div>`;
 
 pg.innerHTML=h;
 if(!S.macro)loadMacro();
-// Loaders only once — not on every renderHome
-if(!S._quoteLoaded){S._quoteLoaded=true;loadQuote();}
-if(!S._statsLoaded){S._statsLoaded=true;loadLiveStats();}
-if(!S._bookLoaded){S._bookLoaded=true;loadBook();}
-if(!S._heatLoaded){S._heatLoaded=true;loadHeatmap();}
 }
 
 // SECTOR CARDS from hero data
@@ -165,8 +163,8 @@ function renderSectors(secs){if(!secs||!secs.length)return'';const mx=Math.max(.
 function renderMacMini(items){const show=items.filter(m=>['turkiye','emtia'].includes(m.category)).slice(0,8);if(!show.length)return'<p style="color:var(--t3)">Veri yok</p>';return show.map(m=>`<div class="mac"><div class="mac-s">${m.flag||''} ${m.name}</div><div class="mac-p">${fN(m.price,m.key?.includes('TRY')?4:2)}</div><div class="mac-c" style="color:${cC(m.change_pct)}">${cS(m.change_pct)}%</div></div>`).join('');}
 
 // LOADERS
-async function loadQuote(){try{const q=await api('/api/quote');const qt=$('quoteText');const qa=$('quoteAuthor');if(qt&&q.text){qt.textContent='"'+q.text+'"';qa.textContent=q.author;}}catch(e){}}
-async function loadLiveStats(){try{const s=await api('/api/live/stats');const el=k=>$(k);if(el('ls-scans'))el('ls-scans').textContent=s.scans_done||0;if(el('ls-signals'))el('ls-signals').textContent=s.signals_total||0;if(el('ls-macro'))el('ls-macro').textContent=s.macro_tracked||0;if(el('ls-uptime'))el('ls-uptime').textContent=s.uptime_hours||0;}catch(e){}}
+async function loadQuote(){try{S.quote=await api('/api/quote');}catch(e){}}
+async function loadLiveStats(){try{S.liveStats=await api('/api/live/stats');}catch(e){}}
 async function loadMacro(){try{S.macro=await api('/api/macro');const el=$('macMini');if(el)el.innerHTML=renderMacMini(S.macro.items||[]);renderTickerBar(S.macro.items||[]);}catch(e){console.error('macro:',e);}}
 function renderTickerBar(items){const tb=$('tbar');const inner=items.map(m=>`<div class="tbar-i"><span style="color:var(--t2);font-weight:600">${m.flag||''} ${m.key||m.name}</span><span style="color:var(--t1)">${fN(m.price,m.key?.includes('TRY')?4:2)}</span><span style="color:${cC(m.change_pct)};font-size:10px">${cS(m.change_pct)}%</span></div>`).join('');tb.innerHTML=`<div class="tbar-inner">${inner}${inner}</div>`;}
 
@@ -207,14 +205,13 @@ function openD(){$('ov').classList.add('open');document.body.style.overflow='hid
 function closeD(){$('ov').classList.remove('open');document.body.style.overflow='';if(S.page==='home')renderHome();}
 
 // BOOK OF THE DAY
-async function loadBook(){try{const b=await api('/api/book');const box=$('bookBox');if(box&&b.title){box.innerHTML=`<div style="display:flex;gap:14px;align-items:flex-start"><div style="font-size:36px;flex-shrink:0">📖</div><div><div style="font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:700;color:var(--cyn);margin-bottom:4px">${b.title}</div><div style="font-size:12px;color:var(--gold);margin-bottom:6px">${b.author}</div><div style="font-size:12px;color:var(--t2);line-height:1.5">${b.description}</div><div style="margin-top:8px;font-size:10px;color:var(--t3)">Seviye: <span style="color:var(--grn)">${b.level||'Herkes'}</span></div></div></div>`;}}catch(e){}}
+async function loadBook(){try{S.book=await api('/api/book');}catch(e){}}
 
 // HEATMAP
 async function loadHeatmap(){
-  const box=$('heatmapBox');if(!box)return;
   try{
     const d=await api('/api/heatmap');
-    if(!d.sectors||!d.sectors.length){box.innerHTML='<p style="color:var(--t3);font-size:12px">Veri bekleniyor — once scan yapin</p>';return;}
+    if(!d.sectors||!d.sectors.length){S.heatmapHtml='<p style="color:var(--t4);font-size:12px">Scan sonrasi gelecek</p>';return;}
     let h='<div style="display:flex;flex-wrap:wrap;gap:3px;overflow-x:auto">';
     const maxMcap=Math.max(...d.sectors.flatMap(s=>s.stocks.map(st=>st.market_cap||1)));
     d.sectors.forEach(sec=>{
@@ -234,9 +231,8 @@ async function loadHeatmap(){
       const col=sec.avg_change>=0?'var(--grn)':'var(--red)';
       h+=`<span style="color:${col}">${sec.sector.slice(0,12)}: ${sec.avg_change>=0?'+':''}${sec.avg_change.toFixed(1)}%</span>`;
     });
-    h+=`</div>`;
-    box.innerHTML=h;
-  }catch(e){box.innerHTML=`<p style="color:var(--t3);font-size:12px">Heatmap: ${e.message}</p>`;}
+    h+=`</div>`;S.heatmapHtml=h;
+  }catch(e){S.heatmapHtml='';}
 }
 
 // ========== DEDENIN NOT DEFTERI (PORTFOY) ==========
@@ -283,11 +279,12 @@ function showAddPF(){$('pfAddForm').style.display='block';$('pfTicker').focus();
 function doAddPF(){const t=$('pfTicker').value.trim().toUpperCase();const l=parseInt($('pfLot').value)||0;const a=parseFloat($('pfAvg').value)||0;if(!t||t.length<3||l<=0||a<=0){alert('Ticker, lot ve maliyet girin');return;}addPF(t,l,a);$('pfAddForm').style.display='none';$('pfTicker').value='';$('pfLot').value='';$('pfAvg').value='';renderPortfoyPage();}
 async function askDedePortfoy(){const pf=getPF();if(!pf.length){alert('Once portfoye hisse ekleyin');return;}const box=$('pfDedeBox');box.style.display='block';box.innerHTML=`<div class="aib"><div class="aib-t">☕ EYYAY DEDE PORTFOY YORUMU</div><div class="aib-tx">Bi cay koy, dede portfoyune bakiyor...</div></div>`;const desc=pf.map(p=>`${p.ticker} ${p.lot} lot (maliyet: ${p.avg} TL)`).join(', ');try{const d=await api('/api/agent?q='+encodeURIComponent('Portfoyumde sunlar var: '+desc+'. Sektorel dagilim ve risk hakkinda ne dusunuyorsun?'));box.innerHTML=`<div class="aib"><div class="aib-t">☕ EYYAY DEDE PORTFOY YORUMU</div><div class="aib-tx">${d.answer}</div></div>`;}catch(e){box.innerHTML='';}}
 
-// INIT — staggered for fast first paint
+// INIT — clean parallel loading
 (async()=>{
 renderHome(); // skeleton
-// Phase 1: macro + health parallel
-await Promise.all([loadMacro(), api('/api/health').catch(()=>null)]);
+// Phase 1: fast parallel (quote, book, macro, health, stats)
+await Promise.all([loadQuote(), loadBook(), loadMacro(), loadLiveStats(), api('/api/health').catch(()=>null)]);
+renderHome(); // show quote + book + macro
 // Phase 2: scan data
 try{
   const d=await api('/api/top10');
@@ -297,8 +294,8 @@ try{
     if(dashR)S.dash=dashR;if(heroR)S.hero=heroR;updCnt(S.dash);
   }else{await startScan();}
 }catch(e){await startScan();}
-// Phase 3: cross (background)
-api('/api/cross').then(d=>{S.cross=d;}).catch(()=>{});
+// Phase 3: cross + heatmap (background)
+await Promise.all([api('/api/cross').then(d=>{S.cross=d;}).catch(()=>{}), loadHeatmap()]);
 // Final render — everything loaded
 renderHome();
 })();
