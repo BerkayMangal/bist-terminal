@@ -1074,36 +1074,79 @@ async def api_health():
     }
 
 # ================================================================
-# MACRO RADAR — live macro indicators via yfinance
+# MACRO RADAR — expanded with EM indices + YTD/1M/1W
 # ================================================================
 MACRO_CACHE = TTLCache(maxsize=50, ttl=300)  # 5 min cache
 
 MACRO_SYMBOLS = {
-    "XU030": {"symbol": "XU030.IS", "name": "BIST 30", "category": "borsa"},
-    "XU100": {"symbol": "XU100.IS", "name": "BIST 100", "category": "borsa"},
-    "USDTRY": {"symbol": "USDTRY=X", "name": "USD/TRY", "category": "doviz"},
-    "EURTRY": {"symbol": "EURTRY=X", "name": "EUR/TRY", "category": "doviz"},
-    "BRENT": {"symbol": "BZ=F", "name": "Brent Petrol", "category": "emtia"},
-    "GOLD": {"symbol": "GC=F", "name": "Altin (oz)", "category": "emtia"},
-    "DXY": {"symbol": "DX-Y.NYB", "name": "Dolar Endeksi", "category": "global"},
-    "VIX": {"symbol": "^VIX", "name": "Korku Endeksi", "category": "global"},
-    "SP500": {"symbol": "^GSPC", "name": "S&P 500", "category": "global"},
+    # Turkiye
+    "XU030": {"symbol": "XU030.IS", "name": "BIST 30", "category": "turkiye", "flag": "🇹🇷"},
+    "XU100": {"symbol": "XU100.IS", "name": "BIST 100", "category": "turkiye", "flag": "🇹🇷"},
+    "USDTRY": {"symbol": "USDTRY=X", "name": "USD/TRY", "category": "turkiye", "flag": "🇹🇷"},
+    "EURTRY": {"symbol": "EURTRY=X", "name": "EUR/TRY", "category": "turkiye", "flag": "🇹🇷"},
+    # Emerging Markets
+    "EEM": {"symbol": "EEM", "name": "iShares EM ETF", "category": "em", "flag": "🌍"},
+    "IBOV": {"symbol": "^BVSP", "name": "Bovespa (Brezilya)", "category": "em", "flag": "🇧🇷"},
+    "SENSEX": {"symbol": "^BSESN", "name": "Sensex (Hindistan)", "category": "em", "flag": "🇮🇳"},
+    "MEXIPC": {"symbol": "^MXX", "name": "IPC (Meksika)", "category": "em", "flag": "🇲🇽"},
+    "JCI": {"symbol": "^JKSE", "name": "JCI (Endonezya)", "category": "em", "flag": "🇮🇩"},
+    "JSE": {"symbol": "^JN0U.JO", "name": "JSE Top40 (G.Afrika)", "category": "em", "flag": "🇿🇦"},
+    "KOSPI": {"symbol": "^KS11", "name": "KOSPI (G.Kore)", "category": "em", "flag": "🇰🇷"},
+    "TWSE": {"symbol": "^TWII", "name": "TAIEX (Tayvan)", "category": "em", "flag": "🇹🇼"},
+    "WIG20": {"symbol": "WIG20.WA", "name": "WIG20 (Polonya)", "category": "em", "flag": "🇵🇱"},
+    "CSI300": {"symbol": "000300.SS", "name": "CSI 300 (Cin)", "category": "em", "flag": "🇨🇳"},
+    # Global
+    "SP500": {"symbol": "^GSPC", "name": "S&P 500", "category": "global", "flag": "🇺🇸"},
+    "NASDAQ": {"symbol": "^IXIC", "name": "Nasdaq", "category": "global", "flag": "🇺🇸"},
+    "DAX": {"symbol": "^GDAXI", "name": "DAX (Almanya)", "category": "global", "flag": "🇩🇪"},
+    "FTSE": {"symbol": "^FTSE", "name": "FTSE 100 (UK)", "category": "global", "flag": "🇬🇧"},
+    "NIKKEI": {"symbol": "^N225", "name": "Nikkei 225 (Japonya)", "category": "global", "flag": "🇯🇵"},
+    # Emtia & Volatilite
+    "BRENT": {"symbol": "BZ=F", "name": "Brent Petrol", "category": "emtia", "flag": "🛢️"},
+    "GOLD": {"symbol": "GC=F", "name": "Altin (oz)", "category": "emtia", "flag": "🥇"},
+    "SILVER": {"symbol": "SI=F", "name": "Gumus (oz)", "category": "emtia", "flag": "🥈"},
+    "DXY": {"symbol": "DX-Y.NYB", "name": "Dolar Endeksi", "category": "emtia", "flag": "💵"},
+    "VIX": {"symbol": "^VIX", "name": "VIX (Korku)", "category": "emtia", "flag": "😱"},
 }
 
 def _fetch_macro_item(key, info):
     try:
         tk = yf.Ticker(info["symbol"])
-        h = tk.history(period="5d", interval="1d")
-        if h is None or h.empty:
+        # Get YTD data (from Jan 1 to now)
+        now = dt.datetime.now()
+        ytd_start = dt.datetime(now.year, 1, 1)
+        h = tk.history(start=ytd_start, interval="1d")
+        if h is None or h.empty or len(h) < 2:
             return None
         price = float(h["Close"].iloc[-1])
-        prev = float(h["Close"].iloc[-2]) if len(h) >= 2 else price
+        prev = float(h["Close"].iloc[-2])
         change = price - prev
         change_pct = (change / prev * 100) if prev != 0 else 0
+
+        # YTD performance
+        first_close = float(h["Close"].iloc[0])
+        ytd_pct = ((price - first_close) / first_close * 100) if first_close != 0 else 0
+
+        # 1M performance (last ~22 trading days)
+        m1_pct = None
+        if len(h) >= 22:
+            m1_close = float(h["Close"].iloc[-22])
+            m1_pct = ((price - m1_close) / m1_close * 100) if m1_close != 0 else 0
+
+        # 1W performance (last ~5 trading days)
+        w1_pct = None
+        if len(h) >= 5:
+            w1_close = float(h["Close"].iloc[-5])
+            w1_pct = ((price - w1_close) / w1_close * 100) if w1_close != 0 else 0
+
         return {
             "key": key, "name": info["name"], "category": info["category"],
+            "flag": info.get("flag", ""),
             "price": round(price, 4), "change": round(change, 4),
             "change_pct": round(change_pct, 2),
+            "ytd_pct": round(ytd_pct, 2),
+            "m1_pct": round(m1_pct, 2) if m1_pct is not None else None,
+            "w1_pct": round(w1_pct, 2) if w1_pct is not None else None,
         }
     except Exception as e:
         log.debug(f"Macro {key}: {e}")
@@ -1116,7 +1159,7 @@ async def api_macro():
         return MACRO_CACHE[cache_key]
     try:
         results = []
-        with ThreadPoolExecutor(max_workers=5) as pool:
+        with ThreadPoolExecutor(max_workers=8) as pool:
             futures = {pool.submit(_fetch_macro_item, k, v): k for k, v in MACRO_SYMBOLS.items()}
             for f in as_completed(futures):
                 r = f.result()
@@ -1254,6 +1297,54 @@ async def api_briefing():
     except Exception as e:
         log.warning(f"briefing: {e}")
         return {"briefing": None, "error": str(e)}
+
+# ================================================================
+# MACRO AI COMMENTARY
+# ================================================================
+MACRO_AI_CACHE = TTLCache(maxsize=5, ttl=3600)
+
+@app.get("/api/macro/commentary")
+async def api_macro_commentary():
+    if not AI_AVAILABLE or not OPENAI_KEY:
+        return {"commentary": None, "error": "AI pasif — OPENAI_KEY gerekli"}
+    cache_key = "macro_ai"
+    if cache_key in MACRO_AI_CACHE:
+        return MACRO_AI_CACHE[cache_key]
+    try:
+        # Get cached macro data
+        macro_data = MACRO_CACHE.get("macro_all")
+        if not macro_data or not macro_data.get("items"):
+            return {"commentary": "Makro veri henuz yuklenmedi. Sayfayi yenileyin.", "generated": False}
+
+        items = macro_data["items"]
+        # Build summary for AI
+        lines = []
+        for m in sorted(items, key=lambda x: x.get("ytd_pct") or 0, reverse=True):
+            lines.append(f"{m.get('flag','')} {m['name']}: {m['price']}, gun:{m['change_pct']}%, YTD:{m.get('ytd_pct','?')}%")
+
+        prompt = (
+            "Sen BistBull Terminal'in makro analistisin. Turkce yaz.\n"
+            "Asagidaki global makro verilere bakarak 3-4 cumle ile BUGUNKU MAKRO TABLO'yu ozetle.\n"
+            "Ozellikle: Turkiye EM akranlarina karsi nasil? Riskler ne? Firsatlar ne?\n"
+            "DXY, VIX, petrol, altin hareketlerinin BIST'e etkisini 1 cumle ile belirt.\n"
+            "Sonra 1 cumle STRATEJI onerisi.\n"
+            "Net, kisa, profesyonel.\n\n"
+            + "\n".join(lines[:20])
+        )
+        client = OpenAI(api_key=OPENAI_KEY)
+        resp = await asyncio.to_thread(
+            lambda: client.chat.completions.create(
+                model=SCORING_MODEL, max_tokens=300, temperature=0.5,
+                messages=[{"role": "user", "content": prompt}]
+            )
+        )
+        text = resp.choices[0].message.content.strip()
+        result = {"commentary": text, "generated": True, "timestamp": dt.datetime.now(dt.timezone.utc).isoformat()}
+        MACRO_AI_CACHE[cache_key] = result
+        return result
+    except Exception as e:
+        log.warning(f"macro_commentary: {e}")
+        return {"commentary": None, "error": str(e)}
 
 # ================================================================
 # QUICK ANALYZE — batch analyze multiple tickers at once
