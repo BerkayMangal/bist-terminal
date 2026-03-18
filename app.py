@@ -31,11 +31,24 @@ try:
 except ImportError:
     CHART_AVAILABLE = False
 
+# AI — support both Anthropic and OpenAI, whichever key is available
+AI_PROVIDER = None
 try:
     import anthropic
-    AI_AVAILABLE = True
+    if os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_KEY"):
+        AI_PROVIDER = "anthropic"
 except ImportError:
-    AI_AVAILABLE = False
+    pass
+
+if not AI_PROVIDER:
+    try:
+        from openai import OpenAI
+        if os.environ.get("OPENAI_KEY") or os.environ.get("OPENAI_API_KEY"):
+            AI_PROVIDER = "openai"
+    except ImportError:
+        pass
+
+AI_AVAILABLE = AI_PROVIDER is not None
 
 BOT_VERSION = "V5"
 APP_NAME = "BISTBULL TERMINAL"
@@ -45,7 +58,28 @@ CONFIDENCE_MIN = 55
 # ENV VARS
 # ================================================================
 ANTHROPIC_KEY = os.environ.get("ANTHROPIC_API_KEY", "") or os.environ.get("ANTHROPIC_KEY", "")
-AI_MODEL = os.environ.get("AI_MODEL", "claude-sonnet-4-20250514")
+OPENAI_KEY = os.environ.get("OPENAI_KEY", "") or os.environ.get("OPENAI_API_KEY", "")
+AI_KEY = ANTHROPIC_KEY or OPENAI_KEY
+AI_MODEL_ANTHROPIC = os.environ.get("AI_MODEL", "claude-sonnet-4-20250514")
+AI_MODEL_OPENAI = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
+
+def ai_call(prompt, max_tokens=200):
+    """Unified AI call — works with Anthropic or OpenAI"""
+    if AI_PROVIDER == "anthropic":
+        client = anthropic.Anthropic(api_key=ANTHROPIC_KEY)
+        resp = client.messages.create(
+            model=AI_MODEL_ANTHROPIC, max_tokens=max_tokens,
+            messages=[{"role": "user", "content": prompt}]
+        )
+        return resp.content[0].text.strip()
+    elif AI_PROVIDER == "openai":
+        client = OpenAI(api_key=OPENAI_KEY)
+        resp = client.chat.completions.create(
+            model=AI_MODEL_OPENAI, max_tokens=max_tokens, temperature=0.4,
+            messages=[{"role": "user", "content": prompt}]
+        )
+        return resp.choices[0].message.content.strip()
+    return None
 
 # ================================================================
 # UNIVERSE
@@ -765,7 +799,7 @@ def generate_chart_png(symbol, tech_data=None):
 # AI TRADER SUMMARY — adapted from fa_bot.py
 # ================================================================
 def ai_trader_summary(r, tech=None):
-    if not AI_AVAILABLE or not ANTHROPIC_KEY:
+    if not AI_AVAILABLE:
         return None
     cache_key = f"{r['symbol']}_{r['overall']}"
     if cache_key in AI_CACHE:
@@ -794,13 +828,9 @@ def ai_trader_summary(r, tech=None):
             f"Negatifler: {', '.join(r['negatives'])}\n\n"
             f"SADECE 2-3 cumle yaz. Kisa, net, aksiyon odakli. Hic baska birsey yazma."
         )
-        client = anthropic.Anthropic(api_key=ANTHROPIC_KEY)
-        resp = client.messages.create(
-            model=AI_MODEL, max_tokens=200,
-            messages=[{"role": "user", "content": prompt}]
-        )
-        text = resp.content[0].text.strip()
-        AI_CACHE[cache_key] = text
+        text = ai_call(prompt, max_tokens=200)
+        if text:
+            AI_CACHE[cache_key] = text
         return text
     except Exception as e:
         log.warning(f"AI summary: {e}")
@@ -928,7 +958,7 @@ def clean_for_json(obj):
 # ================================================================
 @asynccontextmanager
 async def lifespan(app):
-    log.info(f"BISTBULL TERMINAL starting | Universe: {len(UNIVERSE)} | AI: {'ON' if AI_AVAILABLE and ANTHROPIC_KEY else 'OFF'} | Chart: {'ON' if CHART_AVAILABLE else 'OFF'}")
+    log.info(f"BISTBULL TERMINAL starting | Universe: {len(UNIVERSE)} | AI: {AI_PROVIDER or 'OFF'} | Chart: {'ON' if CHART_AVAILABLE else 'OFF'}")
     yield
     log.info("BISTBULL TERMINAL shutting down")
 
@@ -1068,7 +1098,7 @@ async def api_health():
         "version": BOT_VERSION,
         "app": APP_NAME,
         "universe": len(UNIVERSE),
-        "ai": AI_AVAILABLE and bool(ANTHROPIC_KEY),
+        "ai": AI_PROVIDER or False,
         "chart": CHART_AVAILABLE,
         "cache": {"raw": len(RAW_CACHE), "analysis": len(ANALYSIS_CACHE), "tech": len(TECH_CACHE)},
     }
@@ -1258,8 +1288,8 @@ BRIEFING_CACHE = TTLCache(maxsize=10, ttl=3600)
 
 @app.get("/api/briefing")
 async def api_briefing():
-    if not AI_AVAILABLE or not ANTHROPIC_KEY:
-        return {"briefing": None, "error": "AI pasif — ANTHROPIC_KEY gerekli"}
+    if not AI_AVAILABLE:
+        return {"briefing": None, "error": "AI pasif — ANTHROPIC_API_KEY veya OPENAI_KEY gerekli"}
     cache_key = "daily_briefing"
     if cache_key in BRIEFING_CACHE:
         return BRIEFING_CACHE[cache_key]
@@ -1283,14 +1313,7 @@ async def api_briefing():
             f"Toplam taranan: {len(items)} hisse\n"
             "SADECE ozet ve strateji yaz. Baska birsey ekleme."
         )
-        client = anthropic.Anthropic(api_key=ANTHROPIC_KEY)
-        resp = await asyncio.to_thread(
-            lambda: client.messages.create(
-                model=AI_MODEL, max_tokens=400,
-                messages=[{"role": "user", "content": prompt}]
-            )
-        )
-        text = resp.content[0].text.strip()
+        text = await asyncio.to_thread(ai_call, prompt, 400)
         result = {"briefing": text, "generated": True, "timestamp": dt.datetime.now(dt.timezone.utc).isoformat()}
         BRIEFING_CACHE[cache_key] = result
         return result
@@ -1305,19 +1328,17 @@ MACRO_AI_CACHE = TTLCache(maxsize=5, ttl=3600)
 
 @app.get("/api/macro/commentary")
 async def api_macro_commentary():
-    if not AI_AVAILABLE or not ANTHROPIC_KEY:
-        return {"commentary": None, "error": "AI pasif — ANTHROPIC_KEY gerekli"}
+    if not AI_AVAILABLE:
+        return {"commentary": None, "error": "AI pasif — ANTHROPIC_API_KEY veya OPENAI_KEY gerekli"}
     cache_key = "macro_ai"
     if cache_key in MACRO_AI_CACHE:
         return MACRO_AI_CACHE[cache_key]
     try:
-        # Get cached macro data
         macro_data = MACRO_CACHE.get("macro_all")
         if not macro_data or not macro_data.get("items"):
             return {"commentary": "Makro veri henuz yuklenmedi. Sayfayi yenileyin.", "generated": False}
 
         items = macro_data["items"]
-        # Build summary for AI
         lines = []
         for m in sorted(items, key=lambda x: x.get("ytd_pct") or 0, reverse=True):
             lines.append(f"{m.get('flag','')} {m['name']}: {m['price']}, gun:{m['change_pct']}%, YTD:{m.get('ytd_pct','?')}%")
@@ -1331,14 +1352,7 @@ async def api_macro_commentary():
             "Net, kisa, profesyonel.\n\n"
             + "\n".join(lines[:20])
         )
-        client = anthropic.Anthropic(api_key=ANTHROPIC_KEY)
-        resp = await asyncio.to_thread(
-            lambda: client.messages.create(
-                model=AI_MODEL, max_tokens=300,
-                messages=[{"role": "user", "content": prompt}]
-            )
-        )
-        text = resp.content[0].text.strip()
+        text = await asyncio.to_thread(ai_call, prompt, 300)
         result = {"commentary": text, "generated": True, "timestamp": dt.datetime.now(dt.timezone.utc).isoformat()}
         MACRO_AI_CACHE[cache_key] = result
         return result

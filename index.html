@@ -286,7 +286,22 @@ function closeD(){$('ov').classList.remove('open');document.body.style.overflow=
 (async()=>{
   renderHome();
   try{await api('/api/health');}catch(e){console.error(e);}
-  try{const d=await api('/api/top10');if(d.items&&d.items.length>0){S.scan=d;S.dash=await api('/api/dashboard');updCnt(S.dash);renderHome();}}catch(e){}
+  // Load macro immediately
+  await loadMacro();
+  // Check for cached scan data
+  try{
+    const d=await api('/api/top10');
+    if(d.items&&d.items.length>0){
+      S.scan=d;S.dash=await api('/api/dashboard');updCnt(S.dash);renderHome();
+    } else {
+      // No cached data — auto-scan
+      startScan();
+    }
+  }catch(e){
+    // First visit — auto-scan
+    startScan();
+  }
+  // Load cross signals
   try{S.cross=await api('/api/cross');}catch(e){}
   renderHome();
 })();
