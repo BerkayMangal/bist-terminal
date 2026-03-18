@@ -1606,6 +1606,33 @@ async def api_quote():
     return FINANCE_QUOTES[idx]
 
 # ================================================================
+# GÜNÜN FİNANS KİTABI — rotating book recommendations
+# ================================================================
+FINANCE_BOOKS = [
+    {"title": "Akilli Yatirimci", "author": "Benjamin Graham", "description": "Deger yatiriminin kutsal kitabi. Graham, hisse secimi ve risk yonetimini basit ama derin anlatir. Buffett'in 'hayatimi degistiren kitap' dedigi eser.", "level": "Baslangic-Orta"},
+    {"title": "Borsada Teknik Analiz", "author": "John J. Murphy", "description": "Teknik analizin ansiklopedisi. Grafik okuma, trend analizi, gostergeler — hepsi tek kitapta. Terminal kullanan herkesin rafinda olmali.", "level": "Orta"},
+    {"title": "Bir Adim Once", "author": "Peter Lynch", "description": "Efsanevi Magellan Fund yoneticisi, siradan yatirimcinin Wall Street'i nasil yenebilecegini anlatiyor. 'Bildiginizi alin' felsefesinin temeli.", "level": "Baslangic"},
+    {"title": "Piyasa Buyuculeri", "author": "Jack D. Schwager", "description": "Dunyanin en basarili trader'lariyla roportajlar. Her birinin farkli stratejisi ama ortak noktasi: disiplin ve risk yonetimi.", "level": "Orta-Ileri"},
+    {"title": "Zengin Baba Yoksul Baba", "author": "Robert Kiyosaki", "description": "Para, yatirim ve finansal ozgurluk hakkinda temel bakis acisi. Borsa oncesi herkesin okumasi gereken finansal okuryazarlik kitabi.", "level": "Baslangic"},
+    {"title": "Kayip Trader'in Gunlugu", "author": "Jim Paul", "description": "75 milyon dolar kaybeden bir trader'in hikayesi. Kazanmaktan cok kaybetmeyi anlamak icin muhtesem ders kitabi.", "level": "Herkes"},
+    {"title": "Borsanin Sinirlari", "author": "Nassim N. Taleb", "description": "Siyah Kugu teorisinin babasi, risk, belirsizlik ve piyasalardaki rastlantiyi gozler onune seriyor. Dusunce tarzinizi degistirir.", "level": "Ileri"},
+    {"title": "Para Psikolojisi", "author": "Morgan Housel", "description": "Yatirim kararlari mantik degil psikoloji ile alinir. Neden bazi insanlar zenginlesir, bazilari zenginligi koruyamaz?", "level": "Baslangic"},
+    {"title": "Hisselerde Uzun Vadeli Yatirim", "author": "Jeremy Siegel", "description": "200 yillik veriyle hisse senetlerinin neden uzun vadede en iyi yatirim araci oldugunu kanitliyor. Sabirin kitabi.", "level": "Orta"},
+    {"title": "Babil'in En Zengin Adami", "author": "George S. Clason", "description": "5000 yillik para bilgeligi modern hikayelerle. 'Kazandiginizin onda birini biriktirin' kuraliyla basliyor. Kisa ve etkili.", "level": "Baslangic"},
+    {"title": "Deger Yatiriminin Kucuk Kitabi", "author": "Christopher Browne", "description": "Graham-Buffett okulunun modern ozeti. Ucuz ve kaliteli hisse nasil bulunur, adim adim anlatiliyor.", "level": "Baslangic-Orta"},
+    {"title": "Flash Boys", "author": "Michael Lewis", "description": "Yuksek frekanli trading dunyasinin icerisinden bir hikaye. Piyasalarin gercekte nasil calistigini gosteren nefes kesen anlati.", "level": "Herkes"},
+    {"title": "Trader Vic", "author": "Victor Sperandeo", "description": "40 yillik tecrubesiyle Sperandeo, trend takibi ve risk yonetimini pratikte nasil uygulayacaginizi ogretiyor.", "level": "Orta-Ileri"},
+    {"title": "Warren Buffett ve Finansal Tablolarin Yorumu", "author": "Mary Buffett", "description": "Buffett'in gelini, ustanin bilanco okuma yontemini herkesin anlayacagi dilde aktariyor. Temel analize giris icin ideal.", "level": "Baslangic"},
+    {"title": "Kapital", "author": "Thomas Piketty", "description": "Servet esitsizligi ve kapitalizmin dinamikleri. Makro dusunmeyi ogreten, yatirim kararlarinda buyuk resmi gormeni saglayan eser.", "level": "Ileri"},
+]
+
+@app.get("/api/book")
+async def api_book():
+    today = dt.datetime.now().timetuple().tm_yday
+    idx = today % len(FINANCE_BOOKS)
+    return FINANCE_BOOKS[idx]
+
+# ================================================================
 # BORSADEDE AI AGENT — conversational BIST assistant
 # ================================================================
 AGENT_CACHE = TTLCache(maxsize=100, ttl=600)

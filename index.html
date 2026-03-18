@@ -95,12 +95,18 @@ const pg=$('pg-home');const d=S.dash;const sc=S.scan;const hr=S.hero;
 const hasSc=sc&&sc.items&&sc.items.length>0;const hasD=d&&d.top3&&d.top3.length>0;
 let h='';
 
+// ========== QUOTE — EN USTE ==========
+h+=`<div id="quoteBox" style="margin-bottom:14px;padding:10px 14px;background:var(--bg3);border-left:3px solid var(--gold);border-radius:0 var(--rad) var(--rad) 0;font-style:italic;color:var(--t3);font-size:12px;line-height:1.4"><span id="quoteText">...</span> — <span id="quoteAuthor" style="color:var(--gold);font-style:normal;font-weight:600;font-size:11px">...</span></div>`;
+
 // ========== SECTION 1: HERO — "Bugün Ne Oluyor?" ==========
 h+=`<div class="hero-wrap"><div class="hero-tag">📡 BUGÜN NE OLUYOR?</div>`;
 if(hr){
   const modeCol=hr.mode_color==='green'?'var(--grn)':hr.mode_color==='red'?'var(--red)':'var(--ylw)';
-  // MODE — big and clear at top
-  h+=`<div style="display:flex;align-items:center;gap:16px;margin-bottom:16px;padding-bottom:14px;border-bottom:1px solid var(--bdr)"><div style="font-family:'JetBrains Mono',monospace;font-size:28px;font-weight:700;color:${modeCol}">${hr.mode_label}</div><div style="flex:1"><div style="font-size:13px;color:var(--t2);line-height:1.5">${hr.story||''}</div></div></div>`;
+  // MODE + STORY — stacked, mobile friendly
+  h+=`<div style="margin-bottom:14px;padding-bottom:14px;border-bottom:1px solid var(--bdr)">`;
+  h+=`<div style="font-family:'JetBrains Mono',monospace;font-size:18px;font-weight:700;color:${modeCol};margin-bottom:8px">📊 ${hr.mode_label}</div>`;
+  h+=`<div style="font-size:13px;color:var(--t2);line-height:1.6">${hr.story||''}</div>`;
+  h+=`</div>`;
   // 4 insight cards — 2x2 grid
   h+=`<div class="g2" style="margin-bottom:14px">`;
   h+=`<div class="hmc opp"><div class="hmc-icon">💡</div><div class="hmc-label">En Buyuk Firsat</div>${hr.opportunity?`<div class="hmc-value"><span class="clk-t" onclick="loadTicker('${hr.opportunity.ticker}')">${hr.opportunity.ticker}</span> <span style="color:${sC(hr.opportunity.overall)}">${hr.opportunity.overall}/100</span></div><div class="hmc-desc">${hr.opportunity.ai_reason||hr.opportunity.reason||''}</div>`:'<div class="hmc-desc" style="color:var(--t3)">Scan sonrasi</div>'}</div>`;
@@ -116,9 +122,6 @@ h+=`<div id="hSt"></div>`;
 h+=`<div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-grn" id="scanBtn" onclick="startScan()">🔄 YENiLE</button><button class="btn btn-blu" onclick="loadBriefing()">🤖 AI BRiFiNG</button></div>`;
 h+=`</div>`;
 
-// QUOTE — small, after hero
-h+=`<div id="quoteBox" style="margin-bottom:14px;padding:10px 14px;background:var(--bg3);border-left:3px solid var(--gold);border-radius:0 var(--rad) var(--rad) 0;font-style:italic;color:var(--t3);font-size:12px;line-height:1.4"><span id="quoteText">...</span> — <span id="quoteAuthor" style="color:var(--gold);font-style:normal;font-weight:600;font-size:11px">...</span></div>`;
-
 // ========== SECTION 2: ACTION — Top Picks ==========
 if(hasD){h+=`<div class="g3" style="margin-bottom:14px"><div class="card"><div class="card-h"><span class="card-t">🏆 Gunun 3 Hissesi</span></div><div class="card-b">${d.top3.map(i=>`<div class="pkc"><div style="display:flex;justify-content:space-between;align-items:center"><span class="pkc-tick" onclick="loadTicker('${i.ticker}')">${i.ticker}</span><span class="pkc-score" style="color:${sC(i.overall)}">${i.overall}</span></div><div style="font-size:10px;color:var(--t3)">${i.name||''} · ${i.style}</div><div class="pkc-reason">${(i.positives||[]).join(' · ')}</div></div>`).join('')}</div></div><div class="card"><div class="card-h"><span class="card-t">💡 3 Firsat</span></div><div class="card-b">${(d.opportunities||[]).map(i=>`<div class="pkc opp"><div style="display:flex;justify-content:space-between"><span class="pkc-tick" onclick="loadTicker('${i.ticker}')">${i.ticker}</span><span style="color:var(--ylw);font-family:'JetBrains Mono',monospace;font-size:12px">${i.overall}/100</span></div><div class="pkc-reason">${i.reason||''}</div></div>`).join('')||'<p style="color:var(--t3);font-size:12px">Scan sonrasi</p>'}</div></div><div class="card"><div class="card-h"><span class="card-t">⚠️ 3 Risk</span></div><div class="card-b">${(d.risks||[]).map(i=>`<div class="pkc risk"><div style="display:flex;justify-content:space-between"><span class="pkc-tick" onclick="loadTicker('${i.ticker}')">${i.ticker}</span><span style="color:var(--red);font-family:'JetBrains Mono',monospace;font-size:12px">${i.overall}/100</span></div><div class="pkc-reason">${i.reason||''}</div></div>`).join('')||'<p style="color:var(--t3);font-size:12px">Scan sonrasi</p>'}</div></div></div>`;}
 
@@ -131,17 +134,18 @@ h+=`<div class="g3" style="margin-bottom:14px"><div class="card"><div class="car
 // ========== SECTION 5: DETAIL — Radar Table ==========
 if(hasSc){h+=`<div class="card" style="margin-bottom:14px"><div class="card-h"><span class="card-t">📊 Top 10 — Uzun Vadeli Temel Analiz</span><button class="btn btn-sm btn-grn" onclick="goPage('radar')">TUMU →</button></div><div style="padding:6px 14px;background:var(--bg3);border-bottom:1px solid var(--bdr);font-size:10px;color:var(--t3)">⚠️ Uzun vadeli temel analiz — gunluk al-sat sinyali DEGILDIR</div><div class="card-b" style="overflow-x:auto">${renderRadarTbl(sc.items.slice(0,10))}</div></div>`;}
 
-// ========== SECTION 6: SUPPORTING — Stats + Explanation ==========
+// ========== SECTION 6: SUPPORTING — Stats + How + Book ==========
 h+=`<div class="g2" style="margin-bottom:14px">`;
-// LIVE STATS — compact
 h+=`<div class="card"><div class="card-h"><span class="card-t">📡 Sistem</span></div><div class="card-b"><div class="g4" id="liveStats"><div class="live-stat"><div class="live-num" id="ls-scans">—</div><div class="live-label">Analiz</div></div><div class="live-stat"><div class="live-num" id="ls-signals">—</div><div class="live-label">Sinyal</div></div><div class="live-stat"><div class="live-num" id="ls-macro">—</div><div class="live-label">Makro</div></div><div class="live-stat"><div class="live-num" id="ls-uptime">—</div><div class="live-label">Uptime</div></div></div></div></div>`;
-// HOW IT WORKS — compact
-h+=`<div class="card"><div class="card-h"><span class="card-t">🐂 Nasil Calisir?</span></div><div class="card-b" style="font-size:11px;color:var(--t2);line-height:1.6"><b style="color:var(--cyn)">7 boyutlu temel analiz</b> (Piotroski, Altman Z, Beneish, Graham) + <b style="color:var(--cyn)">6 teknik gosterge</b> (RSI, MACD, MA, Bollinger). Birlesik <b style="color:var(--cyn)">100 puan</b> skorlama. <span style="color:var(--grn)">75+</span> guclu, <span style="color:var(--ylw)">55-74</span> orta, <span style="color:var(--red)">55↓</span> zayif. Her hisse icin <b style="color:var(--prp)">AI yatirim tezi</b>.</div></div>`;
+h+=`<div class="card"><div class="card-h"><span class="card-t">🐂 Nasil Calisir?</span></div><div class="card-b" style="font-size:11px;color:var(--t2);line-height:1.6"><b style="color:var(--cyn)">7 boyutlu temel analiz</b> (Piotroski, Altman Z, Beneish, Graham) + <b style="color:var(--cyn)">6 teknik gosterge</b> (RSI, MACD, MA, Bollinger). Birlesik <b style="color:var(--cyn)">100 puan</b> skorlama. <span style="color:var(--grn)">75+</span> guclu, <span style="color:var(--ylw)">55-74</span> orta, <span style="color:var(--red)">55↓</span> zayif.</div></div>`;
 h+=`</div>`;
+
+// ========== SECTION 7: BOOK OF THE DAY ==========
+h+=`<div class="card" style="margin-bottom:14px"><div class="card-h"><span class="card-t">📚 Gunun Finans Kitabi</span></div><div class="card-b" id="bookBox"><div style="color:var(--t3);font-size:12px">Yukleniyor...</div></div></div>`;
 
 pg.innerHTML=h;
 if(!S.macro)loadMacro();
-loadQuote();loadLiveStats();
+loadQuote();loadLiveStats();loadBook();
 }
 
 // SECTOR CARDS from hero data
@@ -195,6 +199,9 @@ function toggleWL(t){if(S.wl.includes(t))wlRm(t);else wlAdd(t);loadTicker(t);}
 function dtab(btn,id){btn.closest('.dp-tabs').querySelectorAll('.dp-tab').forEach(t=>t.classList.remove('on'));btn.classList.add('on');btn.closest('.dp-body').querySelectorAll('.ds').forEach(s=>s.classList.remove('on'));$('ds-'+id).classList.add('on');}
 function openD(){$('ov').classList.add('open');document.body.style.overflow='hidden';}
 function closeD(){$('ov').classList.remove('open');document.body.style.overflow='';if(S.page==='home')renderHome();}
+
+// BOOK OF THE DAY
+async function loadBook(){try{const b=await api('/api/book');const box=$('bookBox');if(box&&b.title){box.innerHTML=`<div style="display:flex;gap:14px;align-items:flex-start"><div style="font-size:36px;flex-shrink:0">📖</div><div><div style="font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:700;color:var(--cyn);margin-bottom:4px">${b.title}</div><div style="font-size:12px;color:var(--gold);margin-bottom:6px">${b.author}</div><div style="font-size:12px;color:var(--t2);line-height:1.5">${b.description}</div><div style="margin-top:8px;font-size:10px;color:var(--t3)">Seviye: <span style="color:var(--grn)">${b.level||'Herkes'}</span></div></div></div>`;}}catch(e){}}
 
 // INIT — staggered for fast first paint
 (async()=>{
