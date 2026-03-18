@@ -1565,6 +1565,78 @@ async def api_social():
     }
 
 # ================================================================
+# GÜNÜN SÖZÜ — rotating finance wisdom
+# ================================================================
+FINANCE_QUOTES = [
+    {"text": "Fiyat ne odediginizdir, deger ne aldiginizdir.", "author": "Warren Buffett"},
+    {"text": "Piyasa kisa vadede oylama makinesi, uzun vadede tarti makinesidir.", "author": "Benjamin Graham"},
+    {"text": "En iyi yatirim kendinize yapacaginiz yatirimdir.", "author": "Warren Buffett"},
+    {"text": "Borsa sabirlidan sabirsiza para transferi yapar.", "author": "Warren Buffett"},
+    {"text": "Risk, ne yaptiginizi bilmemekten kaynaklanir.", "author": "Warren Buffett"},
+    {"text": "Harika sirketi makul fiyata almak, makul sirketi harika fiyata almaktan iyidir.", "author": "Warren Buffett"},
+    {"text": "Herkes acgozlu iken korkun, herkes korkak iken acgozlu olun.", "author": "Warren Buffett"},
+    {"text": "Basitlik, sofistikelikin nihai formudur.", "author": "Charlie Munger"},
+    {"text": "Bildiginizi alin, aldiginizi bilin.", "author": "Peter Lynch"},
+    {"text": "En iyi zaman agac dikmek icin 20 yil onceydi. Ikinci en iyi zaman bugun.", "author": "Cin Atasozu"},
+    {"text": "Getiri pesinde kosmay in, riski yonetin. Getiri kendiligin den gelir.", "author": "Benjamin Graham"},
+    {"text": "Piyasadaki en tehlikeli dort kelime: Bu sefer farkli olacak.", "author": "Sir John Templeton"},
+    {"text": "Sabir, yatirimcinin en guclu silahidir.", "author": "Jesse Livermore"},
+    {"text": "Trendin arkadasindir, ta ki donene kadar.", "author": "Ed Seykota"},
+    {"text": "Bilesik faiz dunyanin sekizinci harikasidir.", "author": "Albert Einstein"},
+    {"text": "Bir hisseyi 10 yil tutmayi dusunmuyorsaniz, 10 dakika bile tutmayin.", "author": "Warren Buffett"},
+    {"text": "Kazananlari tut, kaybedenleri kes.", "author": "William O'Neil"},
+    {"text": "Nakit pozisyon da bir pozisyondur.", "author": "Jesse Livermore"},
+    {"text": "Enflasyon sessiz bir hirsizdir.", "author": "Milton Friedman"},
+    {"text": "Iyi sirketler kotu zamanlarda buyur.", "author": "Shelby Davis"},
+    {"text": "Yatirimda en onemli kalite mizactir, zeka degil.", "author": "Warren Buffett"},
+    {"text": "Batmamak icin cesitlendir, zengin olmak icin yogunlas.", "author": "Andrew Carnegie"},
+    {"text": "Piyasa size ders verecekse en pahalisi verir.", "author": "Wall Street Atasozu"},
+    {"text": "Yalniz kalabal igin tersine gitmeye hazir olan buyuk kazanclar elde edebilir.", "author": "Sir John Templeton"},
+]
+
+@app.get("/api/quote")
+async def api_quote():
+    today = dt.datetime.now().timetuple().tm_yday
+    idx = today % len(FINANCE_QUOTES)
+    return FINANCE_QUOTES[idx]
+
+# ================================================================
+# BORSADEDE AI AGENT — conversational BIST assistant
+# ================================================================
+AGENT_CACHE = TTLCache(maxsize=100, ttl=600)
+
+@app.get("/api/agent")
+async def api_agent(q: str = ""):
+    if not q.strip():
+        return {"answer": "Merhaba! Ben BORSADEDE. BIST hakkinda ne sormak istersin? Hisse analizi, piyasa durumu, temel kavramlar — her konuda yardimci olurum."}
+    if not AI_AVAILABLE:
+        return {"answer": "AI motoru aktif degil. XAI_API_KEY veya OPENAI_KEY ekleyin.", "error": True}
+    cache_key = q.strip().lower()[:100]
+    if cache_key in AGENT_CACHE:
+        return AGENT_CACHE[cache_key]
+    try:
+        context = ""
+        items = TOP10_CACHE.get("items", [])
+        if items:
+            top5 = [f"{r['ticker']}:{r['overall']}/100({r['style']})" for r in items[:5]]
+            context = f"Taranan en iyi 5 hisse: {', '.join(top5)}. Toplam {len(items)} hisse.\n"
+        prompt = (
+            "Sen BORSADEDE'sin — BistBull Terminal'in yapay zeka yatirim asistani.\n"
+            "BIST konusunda uzmansin. Turkce cevap ver.\n"
+            "Yatirim tavsiyesi verme ama bilgi ve analiz perspektifi sun.\n"
+            "3-5 cumle, kisa ve net.\n\n"
+            f"{context}"
+            f"Soru: {q}\n\nCevap:"
+        )
+        text = await asyncio.to_thread(ai_call, prompt, 300)
+        result = {"answer": text or "Cevap olusturulamadi.", "cached": False}
+        AGENT_CACHE[cache_key] = result
+        return result
+    except Exception as e:
+        log.warning(f"agent: {e}")
+        return {"answer": f"Hata: {str(e)}", "error": True}
+
+# ================================================================
 # QUICK ANALYZE — batch analyze multiple tickers at once
 # ================================================================
 @app.get("/api/batch/{tickers}")
