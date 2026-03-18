@@ -1633,6 +1633,83 @@ async def api_book():
     return FINANCE_BOOKS[idx]
 
 # ================================================================
+# HEATMAP — Sektörel ısı haritası (günlük değişim + piyasa değeri)
+# ================================================================
+HEATMAP_CACHE = TTLCache(maxsize=5, ttl=900)  # 15 min
+
+def _fetch_heatmap_data():
+    """Batch download 1-day data for all universe stocks"""
+    symbols = [normalize_symbol(t) for t in UNIVERSE]
+    try:
+        import yfinance as _yf
+        df = _yf.download(symbols, period="2d", group_by="ticker", progress=False, threads=True)
+        results = []
+        for t in UNIVERSE:
+            sym = normalize_symbol(t)
+            try:
+                if len(UNIVERSE) == 1:
+                    ticker_df = df
+                else:
+                    ticker_df = df[sym] if sym in df.columns.get_level_values(0) else None
+                if ticker_df is None or ticker_df.empty or len(ticker_df) < 2:
+                    continue
+                prev_close = float(ticker_df["Close"].iloc[-2])
+                last_close = float(ticker_df["Close"].iloc[-1])
+                if prev_close == 0: continue
+                chg_pct = ((last_close - prev_close) / prev_close) * 100
+                # Get cached scan data for sector/market_cap
+                scan_item = None
+                for item in TOP10_CACHE.get("items", []):
+                    if item["ticker"] == t:
+                        scan_item = item
+                        break
+                sector = scan_item.get("sector", "Diger") if scan_item else "Diger"
+                mcap = scan_item["metrics"].get("market_cap") if scan_item else None
+                score = scan_item["overall"] if scan_item else None
+                results.append({
+                    "ticker": t,
+                    "price": round(last_close, 2),
+                    "change_pct": round(chg_pct, 2),
+                    "market_cap": mcap,
+                    "sector": sector or "Diger",
+                    "score": score,
+                })
+            except Exception:
+                continue
+        return results
+    except Exception as e:
+        log.warning(f"heatmap download: {e}")
+        return []
+
+@app.get("/api/heatmap")
+async def api_heatmap():
+    cache_key = "heatmap"
+    if cache_key in HEATMAP_CACHE:
+        return HEATMAP_CACHE[cache_key]
+    data = await asyncio.to_thread(_fetch_heatmap_data)
+    # Group by sector
+    sectors = defaultdict(list)
+    for d in data:
+        sectors[d["sector"]].append(d)
+    sector_list = []
+    for sec, items in sectors.items():
+        avg_chg = sum(i["change_pct"] for i in items) / len(items) if items else 0
+        total_mcap = sum(i["market_cap"] or 0 for i in items)
+        sector_list.append({
+            "sector": sec, "avg_change": round(avg_chg, 2),
+            "total_mcap": total_mcap, "count": len(items),
+            "stocks": sorted(items, key=lambda x: abs(x["change_pct"]), reverse=True)
+        })
+    sector_list.sort(key=lambda x: x["avg_change"], reverse=True)
+    result = {
+        "timestamp": dt.datetime.now(dt.timezone.utc).isoformat(),
+        "sectors": clean_for_json(sector_list),
+        "total": len(data),
+    }
+    HEATMAP_CACHE[cache_key] = result
+    return result
+
+# ================================================================
 # BORSADEDE AI AGENT — conversational BIST assistant
 # ================================================================
 AGENT_CACHE = TTLCache(maxsize=100, ttl=600)

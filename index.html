@@ -62,12 +62,13 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg0);color:var(
 <div class="page" id="pg-makro" data-page="makro"></div>
 <div class="page" id="pg-takas" data-page="takas"></div>
 <div class="page" id="pg-sosyal" data-page="sosyal"></div>
+<div class="page" id="pg-portfoy" data-page="portfoy"></div>
 </div>
 <div class="ov" id="ov" onclick="if(event.target===this)closeD()"><div class="dp" id="dp"></div></div>
 <script>
 const S={page:'home',scan:null,cross:null,macro:null,dash:null,takas:null,social:null,hero:null,wl:JSON.parse(localStorage.getItem('bb_wl')||'[]'),seen:JSON.parse(localStorage.getItem('bb_seen')||'[]')};
 const QT=['ASELS','THYAO','BIMAS','KCHOL','TUPRS','AKBNK','GARAN','FROTO','TOASO','PGSUS'];
-const PAGES=[{id:'home',label:'Home'},{id:'radar',label:'Radar'},{id:'cross',label:'Cross'},{id:'makro',label:'Makro'},{id:'takas',label:'Takas'},{id:'sosyal',label:'Sosyal'}];
+const PAGES=[{id:'home',label:'Home'},{id:'radar',label:'Radar'},{id:'cross',label:'Cross'},{id:'makro',label:'Makro'},{id:'takas',label:'Takas'},{id:'sosyal',label:'Sosyal'},{id:'portfoy',label:'Portfoy'}];
 const $=s=>document.getElementById(s);
 const fN=(x,d=2)=>{if(x==null)return'N/A';if(Math.abs(x)>=1e9)return(x/1e9).toFixed(2)+'B';if(Math.abs(x)>=1e6)return(x/1e6).toFixed(2)+'M';if(Math.abs(x)>=1e3)return x.toLocaleString('en',{maximumFractionDigits:0});return x.toFixed(d);};
 const fP=(x,d=1)=>x==null?'N/A':(x*100).toFixed(d)+'%';
@@ -78,7 +79,7 @@ const cC=v=>v>=0?'var(--grn)':'var(--red)';const cS=v=>v>=0?'+'+v.toFixed(2):v.t
 async function api(p){const r=await fetch(p);if(!r.ok)throw new Error(r.status);return r.json();}
 setInterval(()=>{$('clk').textContent=new Date().toLocaleTimeString('tr-TR',{hour:'2-digit',minute:'2-digit',second:'2-digit'})+' IST';},1000);
 const nav=$('nav');PAGES.forEach(p=>{const b=document.createElement('button');b.className='nav-b'+(p.id==='home'?' on':'');b.textContent=p.label;b.dataset.p=p.id;b.onclick=()=>goPage(p.id);nav.appendChild(b);});
-function goPage(id){S.page=id;nav.querySelectorAll('.nav-b').forEach(b=>b.classList.toggle('on',b.dataset.p===id));document.querySelectorAll('.page').forEach(p=>p.classList.toggle('on',p.dataset.page===id));if(id==='home')renderHome();if(id==='radar')renderRadarPage();if(id==='cross')renderCrossPage();if(id==='makro')renderMakroPage();if(id==='takas')renderTakasPage();if(id==='sosyal')renderSosyalPage();}
+function goPage(id){S.page=id;nav.querySelectorAll('.nav-b').forEach(b=>b.classList.toggle('on',b.dataset.p===id));document.querySelectorAll('.page').forEach(p=>p.classList.toggle('on',p.dataset.page===id));if(id==='home')renderHome();if(id==='radar')renderRadarPage();if(id==='cross')renderCrossPage();if(id==='makro')renderMakroPage();if(id==='takas')renderTakasPage();if(id==='sosyal')renderSosyalPage();if(id==='portfoy')renderPortfoyPage();}
 const qtEl=$('qticks');QT.forEach(t=>{const d=document.createElement('div');d.className='qtk';d.textContent=t;d.onclick=()=>loadTicker(t);qtEl.appendChild(d);});
 $('sinp').addEventListener('keydown',e=>{if(e.key==='Enter'){const v=e.target.value.trim().toUpperCase();if(v.length>=3)loadTicker(v);}});
 function wlAdd(t){t=t.toUpperCase();if(!S.wl.includes(t)){S.wl.push(t);localStorage.setItem('bb_wl',JSON.stringify(S.wl));}}
@@ -132,6 +133,9 @@ if(hasD){h+=`<div class="g3" style="margin-bottom:14px"><div class="card"><div c
 // ========== 6. MAKRO + SEKTOR ==========
 h+=`<div class="g2" style="margin-bottom:14px"><div class="card"><div class="card-h"><span class="card-t">🌍 Makro Radar</span><button class="btn btn-sm btn-blu" onclick="goPage('makro')">DETAY →</button></div><div class="card-b"><div class="g4" id="macMini">${S.macro?renderMacMini(S.macro.items||[]):'<div class="ld"><div class="sp"></div><div class="ld-t">Macro...</div></div>'}</div></div></div><div class="card"><div class="card-h"><span class="card-t">🏢 Sektor</span></div><div class="card-b">${hr&&hr.strong_sectors?renderSectorCards(hr):(hasD&&d.sectors?renderSectors(d.sectors):'<p style="color:var(--t3);font-size:12px">Scan sonrasi</p>')}</div></div></div>`;
 
+// ========== 6.5 HEATMAP ==========
+h+=`<div class="card" style="margin-bottom:14px"><div class="card-h"><span class="card-t">🔥 Sektorel Isi Haritasi</span><button class="btn btn-sm btn-orn" onclick="loadHeatmap()">🔄</button></div><div class="card-b" id="heatmapBox"><div style="color:var(--t3);font-size:12px">Yukleniyor...</div></div></div>`;
+
 // ========== 7. TOOLS — WL + Seen + Signals ==========
 h+=`<div class="g3" style="margin-bottom:14px"><div class="card"><div class="card-h"><span class="card-t">⭐ Watchlist</span></div><div class="card-b">${S.wl.length?S.wl.map(t=>`<div class="wl-item"><span class="wl-tick" onclick="loadTicker('${t}')">${t}</span><button class="wl-rm" onclick="wlRm('${t}');renderHome();">✕</button></div>`).join(''):'<p style="color:var(--t3);font-size:12px">Hisse detayinda ⭐ ile ekleyin</p>'}</div></div><div class="card"><div class="card-h"><span class="card-t">🕐 Son Baktiklariniz</span></div><div class="card-b">${S.seen.length?S.seen.map(t=>`<span class="ls-item" onclick="loadTicker('${t}')">${t}</span>`).join(''):'<p style="color:var(--t3);font-size:12px">Henuz hisse incelemediniz</p>'}</div></div><div class="card"><div class="card-h"><span class="card-t">⚡ Sinyaller</span><button class="btn btn-sm btn-orn" onclick="goPage('cross')">TUMU →</button></div><div class="card-b">${S.cross&&S.cross.signals?S.cross.signals.slice(0,4).map(s=>`<div class="sigc ${s.signal_type==='bullish'?'bull':s.signal_type==='bearish'?'bear':''}"><div style="display:flex;justify-content:space-between"><span class="clk-t" style="font-size:12px" onclick="loadTicker('${s.ticker}')">${s.ticker}</span><span style="color:var(--t3);font-size:10px;font-family:'JetBrains Mono',monospace">${s.signal}</span></div></div>`).join(''):'<p style="color:var(--t3);font-size:12px">Cross → sinyal tara</p>'}</div></div></div>`;
 
@@ -143,7 +147,7 @@ h+=`<div class="card" style="margin-bottom:14px"><div class="card-h"><span class
 
 pg.innerHTML=h;
 if(!S.macro)loadMacro();
-loadQuote();loadLiveStats();loadBook();
+loadQuote();loadLiveStats();loadBook();loadHeatmap();
 }
 
 // SECTOR CARDS from hero data
@@ -200,6 +204,80 @@ function closeD(){$('ov').classList.remove('open');document.body.style.overflow=
 
 // BOOK OF THE DAY
 async function loadBook(){try{const b=await api('/api/book');const box=$('bookBox');if(box&&b.title){box.innerHTML=`<div style="display:flex;gap:14px;align-items:flex-start"><div style="font-size:36px;flex-shrink:0">📖</div><div><div style="font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:700;color:var(--cyn);margin-bottom:4px">${b.title}</div><div style="font-size:12px;color:var(--gold);margin-bottom:6px">${b.author}</div><div style="font-size:12px;color:var(--t2);line-height:1.5">${b.description}</div><div style="margin-top:8px;font-size:10px;color:var(--t3)">Seviye: <span style="color:var(--grn)">${b.level||'Herkes'}</span></div></div></div>`;}}catch(e){}}
+
+// HEATMAP
+async function loadHeatmap(){
+  const box=$('heatmapBox');if(!box)return;
+  try{
+    const d=await api('/api/heatmap');
+    if(!d.sectors||!d.sectors.length){box.innerHTML='<p style="color:var(--t3);font-size:12px">Veri bekleniyor — once scan yapin</p>';return;}
+    let h='<div style="display:flex;flex-wrap:wrap;gap:3px">';
+    const maxMcap=Math.max(...d.sectors.flatMap(s=>s.stocks.map(st=>st.market_cap||1)));
+    d.sectors.forEach(sec=>{
+      sec.stocks.forEach(st=>{
+        const chg=st.change_pct||0;
+        const bg=chg>=2?'#00c853':chg>=0.5?'#2e7d32':chg>=-0.5?'#37474f':chg>=-2?'#c62828':'#b71c1c';
+        const sz=Math.max(50,Math.min(120,Math.sqrt((st.market_cap||1)/maxMcap)*140));
+        h+=`<div onclick="loadTicker('${st.ticker}')" style="width:${sz}px;height:${sz*0.7}px;background:${bg};border-radius:4px;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;border:1px solid rgba(255,255,255,.05);transition:.15s" onmouseenter="this.style.opacity='0.8'" onmouseleave="this.style.opacity='1'">`;
+        h+=`<div style="font-family:'JetBrains Mono',monospace;font-size:${sz>80?11:9}px;font-weight:700;color:#fff">${st.ticker}</div>`;
+        h+=`<div style="font-family:'JetBrains Mono',monospace;font-size:${sz>80?12:10}px;font-weight:700;color:${chg>=0?'#b9f6ca':'#ffcdd2'}">${chg>=0?'+':''}${chg.toFixed(1)}%</div>`;
+        h+=`</div>`;
+      });
+    });
+    h+=`</div>`;
+    h+=`<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;font-family:'JetBrains Mono',monospace;font-size:9px">`;
+    d.sectors.forEach(sec=>{
+      const col=sec.avg_change>=0?'var(--grn)':'var(--red)';
+      h+=`<span style="color:${col}">${sec.sector.slice(0,12)}: ${sec.avg_change>=0?'+':''}${sec.avg_change.toFixed(1)}%</span>`;
+    });
+    h+=`</div>`;
+    box.innerHTML=h;
+  }catch(e){box.innerHTML=`<p style="color:var(--t3);font-size:12px">Heatmap: ${e.message}</p>`;}
+}
+
+// ========== DEDENIN NOT DEFTERI (PORTFOY) ==========
+function getPF(){return JSON.parse(localStorage.getItem('bb_pf')||'[]');}
+function savePF(pf){localStorage.setItem('bb_pf',JSON.stringify(pf));}
+function addPF(ticker,lot,avg){const pf=getPF();const ex=pf.findIndex(p=>p.ticker===ticker.toUpperCase());if(ex>=0){pf[ex].lot+=lot;pf[ex].avg=((pf[ex].avg*(pf[ex].lot-lot))+avg*lot)/pf[ex].lot;}else{pf.push({ticker:ticker.toUpperCase(),lot,avg});}savePF(pf);}
+function rmPF(ticker){savePF(getPF().filter(p=>p.ticker!==ticker));}
+
+function renderPortfoyPage(){
+const pg=$('pg-portfoy');const pf=getPF();
+let h=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px"><div><h2 style="font-family:'JetBrains Mono',monospace;font-size:15px;color:var(--gold)">📒 Dedenin Not Defteri</h2><p style="font-size:11px;color:var(--t3);margin-top:2px">Sanal portfoyunuz — veriler localStorage'da saklanir</p></div><div style="display:flex;gap:6px"><button class="btn btn-sm btn-grn" onclick="showAddPF()">+ HISSE EKLE</button><button class="btn btn-sm btn-blu" onclick="askDedePortfoy()">☕ DEDE'YE SOR</button></div></div>`;
+
+// Add form (hidden by default)
+h+=`<div id="pfAddForm" style="display:none;margin-bottom:14px;padding:14px;background:var(--bg3);border:1px solid var(--bdr);border-radius:var(--rad)"><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end"><div><div style="font-size:10px;color:var(--t3);margin-bottom:3px">TICKER</div><input id="pfTicker" type="text" placeholder="THYAO" style="font-family:'JetBrains Mono',monospace;font-size:13px;padding:6px 10px;background:var(--bg0);border:1px solid var(--bdr);border-radius:var(--rad);color:var(--t1);outline:0;width:100px;text-transform:uppercase"></div><div><div style="font-size:10px;color:var(--t3);margin-bottom:3px">LOT</div><input id="pfLot" type="number" placeholder="100" style="font-family:'JetBrains Mono',monospace;font-size:13px;padding:6px 10px;background:var(--bg0);border:1px solid var(--bdr);border-radius:var(--rad);color:var(--t1);outline:0;width:80px"></div><div><div style="font-size:10px;color:var(--t3);margin-bottom:3px">MALIYET (TL)</div><input id="pfAvg" type="number" step="0.01" placeholder="45.50" style="font-family:'JetBrains Mono',monospace;font-size:13px;padding:6px 10px;background:var(--bg0);border:1px solid var(--bdr);border-radius:var(--rad);color:var(--t1);outline:0;width:100px"></div><button class="btn btn-grn btn-sm" onclick="doAddPF()">EKLE</button><button class="btn btn-sm" style="background:var(--bg2);color:var(--t3)" onclick="$('pfAddForm').style.display='none'">IPTAL</button></div></div>`;
+
+// Dede comment box
+h+=`<div id="pfDedeBox" style="display:none;margin-bottom:14px"></div>`;
+
+if(!pf.length){
+  h+=`<div class="emp"><h3 style="color:var(--t2)">Henuz portfoyunuz bos</h3><p style="color:var(--t3)">+ Hisse Ekle ile sanal portfoyunuzu olusturun.<br>Eyyay Dede portfoyunuzu analiz etsin!</p></div>`;
+} else {
+  // Portfolio table
+  h+=`<div class="card" style="margin-bottom:14px"><div class="card-h"><span class="card-t">📊 Portfoy (${pf.length} hisse)</span></div><div class="card-b" style="overflow-x:auto"><table class="dtb"><thead><tr><th>Ticker</th><th>Lot</th><th>Maliyet</th><th>Toplam</th><th></th></tr></thead><tbody>`;
+  let totalCost=0;
+  pf.forEach(p=>{
+    const cost=p.lot*p.avg;totalCost+=cost;
+    h+=`<tr><td class="clk-t" onclick="loadTicker('${p.ticker}')">${p.ticker}</td><td style="color:var(--t1)">${p.lot}</td><td style="color:var(--t1)">${p.avg.toFixed(2)} TL</td><td style="color:var(--cyn);font-weight:700">${fN(cost)} TL</td><td><button style="background:0;border:0;color:var(--red);cursor:pointer;font-size:14px" onclick="rmPF('${p.ticker}');renderPortfoyPage()">✕</button></td></tr>`;
+  });
+  h+=`</tbody></table><div style="padding:8px;text-align:right;font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--cyn);font-weight:700">Toplam Maliyet: ${fN(totalCost)} TL</div></div></div>`;
+
+  // Sector distribution
+  const secMap={};pf.forEach(p=>{const items=S.scan?.items||[];const found=items.find(i=>i.ticker===p.ticker);const sec=found?.sector||'Bilinmiyor';if(!secMap[sec])secMap[sec]={count:0,cost:0};secMap[sec].count++;secMap[sec].cost+=p.lot*p.avg;});
+  h+=`<div class="card" style="margin-bottom:14px"><div class="card-h"><span class="card-t">🏢 Sektor Dagilimi</span></div><div class="card-b">`;
+  const totalC=Object.values(secMap).reduce((a,b)=>a+b.cost,0)||1;
+  Object.entries(secMap).sort((a,b)=>b[1].cost-a[1].cost).forEach(([sec,v])=>{
+    const pct=(v.cost/totalC*100).toFixed(1);
+    h+=`<div style="margin-bottom:6px"><div style="display:flex;justify-content:space-between;font-family:'JetBrains Mono',monospace;font-size:11px;margin-bottom:2px"><span style="color:var(--t2)">${sec} (${v.count})</span><span style="color:var(--t1)">${pct}%</span></div><div class="sb-bar"><div class="sb-fill" style="width:${pct}%;background:var(--cyn)"></div></div></div>`;
+  });
+  h+=`</div></div>`;
+}
+pg.innerHTML=h;
+}
+function showAddPF(){$('pfAddForm').style.display='block';$('pfTicker').focus();}
+function doAddPF(){const t=$('pfTicker').value.trim().toUpperCase();const l=parseInt($('pfLot').value)||0;const a=parseFloat($('pfAvg').value)||0;if(!t||t.length<3||l<=0||a<=0){alert('Ticker, lot ve maliyet girin');return;}addPF(t,l,a);$('pfAddForm').style.display='none';$('pfTicker').value='';$('pfLot').value='';$('pfAvg').value='';renderPortfoyPage();}
+async function askDedePortfoy(){const pf=getPF();if(!pf.length){alert('Once portfoye hisse ekleyin');return;}const box=$('pfDedeBox');box.style.display='block';box.innerHTML=`<div class="aib"><div class="aib-t">☕ EYYAY DEDE PORTFOY YORUMU</div><div class="aib-tx">Bi cay koy, dede portfoyune bakiyor...</div></div>`;const desc=pf.map(p=>`${p.ticker} ${p.lot} lot (maliyet: ${p.avg} TL)`).join(', ');try{const d=await api('/api/agent?q='+encodeURIComponent('Portfoyumde sunlar var: '+desc+'. Sektorel dagilim ve risk hakkinda ne dusunuyorsun?'));box.innerHTML=`<div class="aib"><div class="aib-t">☕ EYYAY DEDE PORTFOY YORUMU</div><div class="aib-tx">${d.answer}</div></div>`;}catch(e){box.innerHTML='';}}
 
 // INIT — staggered for fast first paint
 (async()=>{
