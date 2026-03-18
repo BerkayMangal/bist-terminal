@@ -31,26 +31,24 @@ try:
 except ImportError:
     CHART_AVAILABLE = False
 
-# AI — support both Anthropic and OpenAI, whichever key is available
-AI_PROVIDER = None
+# AI — OpenAI preferred (cheaper + working), Anthropic as fallback
+AI_PROVIDERS = []  # ordered list of available providers
 try:
-    import anthropic
+    from openai import OpenAI as _OpenAI
+    if os.environ.get("OPENAI_KEY") or os.environ.get("OPENAI_API_KEY"):
+        AI_PROVIDERS.append("openai")
+except ImportError:
+    pass
+try:
+    import anthropic as _anthropic
     if os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_KEY"):
-        AI_PROVIDER = "anthropic"
+        AI_PROVIDERS.append("anthropic")
 except ImportError:
     pass
 
-if not AI_PROVIDER:
-    try:
-        from openai import OpenAI
-        if os.environ.get("OPENAI_KEY") or os.environ.get("OPENAI_API_KEY"):
-            AI_PROVIDER = "openai"
-    except ImportError:
-        pass
+AI_AVAILABLE = len(AI_PROVIDERS) > 0
 
-AI_AVAILABLE = AI_PROVIDER is not None
-
-BOT_VERSION = "V5"
+BOT_VERSION = "V6"
 APP_NAME = "BISTBULL TERMINAL"
 CONFIDENCE_MIN = 55
 
@@ -59,26 +57,36 @@ CONFIDENCE_MIN = 55
 # ================================================================
 ANTHROPIC_KEY = os.environ.get("ANTHROPIC_API_KEY", "") or os.environ.get("ANTHROPIC_KEY", "")
 OPENAI_KEY = os.environ.get("OPENAI_KEY", "") or os.environ.get("OPENAI_API_KEY", "")
-AI_KEY = ANTHROPIC_KEY or OPENAI_KEY
 AI_MODEL_ANTHROPIC = os.environ.get("AI_MODEL", "claude-sonnet-4-20250514")
 AI_MODEL_OPENAI = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
 
+def _call_openai(prompt, max_tokens):
+    client = _OpenAI(api_key=OPENAI_KEY)
+    resp = client.chat.completions.create(
+        model=AI_MODEL_OPENAI, max_tokens=max_tokens, temperature=0.4,
+        messages=[{"role": "user", "content": prompt}]
+    )
+    return resp.choices[0].message.content.strip()
+
+def _call_anthropic(prompt, max_tokens):
+    client = _anthropic.Anthropic(api_key=ANTHROPIC_KEY)
+    resp = client.messages.create(
+        model=AI_MODEL_ANTHROPIC, max_tokens=max_tokens,
+        messages=[{"role": "user", "content": prompt}]
+    )
+    return resp.content[0].text.strip()
+
 def ai_call(prompt, max_tokens=200):
-    """Unified AI call — works with Anthropic or OpenAI"""
-    if AI_PROVIDER == "anthropic":
-        client = anthropic.Anthropic(api_key=ANTHROPIC_KEY)
-        resp = client.messages.create(
-            model=AI_MODEL_ANTHROPIC, max_tokens=max_tokens,
-            messages=[{"role": "user", "content": prompt}]
-        )
-        return resp.content[0].text.strip()
-    elif AI_PROVIDER == "openai":
-        client = OpenAI(api_key=OPENAI_KEY)
-        resp = client.chat.completions.create(
-            model=AI_MODEL_OPENAI, max_tokens=max_tokens, temperature=0.4,
-            messages=[{"role": "user", "content": prompt}]
-        )
-        return resp.choices[0].message.content.strip()
+    """Try each AI provider in order, fallback if one fails"""
+    for provider in AI_PROVIDERS:
+        try:
+            if provider == "openai":
+                return _call_openai(prompt, max_tokens)
+            elif provider == "anthropic":
+                return _call_anthropic(prompt, max_tokens)
+        except Exception as e:
+            log.warning(f"AI {provider} failed: {e}")
+            continue
     return None
 
 # ================================================================
@@ -958,7 +966,7 @@ def clean_for_json(obj):
 # ================================================================
 @asynccontextmanager
 async def lifespan(app):
-    log.info(f"BISTBULL TERMINAL starting | Universe: {len(UNIVERSE)} | AI: {AI_PROVIDER or 'OFF'} | Chart: {'ON' if CHART_AVAILABLE else 'OFF'}")
+    log.info(f"BISTBULL TERMINAL starting | Universe: {len(UNIVERSE)} | AI: {','.join(AI_PROVIDERS) or 'OFF'} | Chart: {'ON' if CHART_AVAILABLE else 'OFF'}")
     yield
     log.info("BISTBULL TERMINAL shutting down")
 
@@ -1098,7 +1106,7 @@ async def api_health():
         "version": BOT_VERSION,
         "app": APP_NAME,
         "universe": len(UNIVERSE),
-        "ai": AI_PROVIDER or False,
+        "ai": AI_PROVIDERS or False,
         "chart": CHART_AVAILABLE,
         "cache": {"raw": len(RAW_CACHE), "analysis": len(ANALYSIS_CACHE), "tech": len(TECH_CACHE)},
     }
@@ -1359,6 +1367,110 @@ async def api_macro_commentary():
     except Exception as e:
         log.warning(f"macro_commentary: {e}")
         return {"commentary": None, "error": str(e)}
+
+# ================================================================
+# TAKAS — Yabancı oranları (İş Yatırım public API)
+# Domain whitelist gerekli: isyatirim.com.tr
+# ================================================================
+TAKAS_CACHE = TTLCache(maxsize=50, ttl=1800)  # 30 min cache
+
+def _fetch_takas_isyatirim():
+    """İş Yatırım hisse ekranından yabancı payı verisi çek"""
+    import requests
+    url = "https://www.isyatirim.com.tr/_layouts/15/Isyatirim.Website/Common/Data.aspx/StockScreener"
+    try:
+        headers = {
+            "User-Agent": "Mozilla/5.0",
+            "Referer": "https://www.isyatirim.com.tr/tr-tr/analiz/hisse/Sayfalar/default.aspx",
+            "Content-Type": "application/json"
+        }
+        # İş Yatırım screener POST payload
+        payload = {
+            "filterValues": [],
+            "pageSize": 500,
+            "pageNo": 1,
+            "sortField": "FOREIGN_RATIO",
+            "sortAsc": "false"
+        }
+        resp = requests.post(url, json=payload, headers=headers, timeout=15)
+        if resp.status_code == 200:
+            data = resp.json()
+            items = data.get("d", {}).get("Data", []) if isinstance(data.get("d"), dict) else []
+            if not items:
+                # Try alternate response format
+                items = data.get("value", []) or data.get("data", []) or []
+            results = []
+            for item in items:
+                ticker = item.get("HISSE_KODU") or item.get("Ticker") or item.get("hisse_kodu")
+                if not ticker:
+                    continue
+                foreign = item.get("YABANCI_ORAN") or item.get("FOREIGN_RATIO") or item.get("foreignRatio")
+                price = item.get("KAPANIS") or item.get("CLOSE") or item.get("close")
+                change = item.get("YUZDE") or item.get("CHANGE_PERCENT") or item.get("changePercent")
+                results.append({
+                    "ticker": str(ticker).upper(),
+                    "foreign_pct": round(float(foreign), 2) if foreign is not None else None,
+                    "price": round(float(price), 2) if price is not None else None,
+                    "change_pct": round(float(change), 2) if change is not None else None,
+                })
+            return results
+    except Exception as e:
+        log.warning(f"Takas isyatirim: {e}")
+    return None
+
+def _fetch_takas_yfinance():
+    """Fallback: yfinance ile major_holders'dan yabancı payı tahmini"""
+    results = []
+    for ticker in UNIVERSE[:20]:  # ilk 20 hisse (hız için)
+        try:
+            tk = yf.Ticker(normalize_symbol(ticker))
+            info = tk.get_info() or {}
+            # yfinance'de institutionalHolders proxy olarak kullanılabilir
+            inst_pct = info.get("heldPercentInstitutions")
+            price = info.get("currentPrice") or info.get("regularMarketPrice")
+            results.append({
+                "ticker": ticker,
+                "foreign_pct": round(inst_pct * 100, 2) if inst_pct is not None else None,
+                "price": round(float(price), 2) if price is not None else None,
+                "change_pct": None,
+                "source": "yfinance_institutional"
+            })
+        except Exception:
+            continue
+    return results if results else None
+
+@app.get("/api/takas")
+async def api_takas():
+    """Yabancı takas oranları — İş Yatırım veya yfinance fallback"""
+    cache_key = "takas_all"
+    if cache_key in TAKAS_CACHE:
+        return TAKAS_CACHE[cache_key]
+    try:
+        # Try İş Yatırım first
+        data = await asyncio.to_thread(_fetch_takas_isyatirim)
+        source = "isyatirim"
+        if not data:
+            # Fallback to yfinance institutional holders
+            data = await asyncio.to_thread(_fetch_takas_yfinance)
+            source = "yfinance"
+        if not data:
+            return {"items": [], "source": None, "error": "Takas verisi alinamadi. isyatirim.com.tr domain whitelist'e ekleyin."}
+
+        # Sort by foreign_pct descending (en yüksek yabancı payı önce)
+        data = [d for d in data if d.get("foreign_pct") is not None]
+        data.sort(key=lambda x: x["foreign_pct"], reverse=True)
+
+        result = {
+            "timestamp": dt.datetime.now(dt.timezone.utc).isoformat(),
+            "items": clean_for_json(data),
+            "source": source,
+            "count": len(data),
+        }
+        TAKAS_CACHE[cache_key] = result
+        return result
+    except Exception as e:
+        log.error(f"takas: {e}")
+        raise HTTPException(status_code=500, detail="Takas verisi alinamadi")
 
 # ================================================================
 # QUICK ANALYZE — batch analyze multiple tickers at once
