@@ -50,7 +50,7 @@ except ImportError:
 
 AI_AVAILABLE = len(AI_PROVIDERS) > 0
 
-BOT_VERSION = "V6"
+BOT_VERSION = "V7"
 APP_NAME = "BISTBULL TERMINAL"
 CONFIDENCE_MIN = 55
 
@@ -120,10 +120,36 @@ RAW_CACHE = TTLCache(maxsize=5000, ttl=86400)
 ANALYSIS_CACHE = TTLCache(maxsize=5000, ttl=86400)
 TECH_CACHE = TTLCache(maxsize=500, ttl=3600)
 AI_CACHE = TTLCache(maxsize=200, ttl=7200)
+HISTORY_CACHE = TTLCache(maxsize=500, ttl=3600)  # shared price history for tech + cross
 TOP10_CACHE = {"asof": None, "items": []}
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
 log = logging.getLogger("bistbull")
+
+# ================================================================
+# BATCH HISTORY DOWNLOAD — single yf.download for all symbols
+# ================================================================
+def batch_download_history(symbols, period="1y", interval="1d"):
+    result = {}
+    try:
+        if not symbols: return result
+        df = yf.download(symbols, period=period, interval=interval,
+                         group_by="ticker", progress=False, threads=True)
+        if df is None or df.empty: return result
+        for sym in symbols:
+            try:
+                if len(symbols) == 1:
+                    ticker_df = df
+                else:
+                    if sym in df.columns.get_level_values(0):
+                        ticker_df = df[sym].dropna(how="all")
+                    else: continue
+                if ticker_df is not None and not ticker_df.empty and len(ticker_df) >= 20:
+                    result[sym] = ticker_df
+            except Exception: continue
+    except Exception as e:
+        log.warning(f"batch_download_history: {e}")
+    return result
 
 # ================================================================
 # HELPERS — verbatim from fa_bot.py
@@ -585,12 +611,20 @@ def analyze_symbol(symbol):
 # ================================================================
 # TECHNICAL ANALYSIS — verbatim from fa_bot.py
 # ================================================================
-def compute_technical(symbol):
+def compute_technical(symbol, hist_df=None):
     if symbol in TECH_CACHE:
         return TECH_CACHE[symbol]
     try:
-        tk = yf.Ticker(symbol)
-        df = tk.history(period="1y", interval="1d")
+        # Use provided history, shared cache, or fetch fresh
+        if hist_df is not None and len(hist_df) >= 50:
+            df = hist_df
+        elif symbol in HISTORY_CACHE:
+            df = HISTORY_CACHE[symbol]
+        else:
+            tk = yf.Ticker(symbol)
+            df = tk.history(period="1y", interval="1d")
+            if df is not None and not df.empty:
+                HISTORY_CACHE[symbol] = df
         if df is None or len(df) < 50:
             return None
         c = df["Close"]
@@ -881,10 +915,18 @@ class CrossHunter:
             "BB Ust Band Kirilim": {"icon": "neutral", "explanation": "Fiyat Bollinger ust bandini kirdi — momentum guclu ama asiri olabilir"},
             "BB Alt Band Kirilim": {"icon": "neutral", "explanation": "Fiyat Bollinger alt bandini kirdi — oversold veya trend devam"},
         }
+        # Batch download history for all stocks at once (single yf.download)
+        symbols = [normalize_symbol(t) for t in UNIVERSE]
+        history_map = batch_download_history(symbols, period="1y", interval="1d")
+        # Cache downloaded history for reuse
+        for sym, hist_df in history_map.items():
+            HISTORY_CACHE[sym] = hist_df
+
         for t in UNIVERSE:
             try:
                 symbol = normalize_symbol(t)
-                tech = compute_technical(symbol)
+                hist_df = history_map.get(symbol)
+                tech = compute_technical(symbol, hist_df=hist_df)
                 if not tech:
                     continue
                 signals = set()
@@ -936,7 +978,7 @@ def _analyze_safe(ticker):
 
 def scan_universe_blocking():
     ranked = []
-    with ThreadPoolExecutor(max_workers=10) as pool:
+    with ThreadPoolExecutor(max_workers=15) as pool:
         futures = {pool.submit(_analyze_safe, t): t for t in UNIVERSE}
         for future in as_completed(futures):
             r = future.result()
@@ -947,6 +989,21 @@ def scan_universe_blocking():
     TOP10_CACHE["items"] = ranked
     log.info(f"Scan tamamlandi: {len(ranked)} hisse")
     return ranked
+
+# ================================================================
+# BACKGROUND AUTO-SCAN — runs on startup, then every 2 hours
+# ================================================================
+async def _background_scanner():
+    await asyncio.sleep(3)  # let server start
+    while True:
+        try:
+            log.info("Background scan basladi...")
+            await asyncio.to_thread(scan_universe_blocking)
+            await asyncio.to_thread(cross_hunter.scan_all)
+            log.info(f"Background scan tamamlandi. {len(TOP10_CACHE['items'])} hisse, {len(cross_hunter.last_results)} sinyal")
+        except Exception as e:
+            log.error(f"Background scan hatasi: {e}")
+        await asyncio.sleep(7200)  # every 2 hours
 
 # ================================================================
 # JSON SERIALIZER HELPER
@@ -980,8 +1037,10 @@ def clean_for_json(obj):
 # ================================================================
 @asynccontextmanager
 async def lifespan(app):
-    log.info(f"BISTBULL TERMINAL starting | Universe: {len(UNIVERSE)} | AI: {','.join(AI_PROVIDERS) or 'OFF'} | Chart: {'ON' if CHART_AVAILABLE else 'OFF'}")
+    log.info(f"BISTBULL TERMINAL V7 starting | Universe: {len(UNIVERSE)} | AI: {','.join(AI_PROVIDERS) or 'OFF'} | Chart: {'ON' if CHART_AVAILABLE else 'OFF'}")
+    task = asyncio.create_task(_background_scanner())
     yield
+    task.cancel()
     log.info("BISTBULL TERMINAL shutting down")
 
 app = FastAPI(title="BistBull Terminal", version="1.0", lifespan=lifespan)
@@ -1069,7 +1128,7 @@ async def api_top10():
                 "revenue_growth": r["metrics"].get("revenue_growth"),
             })
         return {"asof": TOP10_CACHE["asof"].isoformat() if TOP10_CACHE["asof"] else None, "items": clean_for_json(items), "total_scanned": len(UNIVERSE)}
-    return {"asof": None, "items": [], "total_scanned": 0, "message": "Henuz taranmadi. /api/scan ile baslatin."}
+    return {"asof": None, "items": [], "total_scanned": 0, "message": "Tarama devam ediyor..."}
 
 @app.get("/api/scan")
 async def api_scan():
@@ -1122,13 +1181,14 @@ async def api_health():
         "universe": len(UNIVERSE),
         "ai": AI_PROVIDERS or False,
         "chart": CHART_AVAILABLE,
+        "scanning": TOP10_CACHE["asof"] is None,
         "cache": {"raw": len(RAW_CACHE), "analysis": len(ANALYSIS_CACHE), "tech": len(TECH_CACHE)},
     }
 
 # ================================================================
 # MACRO RADAR — expanded with EM indices + YTD/1M/1W
 # ================================================================
-MACRO_CACHE = TTLCache(maxsize=50, ttl=300)  # 5 min cache
+MACRO_CACHE = TTLCache(maxsize=50, ttl=600)  # 10 min cache
 
 MACRO_SYMBOLS = {
     # Turkiye
