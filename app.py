@@ -1427,36 +1427,165 @@ def scan_universe_blocking():
     return ranked
 
 # ================================================================
-# BACKGROUND AUTO-SCAN — runs on startup, then every 2 hours
+# PIYASA DURUMU — tatil, seans saati, açık/kapalı kontrolü
+# ================================================================
+import zoneinfo
+
+_IST = zoneinfo.ZoneInfo("Europe/Istanbul")
+
+# Statik tatiller (her yıl sabit)
+_FIXED_HOLIDAYS_MD = {
+    (1, 1),    # Yilbasi
+    (4, 23),   # 23 Nisan
+    (5, 1),    # 1 Mayis
+    (5, 19),   # 19 Mayis
+    (7, 15),   # 15 Temmuz
+    (8, 30),   # 30 Agustos
+    (10, 29),  # 29 Ekim
+}
+
+# Dini bayramlar (2025-2027 arası, her yıl guncelle)
+_RELIGIOUS_HOLIDAYS = {
+    # 2025 Ramazan Bayrami
+    dt.date(2025, 3, 30), dt.date(2025, 3, 31), dt.date(2025, 4, 1),
+    # 2025 Kurban Bayrami
+    dt.date(2025, 6, 6), dt.date(2025, 6, 7), dt.date(2025, 6, 8), dt.date(2025, 6, 9),
+    # 2026 Ramazan Bayrami
+    dt.date(2026, 3, 19), dt.date(2026, 3, 20), dt.date(2026, 3, 21),
+    # 2026 Kurban Bayrami
+    dt.date(2026, 5, 26), dt.date(2026, 5, 27), dt.date(2026, 5, 28), dt.date(2026, 5, 29),
+    # 2027 Ramazan Bayrami
+    dt.date(2027, 3, 9), dt.date(2027, 3, 10), dt.date(2027, 3, 11),
+    # 2027 Kurban Bayrami
+    dt.date(2027, 5, 16), dt.date(2027, 5, 17), dt.date(2027, 5, 18), dt.date(2027, 5, 19),
+}
+
+# Bayram arife gunleri (yari gun seans: 10:00-12:30)
+_HALF_DAYS = {
+    dt.date(2025, 3, 28), dt.date(2025, 6, 5),
+    dt.date(2026, 3, 18), dt.date(2026, 5, 25),
+    dt.date(2027, 3, 8), dt.date(2027, 5, 14),
+}
+
+def get_market_status():
+    """BIST piyasa durumu: open/closed/half_day/pre_market/after_hours + neden"""
+    now_ist = dt.datetime.now(_IST)
+    today = now_ist.date()
+    weekday = today.weekday()  # 0=Mon, 6=Sun
+
+    # Hafta sonu
+    if weekday >= 5:
+        next_open = today + dt.timedelta(days=(7 - weekday))
+        return {
+            "status": "closed", "reason": "Hafta sonu",
+            "reason_detail": "Cumartesi" if weekday == 5 else "Pazar",
+            "next_open": next_open.isoformat(),
+            "ist_time": now_ist.strftime("%H:%M"),
+            "global_open": True,  # Bazi global piyasalar acik olabilir
+        }
+
+    # Dini bayram
+    if today in _RELIGIOUS_HOLIDAYS:
+        # Hangi bayram?
+        bayram = "Ramazan Bayrami" if today.month <= 4 else "Kurban Bayrami"
+        # Sonraki acik gun
+        check = today + dt.timedelta(days=1)
+        while check in _RELIGIOUS_HOLIDAYS or check.weekday() >= 5 or (check.month, check.day) in _FIXED_HOLIDAYS_MD:
+            check += dt.timedelta(days=1)
+        return {
+            "status": "closed", "reason": bayram,
+            "reason_detail": f"{bayram} tatili",
+            "next_open": check.isoformat(),
+            "ist_time": now_ist.strftime("%H:%M"),
+            "global_open": True,
+        }
+
+    # Sabit tatil
+    if (today.month, today.day) in _FIXED_HOLIDAYS_MD:
+        names = {(1,1):"Yilbasi",(4,23):"23 Nisan",(5,1):"1 Mayis",(5,19):"19 Mayis",(7,15):"15 Temmuz",(8,30):"30 Agustos",(10,29):"29 Ekim"}
+        name = names.get((today.month, today.day), "Resmi tatil")
+        check = today + dt.timedelta(days=1)
+        while check.weekday() >= 5 or (check.month, check.day) in _FIXED_HOLIDAYS_MD or check in _RELIGIOUS_HOLIDAYS:
+            check += dt.timedelta(days=1)
+        return {
+            "status": "closed", "reason": name,
+            "reason_detail": f"{name} tatili",
+            "next_open": check.isoformat(),
+            "ist_time": now_ist.strftime("%H:%M"),
+            "global_open": True,
+        }
+
+    hour, minute = now_ist.hour, now_ist.minute
+    t = hour * 60 + minute  # dakika cinsinden
+
+    # Yari gun (arife)
+    if today in _HALF_DAYS:
+        if t < 600:  # 10:00 oncesi
+            return {"status": "pre_market", "reason": "Arife — yari gun seans", "reason_detail": "Seans 10:00-12:30", "ist_time": now_ist.strftime("%H:%M"), "global_open": False, "half_day": True}
+        elif t <= 750:  # 12:30'a kadar
+            return {"status": "open", "reason": "Arife — yari gun seans", "reason_detail": "Kapanış 12:30", "ist_time": now_ist.strftime("%H:%M"), "global_open": False, "half_day": True}
+        else:
+            return {"status": "closed", "reason": "Arife — seans bitti", "reason_detail": "Yari gun seans 12:30'da kapandi", "ist_time": now_ist.strftime("%H:%M"), "global_open": True, "half_day": True}
+
+    # Normal gun seans saatleri (10:00-18:00 surekli islem)
+    if t < 595:  # 09:55 oncesi
+        return {"status": "pre_market", "reason": "Seans oncesi", "reason_detail": "BIST 10:00'da acilir", "ist_time": now_ist.strftime("%H:%M"), "global_open": False}
+    elif t <= 1080:  # 18:00'a kadar
+        return {"status": "open", "reason": "Seans acik", "reason_detail": "Surekli islem", "ist_time": now_ist.strftime("%H:%M"), "global_open": False}
+    else:
+        return {"status": "after_hours", "reason": "Seans kapandi", "reason_detail": f"Kapanis 18:00 — Yarin 10:00'da acilir", "ist_time": now_ist.strftime("%H:%M"), "global_open": True}
+
+def is_scan_worthwhile():
+    """Scan yapmaya deger mi? Piyasa aciksa veya ilk scan yapilmadiysa True"""
+    if TOP10_CACHE["asof"] is None:
+        return True  # ilk scan her zaman yap
+    ms = get_market_status()
+    # Piyasa aciksa veya kapandiktan sonra ilk 30dk icindeyse (kapanis verisi icin)
+    if ms["status"] in ("open", "pre_market"):
+        return True
+    if ms["status"] == "after_hours":
+        now_ist = dt.datetime.now(_IST)
+        if now_ist.hour == 18 and now_ist.minute <= 30:
+            return True  # kapanis sonrasi 30dk icinde son scan
+    return False
+
+
+# ================================================================
+# BACKGROUND AUTO-SCAN — respects market hours
 # ================================================================
 async def _background_scanner():
     await asyncio.sleep(3)  # let server start
     while True:
         try:
-            log.info("Background scan basladi...")
-            await asyncio.to_thread(scan_universe_blocking)
-            await asyncio.to_thread(cross_hunter.scan_all)
-            log.info(f"Background scan tamamlandi. {len(TOP10_CACHE['items'])} hisse, {len(cross_hunter.last_results)} sinyal")
+            if is_scan_worthwhile():
+                log.info("Background scan basladi...")
+                await asyncio.to_thread(scan_universe_blocking)
+                await asyncio.to_thread(cross_hunter.scan_all)
+                log.info(f"Background scan tamamlandi. {len(TOP10_CACHE['items'])} hisse, {len(cross_hunter.last_results)} sinyal")
 
-            # V7.1: Pre-compute top 5 AI summaries for speed
-            if AI_AVAILABLE and TOP10_CACHE["items"]:
-                top5 = TOP10_CACHE["items"][:5]
-                for r in top5:
+                # Pre-compute top 5 AI summaries
+                if AI_AVAILABLE and TOP10_CACHE["items"]:
+                    top5 = TOP10_CACHE["items"][:5]
+                    for r in top5:
+                        try:
+                            tech = TECH_CACHE.get(r["symbol"])
+                            await asyncio.to_thread(ai_trader_summary, r, tech)
+                        except Exception:
+                            pass
                     try:
-                        tech = TECH_CACHE.get(r["symbol"])
-                        await asyncio.to_thread(ai_trader_summary, r, tech)
-                        log.info(f"Pre-computed AI: {r['ticker']}")
-                    except Exception as e:
-                        log.debug(f"Pre-compute AI {r['ticker']}: {e}")
-                # Pre-compute briefing
-                try:
-                    await api_briefing()
-                    log.info("Pre-computed briefing")
-                except Exception:
-                    pass
+                        await api_briefing()
+                    except Exception:
+                        pass
+            else:
+                ms = get_market_status()
+                log.info(f"Scan atlanıyor — {ms['reason']} ({ms['ist_time']} IST)")
         except Exception as e:
             log.error(f"Background scan hatasi: {e}")
-        await asyncio.sleep(7200)  # every 2 hours
+
+        # Akıllı bekleme: piyasa aciksa 1 saat, kapaliysa 3 saat
+        ms = get_market_status()
+        wait = 3600 if ms["status"] in ("open",) else 10800
+        await asyncio.sleep(wait)
 
 # ================================================================
 # JSON SERIALIZER HELPER
@@ -1644,6 +1773,7 @@ async def api_cross():
 
 @app.get("/api/health")
 async def api_health():
+    ms = get_market_status()
     return {
         "status": "ok",
         "version": BOT_VERSION,
@@ -1652,8 +1782,22 @@ async def api_health():
         "ai": AI_PROVIDERS or False,
         "chart": CHART_AVAILABLE,
         "scanning": TOP10_CACHE["asof"] is None,
+        "market": ms,
         "cache": {"raw": len(RAW_CACHE), "analysis": len(ANALYSIS_CACHE), "tech": len(TECH_CACHE)},
     }
+
+@app.get("/api/market-status")
+async def api_market_status():
+    """BIST piyasa durumu — açık/kapalı/tatil/arife"""
+    ms = get_market_status()
+    # Son islem gunu bilgisi ekle
+    last_scan = TOP10_CACHE.get("asof")
+    ms["last_scan"] = last_scan.isoformat() if last_scan else None
+    ms["data_age"] = None
+    if last_scan:
+        age_hours = (dt.datetime.now(dt.timezone.utc) - last_scan).total_seconds() / 3600
+        ms["data_age"] = f"{age_hours:.1f} saat once"
+    return ms
 
 # ================================================================
 # MACRO RADAR — expanded with EM indices + YTD/1M/1W
