@@ -257,7 +257,21 @@ h+=`<div class="card" style="margin-bottom:14px"><div class="card-h"><span class
 // 3. GUNUN KITABI
 if(S.book){h+=`<div class="card" style="margin-bottom:14px"><div class="card-h"><span class="card-t">📚 Gunun Finans Kitabi</span></div><div class="card-b"><div style="display:flex;gap:14px;align-items:flex-start"><div style="font-size:36px;flex-shrink:0">📖</div><div><div style="font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:700;color:var(--cyn);margin-bottom:4px">${esc(S.book.title)}</div><div style="font-size:12px;color:var(--gold);margin-bottom:6px">${esc(S.book.author)}</div><div style="font-size:12px;color:var(--t2);line-height:1.5">${esc(S.book.description)}</div><div style="margin-top:8px;font-size:10px;color:var(--t3)">Seviye: <span style="color:var(--grn)">${esc(S.book.level||'Herkes')}</span></div></div></div></div></div>`;}
 
-// 4. HERO
+// 4. PIYASA DURUMU BANNER
+const ms=S.marketStatus;
+if(ms&&ms.status!=='open'){
+  const bannerCol=ms.status==='closed'?'var(--ylw)':ms.status==='pre_market'?'var(--blu)':'var(--t3)';
+  const bannerIcon=ms.status==='closed'?'🏖️':ms.status==='pre_market'?'⏰':'🌙';
+  const bannerBg=ms.status==='closed'?'rgba(255,193,7,.08)':'rgba(33,150,243,.08)';
+  h+=`<div style="margin-bottom:14px;padding:12px 16px;background:${bannerBg};border:1px solid ${bannerCol}30;border-left:3px solid ${bannerCol};border-radius:0 var(--rad) var(--rad) 0;display:flex;align-items:center;gap:10px;flex-wrap:wrap">`;
+  h+=`<span style="font-size:18px">${bannerIcon}</span>`;
+  h+=`<div style="flex:1;min-width:200px"><div style="font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700;color:${bannerCol}">${esc(ms.reason)}</div>`;
+  h+=`<div style="font-size:11px;color:var(--t2);margin-top:2px">${esc(ms.reason_detail||'')}${ms.next_open?' · Sonraki acilis: '+ms.next_open:''}${ms.data_age?' · Veri: '+esc(ms.data_age):''}</div></div>`;
+  if(ms.global_open){h+=`<span style="font-size:10px;color:var(--cyn);font-family:'JetBrains Mono',monospace;white-space:nowrap">🌍 Global acik</span>`;}
+  h+=`</div>`;
+}
+
+// 5. HERO
 h+=`<div class="hero-wrap"><div class="hero-tag">📡 BUGÜN NE OLUYOR?</div>`;
 if(hr){
   const modeCol=hr.mode_color==='green'?'var(--grn)':hr.mode_color==='red'?'var(--red)':'var(--ylw)';
@@ -307,6 +321,29 @@ if(hasSc){h+=`<div class="card" style="margin-bottom:14px"><div class="card-h"><
 const ls=S.liveStats||{};
 h+=`<div class="card" style="margin-bottom:14px"><div class="card-h"><span class="card-t">📡 Sistem</span></div><div class="card-b"><div class="g4"><div class="live-stat"><div class="live-num">${ls.scans_done||'—'}</div><div class="live-label">Analiz</div></div><div class="live-stat"><div class="live-num">${ls.signals_total||'—'}</div><div class="live-label">Sinyal</div></div><div class="live-stat"><div class="live-num">${ls.macro_tracked||'—'}</div><div class="live-label">Makro</div></div><div class="live-stat"><div class="live-num">${ls.uptime_hours||'—'}</div><div class="live-label">Uptime</div></div></div></div></div>`;
 
+// 10. KARSILASTIRMA TABLOSU
+h+=`<div class="card" style="margin-bottom:14px"><div class="card-h"><span class="card-t">📊 Neden BistBull?</span></div><div class="card-b" style="overflow-x:auto">`;
+h+=`<table class="dtb" style="min-width:500px"><thead><tr><th style="min-width:140px">Ozellik</th><th style="text-align:center">Fintables</th><th style="text-align:center">Matriks</th><th style="text-align:center">TradingView</th><th style="text-align:center;color:var(--grn)">BistBull</th></tr></thead><tbody>`;
+const cmp=[
+['Temel Analiz','⭐⭐⭐⭐⭐','⭐⭐⭐','⭐⭐','⭐⭐⭐⭐'],
+['Teknik Analiz','⭐⭐','⭐⭐⭐⭐','⭐⭐⭐⭐⭐','⭐⭐⭐'],
+['Takas / Kurum Akisi','⭐⭐','⭐⭐⭐⭐⭐','—','⭐⭐ (proxy)'],
+['9 Boyut Hibrit Skorlama','—','—','—','⭐⭐⭐⭐⭐'],
+['AI Yorum + Eyyay Dede','—','—','—','⭐⭐⭐⭐⭐'],
+['DEGER / IVME Ikili Analiz','—','—','—','⭐⭐⭐⭐⭐'],
+['Cross Hunter (14 sinyal)','—','⭐⭐⭐','⭐⭐⭐⭐','⭐⭐⭐⭐'],
+['Kullanim Kolayligi','⭐⭐⭐⭐','⭐⭐','⭐⭐⭐','⭐⭐⭐⭐⭐'],
+];
+cmp.forEach((row,i)=>{
+const bg=i%2===1?'background:var(--bg3)':'';
+const last=row[4];
+const isUnique=row[1]==='—'&&row[2]==='—'&&row[3]==='—';
+h+=`<tr style="${bg}"><td style="padding:10px 8px;font-size:12px;color:${isUnique?'var(--cyn)':'var(--t1)'};font-weight:${isUnique?'700':'500'}">${row[0]}</td><td style="text-align:center;font-size:11px;color:var(--t2)">${row[1]}</td><td style="text-align:center;font-size:11px;color:var(--t2)">${row[2]}</td><td style="text-align:center;font-size:11px;color:var(--t2)">${row[3]}</td><td style="text-align:center;font-size:11px;color:var(--grn);font-weight:700">${last}</td></tr>`;
+});
+h+=`</tbody></table>`;
+h+=`<div style="margin-top:12px;padding:10px;background:var(--bg3);border-radius:var(--rad);font-size:11px;color:var(--t2);line-height:1.5;text-align:center"><span style="color:var(--cyn)">Mavi satirlar</span> sadece BistBull'da var — 9 boyutlu hibrit skorlama, AI yatirim tezi ve DEGER/IVME ikili analiz baska hicbir platformda yok.</div>`;
+h+=`</div></div>`;
+
 pg.innerHTML=h;
 if(!S.macro)loadMacro();
 }
@@ -325,6 +362,7 @@ function renderMacMini(items){const show=items.filter(m=>['turkiye','emtia'].inc
 async function loadQuote(){try{S.quote=await api('/api/quote');}catch(e){}}
 async function loadLiveStats(){try{S.liveStats=await api('/api/live/stats');}catch(e){}}
 async function loadBook(){try{S.book=await api('/api/book');}catch(e){}}
+async function loadMarketStatus(){try{S.marketStatus=await api('/api/market-status');}catch(e){}}
 async function loadMacro(){try{S.macro=await api('/api/macro');const el=$('macMini');if(el)el.innerHTML=renderMacMini(S.macro.items||[]);renderTickerBar(S.macro.items||[]);}catch(e){console.error('macro:',e);}}
 function renderTickerBar(items){const tb=$('tbar');const inner=items.map(m=>`<div class="tbar-i"><span style="color:var(--t2);font-weight:600">${esc(m.flag||'')} ${esc(m.key||m.name)}</span><span style="color:var(--t1)">${fN(m.price,m.key?.includes('TRY')?4:2)}</span><span style="color:${cC(m.change_pct)};font-size:10px">${cS(m.change_pct)}%</span></div>`).join('');tb.innerHTML=`<div class="tbar-inner">${inner}${inner}</div>`;}
 
@@ -449,7 +487,7 @@ async function askDedePortfoy(){const pf=getPF();if(!pf.length){alert('Once port
 (async()=>{
 renderHome(); // skeleton
 // Phase 1: fast parallel
-await Promise.all([loadQuote(), loadBook(), loadMacro(), loadLiveStats(), api('/api/health').catch(()=>null)]);
+await Promise.all([loadQuote(), loadBook(), loadMacro(), loadLiveStats(), loadMarketStatus(), api('/api/health').catch(()=>null)]);
 renderHome();
 // Phase 2: scan data (background scan should already have data)
 try{
