@@ -782,27 +782,50 @@ def drivers(scores, confidence):
     return pos[:5], neg[:5]  # V7: 4'ten 5'e cikardi — daha fazla insight
 
 # ================================================================
-# ANALYZE — V7: 9 Boyutlu Hibrit Skorlama
-# Temel 7 boyut korundu + Momentum, Technical Break, Institutional Flow eklendi
+# ANALYZE — V7.1: DEĞER/İVME İkili Skorlama Sistemi
+# DEĞER (6 boyut, uzun vade): Ne almalıyım?
+# İVME (3 boyut, kısa vade): Ne zaman girmeliyim?
+# Combined overall = DEĞER × 0.55 + İVME × 0.45
 # ================================================================
 def analyze_symbol(symbol):
     if symbol in ANALYSIS_CACHE: return ANALYSIS_CACHE[symbol]
     m = compute_metrics(symbol)
 
-    # V7: Teknik veriyi al — yeni 3 boyut icin gerekli
+    # Teknik veriyi al — İVME boyutlari icin gerekli
     tech = None
     try:
         tech = compute_technical(symbol)
     except Exception as e:
         log.debug(f"analyze_symbol tech for {symbol}: {e}")
 
-    # Mevcut 7 temel boyut (korundu)
+    # --- DEĞER: 6 temel boyut ---
     scores = {k: round((f(m) or 50), 1) for k, f in [
         ("value", score_value), ("quality", score_quality), ("growth", score_growth),
         ("balance", score_balance), ("earnings", score_earnings), ("moat", score_moat), ("capital", score_capital),
     ]}
 
-    # V7: Yeni 3 hibrit boyut — teknik veri gerektirir
+    # DEĞER agirlikli skoru (toplam %100 kendi icinde)
+    # Value:23 Quality:23 Growth:18 Balance:18 Earnings:10 Moat:8
+    deger_raw = (
+        0.23 * scores["value"]
+      + 0.23 * scores["quality"]
+      + 0.18 * scores["growth"]
+      + 0.18 * scores["balance"]
+      + 0.10 * scores["earnings"]
+      + 0.08 * scores["moat"]
+    )
+    # Penaltiler sadece DEĞER skoruna uygulanir
+    if m.get("equity") is not None and m["equity"] < 0: deger_raw -= 12
+    if m.get("net_income") is not None and m["net_income"] < 0: deger_raw -= 8
+    if m.get("operating_cf") is not None and m["operating_cf"] < 0: deger_raw -= 8
+    if m.get("interest_coverage") is not None and m["interest_coverage"] < 1.5: deger_raw -= 5
+    if m.get("beneish_m") is not None and m["beneish_m"] > -1.78: deger_raw -= 5
+    if m.get("total_debt") is not None and m.get("cash") is not None:
+        if m["cash"] > (m["total_debt"] or 0):
+            deger_raw += 3
+    deger_score = round(max(1, min(99, deger_raw)), 1)
+
+    # --- İVME: 3 teknik boyut ---
     mom = score_momentum(m, tech)
     tb = score_technical_break(m, tech)
     inst = score_institutional_flow(m, tech)
@@ -810,31 +833,17 @@ def analyze_symbol(symbol):
     scores["tech_break"] = round(tb, 1) if tb is not None else 50.0
     scores["inst_flow"] = round(inst, 1) if inst is not None else 50.0
 
-    # V7: 9 Boyutlu Agirlikli Ortalama (toplam %100)
-    # Value:14 Quality:14 Growth:12 Balance:12 Earnings:10 Moat:10
-    # Momentum:12 Tech Break:10 Inst Flow:6
-    overall = (
-        0.14 * scores["value"]
-      + 0.14 * scores["quality"]
-      + 0.12 * scores["growth"]
-      + 0.12 * scores["balance"]
-      + 0.10 * scores["earnings"]
-      + 0.10 * scores["moat"]
-      + 0.12 * scores["momentum"]
-      + 0.10 * scores["tech_break"]
-      + 0.06 * scores["inst_flow"]
-    )
+    # İVME agirlikli skoru (toplam %100 kendi icinde)
+    # Momentum:40 TechBreak:35 InstFlow:25
+    ivme_score = round(max(1, min(99,
+        0.40 * scores["momentum"]
+      + 0.35 * scores["tech_break"]
+      + 0.25 * scores["inst_flow"]
+    )), 1)
 
-    # Penalti / bonus kuralları korundu
-    if m.get("equity") is not None and m["equity"] < 0: overall -= 12
-    if m.get("net_income") is not None and m["net_income"] < 0: overall -= 8
-    if m.get("operating_cf") is not None and m["operating_cf"] < 0: overall -= 8
-    if m.get("interest_coverage") is not None and m["interest_coverage"] < 1.5: overall -= 5
-    if m.get("beneish_m") is not None and m["beneish_m"] > -1.78: overall -= 5
-    if m.get("total_debt") is not None and m.get("cash") is not None:
-        if m["cash"] > (m["total_debt"] or 0):
-            overall += 3
-    overall = round(max(1, min(99, overall)), 1)
+    # --- COMBINED OVERALL ---
+    overall = round(max(1, min(99, deger_score * 0.55 + ivme_score * 0.45)), 1)
+
     confidence = confidence_score(m)
     style = style_label(scores)
     legends = legendary_labels(m, scores)
@@ -843,6 +852,7 @@ def analyze_symbol(symbol):
         "symbol": symbol, "ticker": base_ticker(symbol), "name": m["name"], "currency": m["currency"],
         "sector": m.get("sector", ""), "industry": m.get("industry", ""),
         "metrics": m, "scores": scores, "overall": overall, "confidence": confidence,
+        "deger": deger_score, "ivme": ivme_score,  # V7.1: ikili skor
         "style": style, "legendary": legends, "positives": pos, "negatives": neg,
     }
     ANALYSIS_CACHE[symbol] = r
@@ -1347,26 +1357,30 @@ async def api_ai_summary(ticker: str):
         log.warning(f"ai-summary {ticker}: {e}")
         raise HTTPException(status_code=500, detail="AI ozet alinamadi")
 
+def _build_scan_item(r):
+    """Build a lightweight scan result item with DEĞER/İVME scores"""
+    return {
+        "ticker": r["ticker"], "name": r["name"],
+        "overall": r["overall"], "confidence": r["confidence"],
+        "deger": r.get("deger", r["overall"]),  # V7.1: DEĞER skoru
+        "ivme": r.get("ivme", 50),               # V7.1: İVME skoru
+        "style": r["style"], "scores": r["scores"],
+        "sector": r.get("sector", ""), "industry": r.get("industry", ""),
+        "legendary": r["legendary"],
+        "positives": r["positives"], "negatives": r["negatives"],
+        "price": r["metrics"].get("price"),
+        "market_cap": r["metrics"].get("market_cap"),
+        "pe": r["metrics"].get("pe"),
+        "pb": r["metrics"].get("pb"),
+        "roe": r["metrics"].get("roe"),
+        "revenue_growth": r["metrics"].get("revenue_growth"),
+    }
+
 @app.get("/api/top10")
 async def api_top10():
     """Top 10 scan — parallel yfinance scan of full universe"""
     if TOP10_CACHE["items"]:
-        items = []
-        for r in TOP10_CACHE["items"]:
-            items.append({
-                "ticker": r["ticker"], "name": r["name"],
-                "overall": r["overall"], "confidence": r["confidence"],
-                "style": r["style"], "scores": r["scores"],
-                "sector": r.get("sector", ""), "industry": r.get("industry", ""),
-                "legendary": r["legendary"],
-                "positives": r["positives"], "negatives": r["negatives"],
-                "price": r["metrics"].get("price"),
-                "market_cap": r["metrics"].get("market_cap"),
-                "pe": r["metrics"].get("pe"),
-                "pb": r["metrics"].get("pb"),
-                "roe": r["metrics"].get("roe"),
-                "revenue_growth": r["metrics"].get("revenue_growth"),
-            })
+        items = [_build_scan_item(r) for r in TOP10_CACHE["items"]]
         return {"asof": TOP10_CACHE["asof"].isoformat() if TOP10_CACHE["asof"] else None, "items": clean_for_json(items), "total_scanned": len(UNIVERSE)}
     return {"asof": None, "items": [], "total_scanned": 0, "message": "Tarama devam ediyor..."}
 
@@ -1375,22 +1389,7 @@ async def api_scan():
     """Trigger full universe scan"""
     try:
         ranked = await asyncio.to_thread(scan_universe_blocking)
-        items = []
-        for r in ranked:
-            items.append({
-                "ticker": r["ticker"], "name": r["name"],
-                "overall": r["overall"], "confidence": r["confidence"],
-                "style": r["style"], "scores": r["scores"],
-                "sector": r.get("sector", ""), "industry": r.get("industry", ""),
-                "legendary": r["legendary"],
-                "positives": r["positives"], "negatives": r["negatives"],
-                "price": r["metrics"].get("price"),
-                "market_cap": r["metrics"].get("market_cap"),
-                "pe": r["metrics"].get("pe"),
-                "pb": r["metrics"].get("pb"),
-                "roe": r["metrics"].get("roe"),
-                "revenue_growth": r["metrics"].get("revenue_growth"),
-            })
+        items = [_build_scan_item(r) for r in ranked]
         return {"asof": TOP10_CACHE["asof"].isoformat() if TOP10_CACHE["asof"] else None, "items": clean_for_json(items), "total_scanned": len(UNIVERSE)}
     except Exception as e:
         log.error(f"scan: {e}")
@@ -2084,14 +2083,36 @@ async def api_hero_summary():
     mode_color = {"POZITIF": "green", "TEMKINLI_POZITIF": "green", "NOTR": "yellow", "RISKLI": "red"}.get(mode, "yellow")
     mode_label = {"POZITIF": "Pozitif", "TEMKINLI_POZITIF": "Temkinli Pozitif", "NOTR": "Notr", "RISKLI": "Riskli"}.get(mode, "Notr")
 
-    # Top opportunity & risk from scan
+    # Top opportunity & risk from scan — V7.1: dual leaders
     opp = None
     risk_item = None
+    deger_leaders = []
+    ivme_leaders = []
     if items:
+        # DEĞER liderleri — en yüksek deger skoru
+        by_deger = sorted(items, key=lambda x: x.get("deger", x["overall"]), reverse=True)
+        for r in by_deger[:3]:
+            deger_leaders.append({
+                "ticker": r["ticker"], "name": r["name"],
+                "deger": r.get("deger", r["overall"]), "ivme": r.get("ivme", 50),
+                "style": r["style"],
+                "reason": r["positives"][0] if r["positives"] else "",
+            })
+        # İVME liderleri — en yüksek ivme skoru
+        by_ivme = sorted(items, key=lambda x: x.get("ivme", 50), reverse=True)
+        for r in by_ivme[:3]:
+            ivme_leaders.append({
+                "ticker": r["ticker"], "name": r["name"],
+                "deger": r.get("deger", r["overall"]), "ivme": r.get("ivme", 50),
+                "style": r["style"],
+                "reason": r["positives"][0] if r["positives"] else "",
+            })
+        # Risk — en düşük değer skoru
+        worst = min(items, key=lambda x: x.get("deger", x["overall"]))
+        risk_item = {"ticker": worst["ticker"], "name": worst["name"], "deger": worst.get("deger", worst["overall"]), "reason": worst["negatives"][0] if worst["negatives"] else ""}
+        # Legacy compat — opp as best value+growth combo
         best = max(items, key=lambda x: x["scores"].get("value", 0) + x["scores"].get("growth", 0))
         opp = {"ticker": best["ticker"], "name": best["name"], "overall": best["overall"], "reason": best["positives"][0] if best["positives"] else ""}
-        worst = min(items, key=lambda x: x["overall"])
-        risk_item = {"ticker": worst["ticker"], "name": worst["name"], "overall": worst["overall"], "reason": worst["negatives"][0] if worst["negatives"] else ""}
 
     # Sector strength from scan
     sec_map = defaultdict(lambda: {"total": 0, "count": 0})
@@ -2149,6 +2170,8 @@ async def api_hero_summary():
         "story": story or f"{total} hisse tarandi. {bullish_count} hisse pozitif bolgede, {bearish_count} hisse zayif.",
         "opportunity": clean_for_json(opp),
         "risk": clean_for_json(risk_item),
+        "deger_leaders": clean_for_json(deger_leaders),  # V7.1
+        "ivme_leaders": clean_for_json(ivme_leaders),    # V7.1
         "bot_says": bot_says or f"Piyasa {mode_label.lower()} modda. {'Secici al stratejisi uygun.' if mode != 'RISKLI' else 'Defansif pozisyon onerilir.'}",
         "watch": watch[:4],
         "strong_sectors": [{"name": s[0], "score": round(s[1], 1)} for s in strong_sectors],
