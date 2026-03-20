@@ -1102,39 +1102,62 @@ def generate_chart_png(symbol, tech_data=None):
         return None
 
 # ================================================================
-# AI TRADER SUMMARY — adapted from fa_bot.py
+# AI RICH CONTEXT BUILDER — V7.1: tum AI prompt'lari icin zengin veri
+# ================================================================
+def _build_rich_context(r, tech=None):
+    """Hisse icin zengin AI context olustur — skorlar + metrikler + teknik + DEĞER/İVME"""
+    s = r["scores"]
+    m = r["metrics"]
+    L = r.get("legendary", {})
+    lines = [
+        f"Hisse: {r['ticker']} ({r['name']}) | Sektor: {m.get('sector','')} | {r['style']}",
+        f"DEGER Skoru: {r.get('deger', r['overall'])}/100 | IVME Skoru: {r.get('ivme', 50)}/100 | Combined: {r['overall']}/100",
+        f"Value:{s['value']:.0f} Quality:{s['quality']:.0f} Growth:{s['growth']:.0f} Balance:{s['balance']:.0f} Earnings:{s['earnings']:.0f} Moat:{s['moat']:.0f}",
+        f"Momentum:{s.get('momentum',50):.0f} TechBreak:{s.get('tech_break',50):.0f} InstFlow:{s.get('inst_flow',50):.0f}",
+        f"Fiyat:{fmt_num(m.get('price'))} PiyasaDeg:{fmt_num(m.get('market_cap'))} P/E:{fmt_num(m.get('pe'))} P/B:{fmt_num(m.get('pb'))} EV/EBITDA:{fmt_num(m.get('ev_ebitda'))}",
+        f"ROE:{fmt_pct(m.get('roe'))} ROIC:{fmt_pct(m.get('roic'))} Brut Marj:{fmt_pct(m.get('gross_margin'))} Net Marj:{fmt_pct(m.get('net_margin'))}",
+        f"Gelir Buyume:{fmt_pct(m.get('revenue_growth'))} EPS Buyume:{fmt_pct(m.get('eps_growth'))}",
+        f"Net Borc/EBITDA:{fmt_num(m.get('net_debt_ebitda'))} Cari Oran:{fmt_num(m.get('current_ratio'))} Faiz Karsilama:{fmt_num(m.get('interest_coverage'))}",
+        f"FCF Yield:{fmt_pct(m.get('fcf_yield'))} CFO/NI:{fmt_num(m.get('cfo_to_ni'))}",
+        f"Piotroski:{L.get('piotroski','N/A')} Altman:{L.get('altman','N/A')} Beneish:{L.get('beneish','N/A')}",
+        f"Graham MoS:{L.get('graham_mos','N/A')} Buffett:{L.get('buffett_filter','N/A')} Graham:{L.get('graham_filter','N/A')}",
+    ]
+    if tech:
+        lines.append(
+            f"Teknik: RSI={tech.get('rsi','?'):.0f if isinstance(tech.get('rsi'),float) else '?'}, "
+            f"MACD={'bullish' if tech.get('macd_bullish') else 'bearish'}, "
+            f"{'MA50 uzerinde' if (tech.get('price',0) or 0) > (tech.get('ma50') or 0) else 'MA50 altinda'}, "
+            f"BB:{tech.get('bb_pos','?')}, Hacim:{tech.get('vol_ratio','?'):.1f}x, "
+            f"52W High'a {abs(tech.get('pct_from_high',0)):.0f}% mesafe"
+        )
+    lines.append(f"Guclu: {', '.join(r.get('positives',[]))}")
+    lines.append(f"Zayif: {', '.join(r.get('negatives',[]))}")
+    return "\n".join(lines)
+
+
+# ================================================================
+# AI TRADER SUMMARY — V7.1: rich context + structured output
 # ================================================================
 def ai_trader_summary(r, tech=None):
     if not AI_AVAILABLE:
         return None
-    cache_key = f"{r['symbol']}_{r['overall']}"
+    cache_key = f"{r['symbol']}_{r['overall']}_{r.get('ivme',0)}"
     if cache_key in AI_CACHE:
         return AI_CACHE[cache_key]
     try:
-        s = r["scores"]
-        m = r["metrics"]
-        tech_str = ""
-        if tech:
-            tech_str = (
-                f"Teknik: RSI={tech.get('rsi', '?'):.0f}, "
-                f"{'MA50 uzerinde' if tech.get('price', 0) > (tech.get('ma50') or 0) else 'MA50 altinda'}, "
-                f"MACD {'bullish' if tech.get('macd_bullish') else 'bearish'}, "
-                f"52W high'a {abs(tech.get('pct_from_high', 0)):.0f}% mesafe"
-            )
+        ctx = _build_rich_context(r, tech)
         prompt = (
-            f"Sen BIST trader'isin. 2-3 cumle ile yatirim tezi yaz. Turkce.\n"
-            f"Hisse: {r['ticker']} ({r['name']})\n"
-            f"Stil: {r['style']} | Genel Skor: {r['overall']}/100\n"
-            f"Value:{s['value']:.0f} Quality:{s['quality']:.0f} Growth:{s['growth']:.0f} "
-            f"Balance:{s['balance']:.0f} Moat:{s['moat']:.0f}\n"
-            f"P/E:{fmt_num(m.get('pe'))} ROE:{fmt_pct(m.get('roe'))} "
-            f"Net Borc/EBITDA:{fmt_num(m.get('net_debt_ebitda'))}\n"
-            f"{tech_str}\n"
-            f"Pozitifler: {', '.join(r['positives'])}\n"
-            f"Negatifler: {', '.join(r['negatives'])}\n\n"
-            f"SADECE 2-3 cumle yaz. Kisa, net, aksiyon odakli. Hic baska birsey yazma."
+            "Sen kurumsal BIST analisti ve portfoy yoneticisisin. 20 yillik tecrüben var.\n"
+            "Asagidaki veriye dayanarak bu hisse icin YAPILANDIRILMIS yatirim tezi yaz. Turkce.\n"
+            "ASLA sallama, SADECE verideki rakamlara dayan. Gercekci ve spesifik ol.\n\n"
+            f"{ctx}\n\n"
+            "Su formatta yaz (her satir ayri, baska HICBIR SEY yazma):\n"
+            "KARAR: [Guclu Al / Al / Tut / Dikkat / Uzak Dur] (birini sec)\n"
+            "TEZ: 1 spesifik cumle — NEDEN bu karar? (rakam kullan, 'iyi' gibi bos kelime yok)\n"
+            "RISK: 1 spesifik cumle — en buyuk risk nedir? (rakam kullan)\n"
+            "ZAMANLAMA: 1 cumle — Ivme skoruna gore giris zamani uygun mu?\n"
         )
-        text = ai_call(prompt, max_tokens=200)
+        text = ai_call(prompt, max_tokens=250)
         if text:
             AI_CACHE[cache_key] = text
         return text
@@ -1143,8 +1166,93 @@ def ai_trader_summary(r, tech=None):
         return None
 
 # ================================================================
-# CROSS HUNTER — adapted from fa_bot.py
+# CROSS HUNTER V2 — 14 sinyal, güvenilirlik yıldızları, hacim doğrulaması
+# Ichimoku, VCP, Rectangle Breakout, S/R, 52W High eklendi
 # ================================================================
+def _compute_ichimoku(df):
+    """Ichimoku hesapla — tenkan, kijun, senkou_a, senkou_b, chikou"""
+    if df is None or len(df) < 52:
+        return None
+    high = df["High"]
+    low = df["Low"]
+    close = df["Close"]
+    # Tenkan-sen (9 period)
+    tenkan = (high.rolling(9).max() + low.rolling(9).min()) / 2
+    # Kijun-sen (26 period)
+    kijun = (high.rolling(26).max() + low.rolling(26).min()) / 2
+    # Senkou Span A (midpoint of tenkan+kijun, shifted 26 forward)
+    senkou_a = ((tenkan + kijun) / 2).shift(26)
+    # Senkou Span B (52 period, shifted 26 forward)
+    senkou_b = ((high.rolling(52).max() + low.rolling(52).min()) / 2).shift(26)
+    return {
+        "tenkan": float(tenkan.iloc[-1]) if not np.isnan(tenkan.iloc[-1]) else None,
+        "kijun": float(kijun.iloc[-1]) if not np.isnan(kijun.iloc[-1]) else None,
+        "tenkan_prev": float(tenkan.iloc[-2]) if len(tenkan) >= 2 and not np.isnan(tenkan.iloc[-2]) else None,
+        "kijun_prev": float(kijun.iloc[-2]) if len(kijun) >= 2 and not np.isnan(kijun.iloc[-2]) else None,
+        "senkou_a": float(senkou_a.iloc[-1]) if not np.isnan(senkou_a.iloc[-1]) else None,
+        "senkou_b": float(senkou_b.iloc[-1]) if not np.isnan(senkou_b.iloc[-1]) else None,
+        "price": float(close.iloc[-1]),
+    }
+
+def _detect_vcp(df):
+    """VCP (Volatility Contraction Pattern) — ATR daralıyor mu?"""
+    if df is None or len(df) < 50:
+        return False
+    close = df["Close"]
+    high = df["High"]
+    low = df["Low"]
+    tr = pd.concat([high - low, abs(high - close.shift(1)), abs(low - close.shift(1))], axis=1).max(axis=1)
+    atr_5 = tr.tail(5).mean()
+    atr_20 = tr.tail(20).mean()
+    atr_50 = tr.tail(50).mean()
+    if atr_50 == 0:
+        return False
+    # VCP: ATR giderek daraliyor + son bar kirilim (close > 5 gunluk high)
+    contracting = atr_5 < atr_20 * 0.85 and atr_20 < atr_50 * 0.90
+    recent_high = float(high.tail(5).max())
+    breakout = float(close.iloc[-1]) > recent_high * 0.998
+    return contracting and breakout
+
+def _detect_rectangle_breakout(df):
+    """Rectangle (konsolidasyon) kırılımı — dar range + breakout"""
+    if df is None or len(df) < 20:
+        return None
+    close = df["Close"]
+    high = df["High"]
+    low = df["Low"]
+    # Son 20 barın range'i
+    range_high = float(high.tail(20).max())
+    range_low = float(low.tail(20).min())
+    if range_low == 0:
+        return None
+    range_pct = (range_high - range_low) / range_low
+    price = float(close.iloc[-1])
+    # Dar range (%8'den az) + fiyat ust siniri kirdi
+    if range_pct < 0.08 and price > range_high * 0.998:
+        return "bullish"
+    elif range_pct < 0.08 and price < range_low * 1.002:
+        return "bearish"
+    return None
+
+def _find_pivot_levels(df, lookback=60):
+    """Support/Resistance seviyeleri bul — pivot high/low"""
+    if df is None or len(df) < lookback:
+        return None, None
+    high = df["High"].tail(lookback)
+    low = df["Low"].tail(lookback)
+    # Pivot highs: 3 bar oncesi ve sonrasindan yuksek
+    pivot_highs = []
+    pivot_lows = []
+    for i in range(3, len(high) - 3):
+        if high.iloc[i] == high.iloc[i-3:i+4].max():
+            pivot_highs.append(float(high.iloc[i]))
+        if low.iloc[i] == low.iloc[i-3:i+4].min():
+            pivot_lows.append(float(low.iloc[i]))
+    resistance = max(pivot_highs) if pivot_highs else None
+    support = min(pivot_lows) if pivot_lows else None
+    return resistance, support
+
+
 class CrossHunter:
     def __init__(self):
         self.last_scan = 0
@@ -1155,20 +1263,33 @@ class CrossHunter:
     def scan_all(self):
         new_signals = []
         all_signals = {}
+
+        # V7.1: 14 sinyal — güvenilirlik yıldızları (1-5)
         SIGNAL_INFO = {
-            "Golden Cross": {"icon": "bullish", "explanation": "MA50 yukari kesti MA200'u — orta/uzun vade yukari donusu"},
-            "Death Cross": {"icon": "bearish", "explanation": "MA50 asagi kesti MA200'u — orta/uzun vade asagi donusu"},
-            "MACD Bullish Cross": {"icon": "bullish", "explanation": "MACD sinyal cizgisini yukari kesti — momentum artiyor"},
-            "MACD Bearish Cross": {"icon": "bearish", "explanation": "MACD sinyal cizgisini asagi kesti — momentum zayifliyor"},
-            "RSI Asiri Alim": {"icon": "bearish", "explanation": "RSI 70+ — asiri alim, duzeltme riski"},
-            "RSI Asiri Satim": {"icon": "bullish", "explanation": "RSI 30- — asiri satim, dip firsati olabilir"},
-            "BB Ust Band Kirilim": {"icon": "neutral", "explanation": "Fiyat Bollinger ust bandini kirdi — momentum guclu ama asiri olabilir"},
-            "BB Alt Band Kirilim": {"icon": "neutral", "explanation": "Fiyat Bollinger alt bandini kirdi — oversold veya trend devam"},
+            # === MEVCUT (güvenilirlik kalibrasyonu eklendi) ===
+            "Golden Cross":       {"icon": "bullish", "stars": 5, "explanation": "MA50 yukari kesti MA200'u — orta/uzun vade yukari donusu. Nadir ve guclu sinyal."},
+            "Death Cross":        {"icon": "bearish", "stars": 5, "explanation": "MA50 asagi kesti MA200'u — orta/uzun vade asagi donusu. Ciddi uyari."},
+            "MACD Bullish Cross":  {"icon": "bullish", "stars": 3, "explanation": "MACD sinyal cizgisini yukari kesti — kisa vadeli momentum artiyor."},
+            "MACD Bearish Cross":  {"icon": "bearish", "stars": 3, "explanation": "MACD sinyal cizgisini asagi kesti — kisa vadeli momentum zayifliyor."},
+            "RSI Asiri Alim":     {"icon": "bearish", "stars": 1, "explanation": "RSI 70+ — asiri alim bolgesi. BIST'te false positive orani yuksek, dikkatli ol."},
+            "RSI Asiri Satim":    {"icon": "bullish", "stars": 1, "explanation": "RSI 30- — asiri satim bolgesi. Dip firsati olabilir ama teyit bekle."},
+            "BB Ust Band Kirilim": {"icon": "neutral", "stars": 2, "explanation": "Fiyat Bollinger ust bandini kirdi — momentum guclu ama geri cekilme riski var."},
+            "BB Alt Band Kirilim": {"icon": "neutral", "stars": 2, "explanation": "Fiyat Bollinger alt bandini kirdi — oversold veya trend devam edebilir."},
+            # === YENİ V2 SİNYALLERİ ===
+            "Ichimoku Kumo Breakout": {"icon": "bullish", "stars": 5, "explanation": "Fiyat Ichimoku bulutu (kumo) uzerine cikti — guclu trend degisimi. BIST'te en guvenilir sinyallerden biri."},
+            "Ichimoku Kumo Breakdown": {"icon": "bearish", "stars": 5, "explanation": "Fiyat Ichimoku bulutu altina dustu — trend asagi donuyor."},
+            "Ichimoku TK Cross":  {"icon": "bullish", "stars": 4, "explanation": "Tenkan-sen Kijun-sen'i yukari kesti — Ichimoku'nun golden cross'u, orta vade pozitif."},
+            "VCP Kirilim":        {"icon": "bullish", "stars": 5, "explanation": "Volatilite daralma paterni (VCP) kirilimi — BIST trend piyasasinda cok guclu. Hacimle teyit onemli."},
+            "Rectangle Breakout": {"icon": "bullish", "stars": 4, "explanation": "Konsolidasyon kirilimi — dar araligi yukari kirdi. Devam formasyonu."},
+            "Rectangle Breakdown": {"icon": "bearish", "stars": 4, "explanation": "Konsolidasyon kirilimi — dar araligi asagi kirdi."},
+            "52W High Breakout":  {"icon": "bullish", "stars": 5, "explanation": "52 haftalik zirveyi kirdi — yeni alan aciyor, trend takipcileri icin en guclu sinyal."},
+            "Direnc Kirilimi":    {"icon": "bullish", "stars": 4, "explanation": "Pivot direnc seviyesi kirildi — yukari potansiyel aciyor."},
+            "Destek Kirilimi":    {"icon": "bearish", "stars": 4, "explanation": "Pivot destek seviyesi kirildi — asagi risk artiyor."},
         }
-        # Batch download history for all stocks at once (single yf.download)
+
+        # Batch download
         symbols = [normalize_symbol(t) for t in UNIVERSE]
         history_map = batch_download_history(symbols, period="1y", interval="1d")
-        # Cache downloaded history for reuse
         for sym, hist_df in history_map.items():
             HISTORY_CACHE[sym] = hist_df
 
@@ -1179,18 +1300,25 @@ class CrossHunter:
                 tech = compute_technical(symbol, hist_df=hist_df)
                 if not tech:
                     continue
+
                 signals = set()
+                price = tech.get("price", 0)
+                vol_ratio = tech.get("vol_ratio")
+                vol_confirmed = vol_ratio is not None and vol_ratio > 1.3
+
                 details = {
                     "ticker": t,
-                    "price": tech.get("price"),
+                    "price": price,
                     "rsi": tech.get("rsi"),
                     "ma50": tech.get("ma50"),
                     "ma200": tech.get("ma200"),
                     "tech_score": tech.get("tech_score", 50),
-                    "vol_ratio": tech.get("vol_ratio"),
+                    "vol_ratio": vol_ratio,
                     "pct_from_high": tech.get("pct_from_high"),
                     "macd_bullish": tech.get("macd_bullish"),
                 }
+
+                # --- MEVCUT 8 sinyal ---
                 if tech.get("cross_signal") == "GOLDEN_CROSS": signals.add("Golden Cross")
                 if tech.get("cross_signal") == "DEATH_CROSS": signals.add("Death Cross")
                 if tech.get("rsi") and tech["rsi"] > 70: signals.add("RSI Asiri Alim")
@@ -1200,14 +1328,72 @@ class CrossHunter:
                 if tech.get("bb_pos") == "ABOVE": signals.add("BB Ust Band Kirilim")
                 if tech.get("bb_pos") == "BELOW": signals.add("BB Alt Band Kirilim")
 
+                # --- YENİ V2: Ichimoku ---
+                if hist_df is not None and len(hist_df) >= 52:
+                    ichi = _compute_ichimoku(hist_df)
+                    if ichi and ichi["senkou_a"] and ichi["senkou_b"]:
+                        kumo_top = max(ichi["senkou_a"], ichi["senkou_b"])
+                        kumo_bot = min(ichi["senkou_a"], ichi["senkou_b"])
+                        if ichi["price"] > kumo_top and ichi.get("tenkan_prev") and ichi["tenkan_prev"] <= kumo_top:
+                            signals.add("Ichimoku Kumo Breakout")
+                        if ichi["price"] < kumo_bot and ichi.get("tenkan_prev") and ichi["tenkan_prev"] >= kumo_bot:
+                            signals.add("Ichimoku Kumo Breakdown")
+                        if ichi.get("tenkan") and ichi.get("kijun") and ichi.get("tenkan_prev") and ichi.get("kijun_prev"):
+                            if ichi["tenkan_prev"] <= ichi["kijun_prev"] and ichi["tenkan"] > ichi["kijun"]:
+                                signals.add("Ichimoku TK Cross")
+                        details["ichimoku_above_kumo"] = ichi["price"] > kumo_top
+
+                # --- YENİ V2: VCP ---
+                if hist_df is not None and _detect_vcp(hist_df):
+                    signals.add("VCP Kirilim")
+
+                # --- YENİ V2: Rectangle ---
+                if hist_df is not None:
+                    rect = _detect_rectangle_breakout(hist_df)
+                    if rect == "bullish": signals.add("Rectangle Breakout")
+                    elif rect == "bearish": signals.add("Rectangle Breakdown")
+
+                # --- YENİ V2: 52W High ---
+                pct_high = tech.get("pct_from_high")
+                if pct_high is not None and pct_high >= 0:
+                    signals.add("52W High Breakout")
+
+                # --- YENİ V2: Support/Resistance ---
+                if hist_df is not None:
+                    resistance, support = _find_pivot_levels(hist_df)
+                    if resistance and price > resistance * 0.998:
+                        signals.add("Direnc Kirilimi")
+                    if support and price < support * 1.002:
+                        signals.add("Destek Kirilimi")
+
                 all_signals[t] = signals
                 prev = self.prev_signals.get(t, set())
                 for sig in signals:
                     if sig not in prev:
-                        sig_info = SIGNAL_INFO.get(sig, {"icon": "neutral", "explanation": ""})
-                        new_signals.append({"signal": sig, "signal_type": sig_info["icon"], "explanation": sig_info["explanation"], **details})
+                        si = SIGNAL_INFO.get(sig, {"icon": "neutral", "stars": 1, "explanation": ""})
+                        new_signals.append({
+                            "signal": sig,
+                            "signal_type": si["icon"],
+                            "stars": si["stars"],
+                            "explanation": si["explanation"],
+                            "vol_confirmed": vol_confirmed,
+                            **details,
+                        })
             except Exception as e:
                 log.debug(f"CrossHunter {t}: {e}")
+
+        # Her ticker icin toplam sinyal gucu hesapla
+        ticker_strength = defaultdict(lambda: {"signals": [], "total_stars": 0})
+        for s in new_signals:
+            ts = ticker_strength[s["ticker"]]
+            ts["signals"].append(s)
+            ts["total_stars"] += s["stars"]
+        for s in new_signals:
+            s["ticker_total_stars"] = ticker_strength[s["ticker"]]["total_stars"]
+            s["ticker_signal_count"] = len(ticker_strength[s["ticker"]]["signals"])
+
+        # Guc sirasina gore sirala (en guclu sinyal kumesi once)
+        new_signals.sort(key=lambda x: (-x["ticker_total_stars"], -x["stars"]))
 
         self.prev_signals = all_signals
         self.last_scan = time.time()
@@ -1251,6 +1437,23 @@ async def _background_scanner():
             await asyncio.to_thread(scan_universe_blocking)
             await asyncio.to_thread(cross_hunter.scan_all)
             log.info(f"Background scan tamamlandi. {len(TOP10_CACHE['items'])} hisse, {len(cross_hunter.last_results)} sinyal")
+
+            # V7.1: Pre-compute top 5 AI summaries for speed
+            if AI_AVAILABLE and TOP10_CACHE["items"]:
+                top5 = TOP10_CACHE["items"][:5]
+                for r in top5:
+                    try:
+                        tech = TECH_CACHE.get(r["symbol"])
+                        await asyncio.to_thread(ai_trader_summary, r, tech)
+                        log.info(f"Pre-computed AI: {r['ticker']}")
+                    except Exception as e:
+                        log.debug(f"Pre-compute AI {r['ticker']}: {e}")
+                # Pre-compute briefing
+                try:
+                    await api_briefing()
+                    log.info("Pre-computed briefing")
+                except Exception:
+                    pass
         except Exception as e:
             log.error(f"Background scan hatasi: {e}")
         await asyncio.sleep(7200)  # every 2 hours
@@ -1397,15 +1600,43 @@ async def api_scan():
 
 @app.get("/api/cross")
 async def api_cross():
-    """Cross Hunter — scan for new technical signals"""
+    """Cross Hunter V2 — 14 sinyal, yildiz, hacim dogrulamasi, toplu AI yorum"""
     try:
         new_signals = await asyncio.to_thread(cross_hunter.scan_all)
         bullish = sum(1 for s in new_signals if s.get("signal_type") == "bullish")
         bearish = sum(1 for s in new_signals if s.get("signal_type") == "bearish")
+        total_stars = sum(s.get("stars", 1) for s in new_signals)
+        vol_confirmed = sum(1 for s in new_signals if s.get("vol_confirmed"))
+
+        # Toplu AI yorum — tek cagri ile tum sinyalleri yorumla
+        ai_commentary = None
+        if AI_AVAILABLE and new_signals:
+            try:
+                # Ticker bazinda gruplanmis ozet
+                ticker_groups = defaultdict(list)
+                for s in new_signals[:15]:
+                    ticker_groups[s["ticker"]].append(f"{s['signal']}({'*'*s.get('stars',1)})")
+                sig_summary = "; ".join(f"{t}: {', '.join(sigs)}" for t, sigs in list(ticker_groups.items())[:8])
+                prompt = (
+                    "Sen BistBull Cross Hunter'in sinyal analistisin. Turkce, somut, sallama YOK.\n"
+                    f"Bugun {len(new_signals)} yeni sinyal tespit edildi ({bullish} yukari, {bearish} asagi).\n"
+                    f"Sinyaller: {sig_summary}\n\n"
+                    "2-3 cumle yaz: Hangi sinyal(ler) gercekten dikkat cekici? Hangisi gürültü? "
+                    "Hacim teyidi olan sinyalleri vurgula. Spesifik hisse ismi ve sinyal adi kullan."
+                )
+                ai_commentary = await asyncio.to_thread(ai_call, prompt, 250)
+            except Exception as e:
+                log.debug(f"cross AI: {e}")
+
         return {
             "timestamp": dt.datetime.now(dt.timezone.utc).isoformat(),
             "signals": clean_for_json(new_signals),
-            "summary": {"total": len(new_signals), "bullish": bullish, "bearish": bearish, "scanned": len(UNIVERSE)},
+            "ai_commentary": ai_commentary,
+            "summary": {
+                "total": len(new_signals), "bullish": bullish, "bearish": bearish,
+                "total_stars": total_stars, "vol_confirmed": vol_confirmed,
+                "scanned": len(UNIVERSE),
+            },
         }
     except Exception as e:
         log.error(f"cross: {e}")
@@ -1620,19 +1851,34 @@ async def api_briefing():
             return {"briefing": "Henuz tarama yapilmadi. Once SCAN calistirin.", "generated": False}
 
         top5 = items[:5]
+        top3_deger = sorted(items, key=lambda x: x.get("deger", x["overall"]), reverse=True)[:3]
+        top3_ivme = sorted(items, key=lambda x: x.get("ivme", 50), reverse=True)[:3]
+        worst = sorted(items, key=lambda x: x.get("deger", x["overall"]))[:2]
+        cross_data = cross_hunter.last_results[:5]
+
         summary_parts = []
         for r in top5:
-            summary_parts.append(f"{r['ticker']}: {r['overall']}/100 ({r['style']}), V:{r['scores']['value']:.0f} Q:{r['scores']['quality']:.0f} G:{r['scores']['growth']:.0f} B:{r['scores']['balance']:.0f}")
+            summary_parts.append(f"{r['ticker']}: D:{r.get('deger',r['overall']):.0f} I:{r.get('ivme',50):.0f} ({r['style']}), P/E:{fmt_num(r['metrics'].get('pe'))} ROE:{fmt_pct(r['metrics'].get('roe'))}")
+
+        # Pre-build strings (Python f-string can't have backslash in expressions)
+        deger_str = ", ".join(f"{r['ticker']}(D:{r.get('deger',r['overall']):.0f})" for r in top3_deger)
+        ivme_str = ", ".join(f"{r['ticker']}(I:{r.get('ivme',50):.0f})" for r in top3_ivme)
+        worst_str = ", ".join(f"{r['ticker']}(D:{r.get('deger',r['overall']):.0f})" for r in worst)
+        sig_str = ", ".join(f"{s['ticker']}:{s['signal']}" for s in cross_data[:3])
 
         prompt = (
-            "Sen BistBull Terminal'in piyasa analisti yazarisin. Turkce yaz.\n"
-            "Asagidaki BIST hisse tarama sonuclarina gore kisa bir 'GUNUN OZETI' yaz.\n"
-            "3-4 cumle: genel piyasa durumu, en dikkat cekici hisseler, firsatlar ve riskler.\n"
-            "Sonra ayri 1-2 cumle: 'BUGUNKU STRATEJI' onerisi.\n"
-            "Profesyonel, net, aksiyona yonelik.\n\n"
-            f"Top 5 hisse:\n" + "\n".join(summary_parts) + "\n\n"
-            f"Toplam taranan: {len(items)} hisse\n"
-            "SADECE ozet ve strateji yaz. Baska birsey ekleme."
+            "Sen BistBull Terminal'in baş piyasa analistisin. Kurumsal ton, somut veri, sallama YOK. Turkce yaz.\n\n"
+            f"TARAMA: {len(items)} BIST hissesi tarandi.\n"
+            f"DEGER Liderleri (uzun vade): {deger_str}\n"
+            f"IVME Liderleri (kisa vade): {ivme_str}\n"
+            f"Zayiflar: {worst_str}\n"
+            f"Top 5 detay:\n" + "\n".join(summary_parts) + "\n"
+            f"Aktif sinyal: {len(cross_data)} adet ({sig_str})\n\n"
+            "YAPILANDIRILMIS BRIFING YAZ (her baslik ayri satirda):\n"
+            "OZET: 2-3 cumle genel durum (rakam kullan, 'iyi/kotu' gibi bos sifat degil)\n"
+            "YATIRIMCI: 2 cumle — uzun vadeciye ne one cikar? (DEGER skorlarina dayan)\n"
+            "TRADER: 2 cumle — kisa vadeciye ne one cikar? (IVME skorlarina ve sinyallere dayan)\n"
+            "DIKKAT: 1 cumle — en buyuk risk (spesifik hisse veya makro)\n"
         )
         text = await asyncio.to_thread(ai_call, prompt, 400)
         result = {"briefing": text, "generated": True, "timestamp": dt.datetime.now(dt.timezone.utc).isoformat()}
@@ -1670,13 +1916,14 @@ async def api_macro_commentary():
             lines.append(f"{m.get('flag','')} {m['name']}: {m['price']}, gun:{m['change_pct']}%, YTD:{m.get('ytd_pct','?')}%")
 
         prompt = (
-            "Sen BistBull Terminal'in makro analistisin. Turkce yaz.\n"
-            "Asagidaki global makro verilere bakarak 3-4 cumle ile BUGUNKU MAKRO TABLO'yu ozetle.\n"
-            "Ozellikle: Turkiye EM akranlarina karsi nasil? Riskler ne? Firsatlar ne?\n"
-            "DXY, VIX, petrol, altin hareketlerinin BIST'e etkisini 1 cumle ile belirt.\n"
-            "Sonra 1 cumle STRATEJI onerisi.\n"
-            "Net, kisa, profesyonel.\n\n"
-            + "\n".join(lines[:20])
+            "Sen BistBull Terminal'in makro stratejistisin. Kurumsal ton, somut, sallama YOK. Turkce yaz.\n"
+            "Asagidaki verilere DAYANARAK (sadece verideki rakamlari kullan):\n\n"
+            + "\n".join(lines[:20]) + "\n\n"
+            "YAPILANDIRILMIS YORUM YAZ (her baslik ayri satirda):\n"
+            "TABLO: 2 cumle — bugunun makro tablosu (DXY, VIX, petrol, altin hareketleri + rakamlari)\n"
+            "EM: 1 cumle — Turkiye EM akranlarina karsi nerede? (YTD rakamlariyla kiyasla)\n"
+            "BIST: 1 cumle — bu makro tablo BIST icin ne anlama geliyor? (spesifik etki)\n"
+            "STRATEJI: 1 cumle — yatirimci ne yapmali? (somut, 'dikkatli ol' gibi bos laf degil)\n"
         )
         text = await asyncio.to_thread(ai_call, prompt, 300)
         result = {"commentary": text, "generated": True, "timestamp": dt.datetime.now(dt.timezone.utc).isoformat()}
@@ -2026,22 +2273,41 @@ async def api_agent(q: str = ""):
         context = ""
         items = TOP10_CACHE.get("items", [])
         if items:
-            top5 = [f"{r['ticker']}:{r['overall']}/100({r['style']})" for r in items[:5]]
-            context = f"Taranan en iyi 5 hisse: {', '.join(top5)}. Toplam {len(items)} hisse.\n"
+            top3_d = sorted(items, key=lambda x: x.get("deger", x["overall"]), reverse=True)[:3]
+            top3_i = sorted(items, key=lambda x: x.get("ivme", 50), reverse=True)[:3]
+            d_str = ", ".join(f"{r['ticker']}(D:{r.get('deger',r['overall']):.0f})" for r in top3_d)
+            i_str = ", ".join(f"{r['ticker']}(I:{r.get('ivme',50):.0f})" for r in top3_i)
+            context = (
+                f"Taranan {len(items)} hisseden DEGER liderleri: {d_str}. "
+                f"IVME liderleri: {i_str}.\n"
+            )
+            # Sorulan spesifik hisse varsa, context'e ekle
+            for r in items:
+                if r["ticker"].lower() in q.lower():
+                    ctx = _build_rich_context(r)
+                    context += f"\n{r['ticker']} DETAY:\n{ctx}\n"
+                    break
+        cross_signals = cross_hunter.last_results[:5]
+        if cross_signals:
+            sig_parts = ", ".join(f"{s['ticker']}:{s['signal']}({s.get('stars',1)}*)" for s in cross_signals[:5])
+            context += f"Aktif sinyaller: {sig_parts}\n"
+
         prompt = (
-            "Sen EYYAY DEDE'sin (H. Sayilgan). 59 yasinda, tombul, beyaz sakalli, kalin hirkali, "
-            "Anadolu kurnazi bir yatirim dedesisin.\n"
-            "Konusma tarzin: Bilge, sicakkanli, esprili ama agir. "
-            "'Evladim', 'sayin yatirimci', 'yavrum', 'eyyay bak simdi', "
-            "'bi cayini koy dede anlatsin', 'eyyay bu hisse yavru gibi buyur', "
-            "'dikkat et burada evladim' gibi cumleler kullan.\n"
-            "ASLA 'kanka' deme. Sen bilge bir dedesin, 'evladim' veya 'sayin yatirimci' dersin.\n"
-            "'Eyyay' senin selamlaman ve onaylaman — bazen cumle basinda kullan.\n"
-            "Bazen basit ama dahice benzetmeler yap: 'yazin ucaklar cok ucar' gibi.\n"
-            "Cevaplarin KISA olsun (4-5 cumle MAX). Laf kalabaligi yapma.\n"
-            "Asla direkt 'al' veya 'sat' deme. Her zaman 'bu dedenin gorusu, sen de arastir evladim' diye bitir.\n"
-            "Bilgi seviyen cok yuksek: Temel analiz, teknik sinyaller, takas, makro hepsini bilirsin. "
-            "Ama basit ve anlasilir anlatirsin.\n\n"
+            "Sen Eyyay Dede'sin. Gercek ismin Huseyin Sayilgan. 59 yasinda, Kayseri'li, "
+            "30 yillik borsa tecrubesi olan emekli bir portfoy yoneticisisin.\n\n"
+            "KARAKTER KURALLARI:\n"
+            "- Hitap: 'evladim', 'sayin yatirimci', 'yavrum' kullan. ASLA 'kanka', 'bro', 'moruk' DEME.\n"
+            "- 'Eyyay' senin imzan — bazen cumle basinda onaylama/selamlama olarak kullan.\n"
+            "- Bilge ve sicakkanli ama ASLA laubali degil. Ciddi konularda ciddisin.\n"
+            "- Benzetmeler: 'misir tarlasina su vermeden hasat beklenmez' gibi Anadolu hikmeti.\n\n"
+            "ICERIK KURALLARI (KRITIK):\n"
+            "- ASLA bos laf yapma. Her cumlende SOMUT veri veya SPESIFIK bilgi olsun.\n"
+            "- Rakam kullan: 'P/E 5.2 ile sektör ortalamasinin yarisi' gibi, 'ucuz' deme.\n"
+            "- Skor kullan: 'Deger skoru 78, Ivme skoru 45 — temel guclu ama giris zamani degil' gibi.\n"
+            "- Riskleri ACIKCA soyle: 'Borc/EBITDA 3.2 — bu yuksek, dikkat' gibi.\n"
+            "- ASLA 'al' veya 'sat' deme. 'Dedenin gorusune gore... ama sen de arastir evladim' de.\n"
+            "- Cevaplarin 4-5 cumle MAX. Kisa ama DOLU.\n"
+            "- Elindeki verilere dayan, verinin disina cikma, uydurmaca YAPMA.\n\n"
             f"{context}"
             f"Kullanicinin sorusu: {q}\n\nEyyay Dede:"
         )
@@ -2133,25 +2399,25 @@ async def api_hero_summary():
     if cross_data: watch.append(f"{len(cross_data)} teknik sinyal aktif")
     if not watch: watch = ["Piyasa sakin, secici izle"]
 
-    # AI-powered story + commentary
+    # AI-powered story + commentary — V7.1: rich dual context
     story = None
     bot_says = None
     if AI_AVAILABLE and items:
         try:
-            top3 = [f"{r['ticker']}({r['overall']})" for r in items[:3]]
-            bot3 = [f"{r['ticker']}({r['overall']})" for r in items[-3:]]
+            d_top = [f"{r['ticker']}(D:{r.get('deger',r['overall']):.0f})" for r in (deger_leaders or items[:3])]
+            i_top = [f"{r['ticker']}(I:{r.get('ivme',50):.0f})" for r in (ivme_leaders or items[:3])]
+            bot3 = [f"{r['ticker']}(D:{r.get('deger',r['overall']):.0f})" for r in sorted(items, key=lambda x: x.get('deger', x['overall']))[:3]]
             macro_str = ", ".join([f"{m['name']}:{m.get('change_pct',0):+.1f}%" for m in macro_items[:6]])
             prompt = (
-                "Sen BistBull Terminal'in piyasa editoru ve stratejistisin. Turkce yaz.\n"
-                f"Piyasa modu: {mode_label}. {total} hisse tarandi, {bullish_count} pozitif, {bearish_count} zayif.\n"
-                f"En iyiler: {', '.join(top3)}. En zayiflar: {', '.join(bot3)}.\n"
-                f"Makro: {macro_str}\n"
-                f"Guclu sektorler: {', '.join([s[0] for s in strong_sectors])}\n"
-                f"Cross sinyal: {len(cross_data)} adet\n\n"
-                "Asagidaki 3 seyi yaz, HER BIRINI AYRI SATIRDA, baska hic birsey yazma:\n"
-                "HIKAYE: 2 cumle ile bugunun ana piyasa hikayesi\n"
-                "YORUM: 2 cumle ile bot yorumu ve strateji onerisi\n"
-                "FIRSAT: 1 cumle ile en buyuk firsat"
+                "Sen BistBull Terminal'in piyasa stratejistisin. Kurumsal, somut, sallama YOK. Turkce yaz.\n"
+                f"Piyasa: {mode_label}. {total} hisse, {bullish_count} pozitif, {bearish_count} zayif.\n"
+                f"DEGER liderleri: {', '.join(d_top)}. IVME liderleri: {', '.join(i_top)}.\n"
+                f"Zayiflar: {', '.join(bot3)}. Makro: {macro_str}\n"
+                f"Guclu sektorler: {', '.join([s[0] for s in strong_sectors])}. {len(cross_data)} sinyal aktif.\n\n"
+                "3 satir yaz, HER BIRINI AYRI SATIRDA:\n"
+                "HIKAYE: 2 cumle — bugunun piyasa hikayesi (spesifik rakam ve hisse ismi kullan)\n"
+                "YORUM: 2 cumle — DEGER ve IVME perspektifinden strateji (hangi hisseyi neden, somut)\n"
+                "FIRSAT: 1 cumle — hem DEGER hem IVME skoru yuksek en iyi firsat (altin kesisim)"
             )
             text = await asyncio.to_thread(ai_call, prompt, 300)
             if text:
