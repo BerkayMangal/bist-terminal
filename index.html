@@ -13,12 +13,10 @@
 <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=DM+Sans:wght@300;400;500;600;700&display=swap">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=DM+Sans:wght@300;400;500;600;700&display=swap">
 <style>
-/* === TEMA SISTEMI === */
-:root{--bg0:#060a10;--bg1:#0a0f18;--bg2:#0e1420;--bg3:#121a2a;--bg4:#182236;--bdr:#1a2540;--bdr2:#243352;--t1:#eaf0fa;--t2:#96aac8;--t3:#6e84a8;--t4:#4a6080;--grn:#00e676;--grn2:#00c853;--grnd:rgba(0,230,118,.12);--red:#ff5252;--redd:rgba(255,82,82,.12);--ylw:#ffc107;--ylwd:rgba(255,193,7,.12);--blu:#42a5f5;--blud:rgba(66,165,245,.12);--cyn:#00e5ff;--orn:#ff9100;--prp:#bb86fc;--prpd:rgba(187,134,252,.12);--gold:#ffd700;--rad:6px;--rad2:10px;--safe-b:env(safe-area-inset-bottom,0px);--fs-xs:11px;--fs-sm:12px;--fs-base:13px;--fs-md:14px;--fs-lg:16px;--fs-xl:18px;--fs-pill:11px;--fs-mono:12px;--fs-tbl:12px;--fs-nav:11px}
-/* Kolay Okuma — daha buyuk, daha soft */
-.theme-easy{--bg0:#0a0e14;--bg1:#0e131c;--bg2:#121926;--bg3:#161e30;--bg4:#1c2640;--bdr:#20304a;--bdr2:#2c4060;--t1:#f0f4fa;--t2:#a8bcd8;--t3:#7a94b8;--t4:#5a7498;--grn:#4caf50;--grn2:#388e3c;--grnd:rgba(76,175,80,.15);--red:#ef5350;--redd:rgba(239,83,80,.15);--ylw:#ffca28;--ylwd:rgba(255,202,40,.15);--blu:#64b5f6;--blud:rgba(100,181,246,.15);--cyn:#4dd0e1;--orn:#ffa726;--prp:#ce93d8;--prpd:rgba(206,147,216,.15);--rad:8px;--rad2:12px;--fs-xs:12px;--fs-sm:13px;--fs-base:14px;--fs-md:15px;--fs-lg:18px;--fs-xl:20px;--fs-pill:12px;--fs-mono:13px;--fs-tbl:13px;--fs-nav:12px}
+/* === BISTBULL DESIGN SYSTEM — Kolay & Okunabilir === */
+:root{--bg0:#0a0e14;--bg1:#0e131c;--bg2:#121926;--bg3:#161e30;--bg4:#1c2640;--bdr:#1e3048;--bdr2:#2c4060;--t1:#f0f4fa;--t2:#a8bcd8;--t3:#7a94b8;--t4:#5a7498;--grn:#4caf50;--grn2:#388e3c;--grnd:rgba(76,175,80,.15);--red:#ef5350;--redd:rgba(239,83,80,.12);--ylw:#ffca28;--ylwd:rgba(255,202,40,.12);--blu:#64b5f6;--blud:rgba(100,181,246,.12);--orn:#ffa726;--prp:#ce93d8;--prpd:rgba(206,147,216,.12);--gold:#ffd54f;--cyn:var(--blu);--rad:8px;--rad2:12px;--safe-b:env(safe-area-inset-bottom,0px);--fs-xs:12px;--fs-sm:13px;--fs-base:14px;--fs-md:15px;--fs-lg:18px;--fs-xl:20px;--fs-pill:12px;--fs-mono:13px;--fs-tbl:13px;--fs-nav:12px}
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg0);color:var(--t1);min-height:100vh;min-height:100dvh;overflow-x:hidden;-webkit-tap-highlight-color:transparent}
+body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg0);color:var(--t1);min-height:100vh;min-height:100dvh;overflow-x:hidden;-webkit-tap-highlight-color:transparent;line-height:1.6;font-size:var(--fs-base)}
 ::-webkit-scrollbar{width:5px;height:5px}::-webkit-scrollbar-track{background:var(--bg1)}::-webkit-scrollbar-thumb{background:var(--bdr2);border-radius:3px}
 .mono{font-family:'JetBrains Mono',monospace;color:var(--t1)}
 
@@ -44,17 +42,17 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg0);color:var(
 .qtk{font-family:'JetBrains Mono',monospace;font-size:10px;padding:6px 10px;background:var(--bg3);border:1px solid var(--bdr);border-radius:3px;color:var(--t2);cursor:pointer;transition:.15s;white-space:nowrap;min-height:32px;display:flex;align-items:center}.qtk:hover,.qtk:active{border-color:var(--cyn);color:var(--cyn);background:var(--blud)}
 
 /* MAIN */
-.main{padding:16px 20px;max-width:1600px;margin:0 auto}.page{display:none}.page.on{display:block}
+.main{padding:20px;max-width:1600px;margin:0 auto}.page{display:none}.page.on{display:block}
 
 /* GRID */
-.g2{display:grid;grid-template-columns:1fr 1fr;gap:14px}.g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px}.g4{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.g6{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:18px}.g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:18px}.g4{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}.g6{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
 
 /* CARD */
-.card{background:var(--bg2);border:1px solid var(--bdr);border-radius:var(--rad2);overflow:hidden}.card:hover{border-color:var(--bdr2)}.card-h{padding:10px 14px;border-bottom:1px solid var(--bdr);display:flex;align-items:center;justify-content:space-between}.card-t{font-family:'JetBrains Mono',monospace;font-size:var(--fs-xs);font-weight:600;color:var(--t2);text-transform:uppercase;letter-spacing:1px}.card-b{padding:14px}
+.card{background:var(--bg2);border:1px solid var(--bdr);border-radius:var(--rad2);overflow:hidden;transition:border-color .2s}.card:hover{border-color:var(--bdr2)}.card-h{padding:12px 16px;border-bottom:1px solid var(--bdr);display:flex;align-items:center;justify-content:space-between}.card-t{font-family:'JetBrains Mono',monospace;font-size:var(--fs-xs);font-weight:600;color:var(--t2);text-transform:uppercase;letter-spacing:1px}.card-b{padding:18px}
 
 /* HERO */
-.hmc{background:var(--bg3);border:1px solid var(--bdr);border-radius:var(--rad);padding:14px;position:relative;overflow:hidden}.hmc-icon{font-size:20px;margin-bottom:6px}.hmc-label{font-family:'JetBrains Mono',monospace;font-size:var(--fs-xs);color:var(--t3);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px}.hmc-value{font-family:'JetBrains Mono',monospace;font-size:var(--fs-md);font-weight:700;color:var(--t1);margin-bottom:4px}.hmc-desc{font-size:var(--fs-base);color:var(--t2);line-height:1.5}.hmc.mode{border-left:3px solid var(--grn)}.hmc.story{border-left:3px solid var(--cyn)}.hmc.opp{border-left:3px solid var(--grn)}.hmc.risk{border-left:3px solid var(--red)}.hmc.bot{border-left:3px solid var(--prp)}.hmc.watch{border-left:3px solid var(--ylw)}
-.hero-wrap{background:linear-gradient(135deg,var(--bg3),var(--bg2) 40%,#0c1628);border:1px solid var(--bdr2);border-radius:var(--rad2);padding:20px;margin-bottom:16px;position:relative;overflow:hidden}.hero-wrap::before{content:'';position:absolute;top:-40%;right:-10%;width:300px;height:300px;background:radial-gradient(circle,rgba(0,230,118,.06),transparent 70%);pointer-events:none}
+.hmc{background:var(--bg3);border:1px solid var(--bdr);border-radius:var(--rad);padding:16px;position:relative;overflow:hidden}.hmc-icon{font-size:20px;margin-bottom:6px}.hmc-label{font-family:'JetBrains Mono',monospace;font-size:var(--fs-xs);color:var(--t3);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px}.hmc-value{font-family:'JetBrains Mono',monospace;font-size:var(--fs-md);font-weight:700;color:var(--t1);margin-bottom:4px}.hmc-desc{font-size:var(--fs-base);color:var(--t2);line-height:1.6}.hmc.mode{border-left:3px solid var(--grn)}.hmc.story{border-left:3px solid var(--blu)}.hmc.opp{border-left:3px solid var(--grn)}.hmc.risk{border-left:3px solid var(--red)}.hmc.bot{border-left:3px solid var(--prp)}.hmc.watch{border-left:3px solid var(--ylw)}
+.hero-wrap{background:linear-gradient(135deg,var(--bg3) 0%,var(--bg2) 50%,#0c1628 100%);border:1px solid var(--bdr2);border-radius:var(--rad2);padding:24px;margin-bottom:20px;position:relative;overflow:hidden}.hero-wrap::before{content:'';position:absolute;top:-40%;right:-10%;width:300px;height:300px;background:radial-gradient(circle,rgba(76,175,80,.08),transparent 70%);pointer-events:none}
 .hero-tag{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--grn);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:12px;display:flex;align-items:center;gap:8px}
 .hero-strat{margin-top:12px;padding:10px 14px;background:var(--grnd);border:1px solid rgba(0,230,118,.2);border-radius:var(--rad);font-size:13px;color:var(--grn);line-height:1.5}
 
@@ -99,7 +97,7 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg0);color:var(
 .aib{background:linear-gradient(135deg,#140e30,var(--bg2));border:1px solid var(--prp);border-radius:var(--rad);padding:14px;margin-top:14px}.aib-t{font-family:'JetBrains Mono',monospace;font-size:var(--fs-xs);color:var(--prp);text-transform:uppercase;margin-bottom:6px}.aib-tx{font-size:var(--fs-base);color:var(--t1);line-height:1.6}
 
 /* LOADING */
-.ld{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:50px 20px;gap:12px}.sp{width:28px;height:28px;border:3px solid var(--bdr);border-top-color:var(--grn);border-radius:50%;animation:spn .7s linear infinite}@keyframes spn{to{transform:rotate(360deg)}}.ld-t{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--t3)}
+.ld{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:50px 20px;gap:12px}.sp{width:28px;height:28px;border:3px solid var(--bdr);border-top-color:var(--grn);border-radius:50%;animation:spn .7s linear infinite}@keyframes spn{to{transform:rotate(360deg)}}.ld-t{font-family:'JetBrains Mono',monospace;font-size:var(--fs-sm);color:var(--t3)}
 
 /* MISC */
 .emp{text-align:center;padding:40px 20px}.emp h3{color:var(--t2);font-size:15px;margin-bottom:6px}.emp p{color:var(--t3);font-size:12px}.chart-img{width:100%;border-radius:var(--rad);border:1px solid var(--bdr)}
@@ -110,59 +108,42 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg0);color:var(
 .expl{background:linear-gradient(135deg,#0d1628,var(--bg3));border:1px solid var(--bdr2);border-radius:var(--rad2);padding:20px;margin-bottom:16px}.expl-title{font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700;color:var(--cyn);text-transform:uppercase;letter-spacing:1px;margin-bottom:12px}.expl-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}.expl-item{padding:12px;background:var(--bg2);border:1px solid var(--bdr);border-radius:var(--rad)}.expl-item h4{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--grn);margin-bottom:6px}.expl-item p{font-size:12px;color:var(--t2);line-height:1.5}.expl-item .num{font-family:'JetBrains Mono',monospace;font-size:24px;font-weight:700;color:var(--cyn);margin-bottom:4px}
 .tk-bar{display:flex;height:20px;border-radius:3px;overflow:hidden;margin:6px 0}.tk-fill{transition:width .5s;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;font-family:'JetBrains Mono',monospace}
 
-/* ===== MOBILE-FIRST RESPONSIVE ===== */
+/* ===== MOBILE RESPONSIVE ===== */
 @media(max-width:900px){
   .g2,.g3,.g6{grid-template-columns:1fr}
   .g4{grid-template-columns:1fr 1fr}
-  .hdr{flex-wrap:wrap;height:auto;padding:8px 12px;gap:6px}
+  .hdr{flex-wrap:wrap;height:auto;padding:10px 14px;gap:6px}
   .logo{font-size:15px}
   .hdr-nav{width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;gap:0;padding-bottom:2px}
-  .nav-b{padding:8px 12px;font-size:10px;flex-shrink:0}
-  .hdr-r{gap:6px}
-  .clk{font-size:10px}
-  .sbar{padding:8px 12px;gap:6px}
-  .sinp{width:100%;font-size:14px}
+  .nav-b{padding:10px 14px;flex-shrink:0}
+  .sbar{padding:10px 14px;gap:8px}
+  .sinp{width:100%}
   .sbar>.qticks{width:100%;flex-wrap:nowrap;overflow-x:auto}
   .sbar>span:nth-child(1){display:none}
   .sbar>span:nth-child(3){display:none}
-  .main{padding:10px 12px}
-  .hero-wrap{padding:14px}
-  .hero-tag{font-size:9px}
-  .hmc{padding:10px}
-  .hmc-value{font-size:12px}
-  .hmc-desc{font-size:11px}
-  .card-b{padding:10px}
-  .pkc{padding:10px}
-  .pkc-tick{font-size:14px}
-  .pkc-score{font-size:18px}
-  .dtb{font-size:10px}
-  .dtb th,.dtb td{padding:5px 4px}
+  .main{padding:12px 14px}
+  .hero-wrap{padding:16px}
+  .hmc{padding:12px}
+  .card-b{padding:14px}
+  .pkc{padding:12px}
   .dp{width:100%;max-width:100%;border-radius:0;max-height:100vh;max-height:100dvh}
-  .dp-h{padding:14px 12px}
-  .dp-tick{font-size:18px}
-  .dp-body{padding:12px}
+  .dp-h{padding:16px 14px}
+  .dp-body{padding:14px}
   .dp-tabs{overflow-x:auto;-webkit-overflow-scrolling:touch}
-  .dp-tab{padding:8px 12px;font-size:9px;flex-shrink:0}
-  .mg{grid-template-columns:1fr 1fr;gap:6px}
+  .dp-tab{padding:10px 14px;flex-shrink:0}
+  .mg{grid-template-columns:1fr 1fr;gap:8px}
   .expl-grid{grid-template-columns:1fr}
-  .em-row{font-size:10px;padding:4px 6px}
-  .em-price,.em-chg,.em-ytd{width:50px;font-size:10px}
-  .mac{padding:6px}
-  .mac-p{font-size:12px}
-  .cbar{padding:2px 12px;font-size:8px;gap:10px}
-  .live-stat{padding:6px}
-  .live-num{font-size:16px}
-  .sigc{padding:8px 10px}
-  .tbar{height:28px}
-  .tbar-i{font-size:10px;gap:4px}
+  .em-row{padding:6px 8px}
+  .mac{padding:8px}
+  .sigc{padding:10px 12px}
   .ov.open{padding-top:0}
 }
 @media(max-width:400px){
   .g4{grid-template-columns:1fr}
   .mg{grid-template-columns:1fr}
-  .hmc{padding:8px}
-  .hero-wrap{padding:10px}
-  .nav-b{padding:6px 10px;font-size:9px}
+  .hmc{padding:10px}
+  .hero-wrap{padding:12px}
+  .nav-b{padding:8px 12px}
 }
 </style>
 </head>
@@ -170,7 +151,7 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg0);color:var(
 <div class="hdr">
   <div class="logo"><svg width="32" height="32" viewBox="0 0 90 100" style="vertical-align:middle;margin-right:8px"><defs><linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" style="stop-color:#00e676"/><stop offset="100%" style="stop-color:#00c853"/></linearGradient></defs><path d="M25,55 Q5,20 2,5 Q8,18 22,35 Z" fill="url(#bg)" opacity=".9"/><path d="M65,55 Q85,20 88,5 Q82,18 68,35 Z" fill="url(#bg)" opacity=".9"/><ellipse cx="45" cy="62" rx="28" ry="22" fill="url(#bg)"/><ellipse cx="45" cy="78" rx="18" ry="12" fill="#00c853"/><ellipse cx="38" cy="79" rx="3" ry="2.5" fill="#0a0f18"/><ellipse cx="52" cy="79" rx="3" ry="2.5" fill="#0a0f18"/><ellipse cx="33" cy="58" rx="5" ry="4" fill="#0a0f18"/><ellipse cx="57" cy="58" rx="5" ry="4" fill="#0a0f18"/><ellipse cx="34" cy="57" rx="2" ry="1.5" fill="#eaf0fa"/><ellipse cx="58" cy="57" rx="2" ry="1.5" fill="#eaf0fa"/><path d="M25,52 Q33,48 38,51" stroke="#0a0f18" stroke-width="2.5" fill="none" stroke-linecap="round"/><path d="M65,52 Q57,48 52,51" stroke="#0a0f18" stroke-width="2.5" fill="none" stroke-linecap="round"/><path d="M20,80 Q45,100 70,80" fill="url(#bg)" opacity=".6"/></svg>BIST<b>BULL</b><small>TERMINAL</small></div>
   <div class="hdr-nav" id="nav"></div>
-  <div class="hdr-r"><button id="themeBtn" onclick="toggleTheme()" style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-xs);padding:4px 10px;background:var(--bg3);border:1px solid var(--bdr);border-radius:var(--rad);color:var(--t2);cursor:pointer;white-space:nowrap;min-height:32px" title="Tema degistir">👁️ Kolay</button><div class="dot"></div><div class="clk" id="clk"></div></div>
+  <div class="hdr-r"><div class="dot"></div><div class="clk" id="clk"></div></div>
 </div>
 <div class="tbar"><div class="tbar-inner" id="tbar"><div class="tbar-i"><span style="color:var(--t3)">Macro yukleniyor...</span></div></div></div>
 <div class="cbar"><div class="cbar-i">Analiz <span class="cbar-v" id="cnt-a">0</span></div><div class="cbar-i">Sinyal <span class="cbar-v" id="cnt-s">0</span></div><div class="cbar-i">Cache <span class="cbar-v" id="cnt-c">0</span></div><div class="cbar-i" style="margin-left:auto">Son <span class="cbar-v" id="cnt-u">—</span></div></div>
@@ -213,10 +194,6 @@ const cS=v=>v>=0?'+'+v.toFixed(2):v.toFixed(2);
 // ===== API =====
 async function api(p){const r=await fetch(p);if(!r.ok)throw new Error(r.status);return r.json();}
 
-// ===== TEMA ===== 
-function toggleTheme(){const isEasy=document.documentElement.classList.toggle('theme-easy');localStorage.setItem('bb_theme',isEasy?'easy':'terminal');$('themeBtn').textContent=isEasy?'⚡ Terminal':'👁️ Kolay';}
-if(localStorage.getItem('bb_theme')==='easy'){document.documentElement.classList.add('theme-easy');document.addEventListener('DOMContentLoaded',()=>{const b=$('themeBtn');if(b)b.textContent='⚡ Terminal';});}
-
 // ===== CLOCK =====
 setInterval(()=>{$('clk').textContent=new Date().toLocaleTimeString('tr-TR',{hour:'2-digit',minute:'2-digit',second:'2-digit'})+' IST';},1000);
 
@@ -249,87 +226,73 @@ sorted.forEach((it,i)=>{h+=`<tr><td style="color:var(--t3)">${i+1}</td><td class
 return h+'</tbody></table>';}
 
 // ===== HOME PAGE =====
+const _loadMsgs=['40 hisse kontrol ediliyor...','Ichimoku bulutlarina bakiliyor...','Piotroski ve Altman hesaplaniyor...','Eyyay Dede cayi demliyor... ☕','Deger ve Ivme skorlari hesaplaniyor...','Cross sinyalleri taraniyor...'];
+function _rndLoad(){return _loadMsgs[Math.floor(Math.random()*_loadMsgs.length)];}
+
 function renderHome(){
 const pg=$('pg-home');const d=S.dash;const sc=S.scan;const hr=S.hero;
 const hasSc=sc&&sc.items&&sc.items.length>0;const hasD=d&&d.top3&&d.top3.length>0;
 let h='';
 
-// 1. OZLU SOZ
-if(S.quote){h+=`<div style="margin-bottom:14px;padding:12px 16px;background:var(--bg3);border-left:3px solid var(--gold);border-radius:0 var(--rad) var(--rad) 0;font-style:italic;color:var(--t2);font-size:13px;line-height:1.5">"${esc(S.quote.text)}" — <span style="color:var(--gold);font-style:normal;font-weight:600;font-size:12px">${esc(S.quote.author)}</span></div>`;}
-else{h+=`<div style="margin-bottom:14px;padding:12px 16px;background:var(--bg3);border-left:3px solid var(--gold);border-radius:0 var(--rad) var(--rad) 0;font-style:italic;color:var(--t4);font-size:12px">Gunun sozu yukleniyor...</div>`;}
-
-// 2. NASIL CALISIR
-h+=`<div class="card" style="margin-bottom:14px"><div class="card-h"><span class="card-t">🐂 BistBull Nasil Calisir?</span></div><div class="card-b" style="font-size:12px;color:var(--t2);line-height:1.7"><b style="color:var(--cyn)">9 boyutlu hibrit analiz</b> — iki ayri perspektif: <span style="color:var(--grn)">🏛️ DEĞER</span> (6 boyut: Value, Quality, Growth, Balance, Earnings, Moat — Piotroski, Altman, Beneish, Graham, Buffett) + <span style="color:var(--orn)">⚡ İVME</span> (3 boyut: Momentum, Teknik Kirilim, Kurum Akisi). Her hisse iki ayri skor alir: <span style="color:var(--grn)">Deger skoru</span> (uzun vade — ne almaliyim?) ve <span style="color:var(--orn)">Ivme skoru</span> (kisa vade — ne zaman girmeliyim?). 40 hisselik BIST universe otomatik taranir. <b style="color:var(--prp)">AI destekli yatirim tezi</b> ve <b style="color:var(--prp)">Eyyay Dede</b> yatirim asistani ile profesyonel analiz herkesin erisiminde.</div></div>`;
-
-// 3. GUNUN KITABI
-if(S.book){h+=`<div class="card" style="margin-bottom:14px"><div class="card-h"><span class="card-t">📚 Gunun Finans Kitabi</span></div><div class="card-b"><div style="display:flex;gap:14px;align-items:flex-start"><div style="font-size:36px;flex-shrink:0">📖</div><div><div style="font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:700;color:var(--cyn);margin-bottom:4px">${esc(S.book.title)}</div><div style="font-size:12px;color:var(--gold);margin-bottom:6px">${esc(S.book.author)}</div><div style="font-size:12px;color:var(--t2);line-height:1.5">${esc(S.book.description)}</div><div style="margin-top:8px;font-size:10px;color:var(--t3)">Seviye: <span style="color:var(--grn)">${esc(S.book.level||'Herkes')}</span></div></div></div></div></div>`;}
-
-// 4. PIYASA DURUMU BANNER
+// === 1. MARKET STATUS BANNER (kapaliysa) ===
 const ms=S.marketStatus;
 if(ms&&ms.status!=='open'){
   const bannerCol=ms.status==='closed'?'var(--ylw)':ms.status==='pre_market'?'var(--blu)':'var(--t3)';
   const bannerIcon=ms.status==='closed'?'🏖️':ms.status==='pre_market'?'⏰':'🌙';
-  const bannerBg=ms.status==='closed'?'rgba(255,193,7,.08)':'rgba(33,150,243,.08)';
-  h+=`<div style="margin-bottom:14px;padding:12px 16px;background:${bannerBg};border:1px solid ${bannerCol}30;border-left:3px solid ${bannerCol};border-radius:0 var(--rad) var(--rad) 0;display:flex;align-items:center;gap:10px;flex-wrap:wrap">`;
-  h+=`<span style="font-size:18px">${bannerIcon}</span>`;
-  h+=`<div style="flex:1;min-width:200px"><div style="font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700;color:${bannerCol}">${esc(ms.reason)}</div>`;
-  h+=`<div style="font-size:11px;color:var(--t2);margin-top:2px">${esc(ms.reason_detail||'')}${ms.next_open?' · Sonraki acilis: '+ms.next_open:''}${ms.data_age?' · Veri: '+esc(ms.data_age):''}</div></div>`;
-  if(ms.global_open){h+=`<span style="font-size:10px;color:var(--cyn);font-family:'JetBrains Mono',monospace;white-space:nowrap">🌍 Global acik</span>`;}
+  const bannerBg=ms.status==='closed'?'rgba(255,202,40,.06)':'rgba(100,181,246,.06)';
+  h+=`<div style="margin-bottom:20px;padding:14px 18px;background:${bannerBg};border:1px solid ${bannerCol}30;border-left:3px solid ${bannerCol};border-radius:0 var(--rad) var(--rad) 0;display:flex;align-items:center;gap:12px;flex-wrap:wrap">`;
+  h+=`<span style="font-size:22px">${bannerIcon}</span>`;
+  h+=`<div style="flex:1;min-width:200px"><div style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-base);font-weight:700;color:${bannerCol}">${esc(ms.reason)}</div>`;
+  h+=`<div style="font-size:var(--fs-sm);color:var(--t2);margin-top:3px">${esc(ms.reason_detail||'')}${ms.next_open?' · Sonraki acilis: '+ms.next_open:''}${ms.data_age?' · Veri: '+esc(ms.data_age):''}</div></div>`;
+  if(ms.global_open){h+=`<span style="font-size:var(--fs-xs);color:var(--blu);font-family:'JetBrains Mono',monospace;white-space:nowrap">🌍 Global piyasalar acik</span>`;}
   h+=`</div>`;
 }
 
-// 5. HERO
+// === 2. HERO — ILÇK EKRAN, EN ÖNEMLI ===
 h+=`<div class="hero-wrap"><div class="hero-tag">📡 BUGÜN NE OLUYOR?</div>`;
 if(hr){
   const modeCol=hr.mode_color==='green'?'var(--grn)':hr.mode_color==='red'?'var(--red)':'var(--ylw)';
-  h+=`<div style="margin-bottom:14px;padding-bottom:14px;border-bottom:1px solid var(--bdr)">`;
-  h+=`<div style="font-family:'JetBrains Mono',monospace;font-size:18px;font-weight:700;color:${modeCol};margin-bottom:8px">📊 ${esc(hr.mode_label)}</div>`;
-  h+=`<div style="font-size:13px;color:var(--t2);line-height:1.6">${esc(hr.story||'')}</div></div>`;
-  h+=`<div class="g2" style="margin-bottom:14px">`;
-  // DEĞER LİDERLERİ (sol)
-  h+=`<div class="hmc opp" style="border-left-color:var(--grn)"><div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--grn);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">🏛️ Deger Liderleri</div>`;
-  if(hr.deger_leaders&&hr.deger_leaders.length){hr.deger_leaders.forEach((d,i)=>{h+=`<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;${i<hr.deger_leaders.length-1?'border-bottom:1px solid var(--bdr)':''}"><span class="clk-t" style="font-size:13px" onclick="loadTicker('${esc(d.ticker)}')">${esc(d.ticker)}</span><div style="text-align:right"><span style="font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:700;color:var(--grn)">${d.deger}</span><span style="font-size:10px;color:var(--t3);margin-left:4px">D</span></div></div>`;});}else{h+=`<div class="hmc-desc" style="color:var(--t3)">Scan sonrasi</div>`;}
-  h+=`<div style="font-size:10px;color:var(--t4);margin-top:6px;font-style:italic">Uzun vade · Haftalik guncellenir</div></div>`;
-  // İVME LİDERLERİ (sağ)
-  h+=`<div class="hmc opp" style="border-left-color:var(--orn)"><div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--orn);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">⚡ Ivme Liderleri</div>`;
-  if(hr.ivme_leaders&&hr.ivme_leaders.length){hr.ivme_leaders.forEach((d,i)=>{h+=`<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;${i<hr.ivme_leaders.length-1?'border-bottom:1px solid var(--bdr)':''}"><span class="clk-t" style="font-size:13px" onclick="loadTicker('${esc(d.ticker)}')">${esc(d.ticker)}</span><div style="text-align:right"><span style="font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:700;color:var(--orn)">${d.ivme}</span><span style="font-size:10px;color:var(--t3);margin-left:4px">I</span></div></div>`;});}else{h+=`<div class="hmc-desc" style="color:var(--t3)">Scan sonrasi</div>`;}
-  h+=`<div style="font-size:10px;color:var(--t4);margin-top:6px;font-style:italic">Kisa vade · Gunluk guncellenir</div></div>`;
+  h+=`<div style="margin-bottom:18px;padding-bottom:18px;border-bottom:1px solid var(--bdr)">`;
+  h+=`<div style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-xl);font-weight:700;color:${modeCol};margin-bottom:10px">📊 ${esc(hr.mode_label)}</div>`;
+  h+=`<div style="font-size:var(--fs-base);color:var(--t2);line-height:1.7">${esc(hr.story||'')}</div></div>`;
+  h+=`<div class="g2" style="margin-bottom:18px">`;
+  // DEĞER LİDERLERİ
+  h+=`<div class="hmc opp" style="border-left-color:var(--grn)"><div style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-xs);color:var(--grn);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">🏛️ Deger Liderleri</div>`;
+  if(hr.deger_leaders&&hr.deger_leaders.length){hr.deger_leaders.forEach((dl,i)=>{h+=`<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;${i<hr.deger_leaders.length-1?'border-bottom:1px solid var(--bdr)':''}"><span class="clk-t" style="font-size:var(--fs-md)" onclick="loadTicker('${esc(dl.ticker)}')">${esc(dl.ticker)}</span><div style="text-align:right"><span style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-lg);font-weight:700;color:var(--grn)">${dl.deger}</span><span style="font-size:var(--fs-xs);color:var(--t3);margin-left:4px">D</span></div></div>`;});}else{h+=`<div class="hmc-desc" style="color:var(--t3)">Tarama sonrasi gorunur</div>`;}
+  h+=`<div style="font-size:var(--fs-xs);color:var(--t4);margin-top:8px;font-style:italic">Uzun vade · Haftalik guncellenir</div></div>`;
+  // İVME LİDERLERİ
+  h+=`<div class="hmc opp" style="border-left-color:var(--blu)"><div style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-xs);color:var(--blu);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">⚡ Ivme Liderleri</div>`;
+  if(hr.ivme_leaders&&hr.ivme_leaders.length){hr.ivme_leaders.forEach((dl,i)=>{h+=`<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;${i<hr.ivme_leaders.length-1?'border-bottom:1px solid var(--bdr)':''}"><span class="clk-t" style="font-size:var(--fs-md)" onclick="loadTicker('${esc(dl.ticker)}')">${esc(dl.ticker)}</span><div style="text-align:right"><span style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-lg);font-weight:700;color:var(--blu)">${dl.ivme}</span><span style="font-size:var(--fs-xs);color:var(--t3);margin-left:4px">I</span></div></div>`;});}else{h+=`<div class="hmc-desc" style="color:var(--t3)">Tarama sonrasi gorunur</div>`;}
+  h+=`<div style="font-size:var(--fs-xs);color:var(--t4);margin-top:8px;font-style:italic">Kisa vade · Gunluk guncellenir</div></div>`;
   h+=`</div>`;
-  // Risk + Bot + Watch — alt satır
-  h+=`<div class="g3" style="margin-bottom:14px">`;
-  h+=`<div class="hmc risk"><div class="hmc-icon">⚠️</div><div class="hmc-label">Dikkat</div>${hr.risk?`<div class="hmc-value"><span class="clk-t" onclick="loadTicker('${esc(hr.risk.ticker)}')">${esc(hr.risk.ticker)}</span> <span style="color:var(--red)">D:${hr.risk.deger||'?'}</span></div><div class="hmc-desc">${esc(hr.risk.reason||'')}</div>`:'<div class="hmc-desc" style="color:var(--t3)">Scan sonrasi</div>'}</div>`;
+  // Risk + Bot + Watch
+  h+=`<div class="g3" style="margin-bottom:18px">`;
+  h+=`<div class="hmc risk"><div class="hmc-icon">⚠️</div><div class="hmc-label">Dikkat</div>${hr.risk?`<div class="hmc-value"><span class="clk-t" onclick="loadTicker('${esc(hr.risk.ticker)}')">${esc(hr.risk.ticker)}</span> <span style="color:var(--red)">D:${hr.risk.deger||'?'}</span></div><div class="hmc-desc">${esc(hr.risk.reason||'')}</div>`:'<div class="hmc-desc" style="color:var(--t3)">Tarama sonrasi</div>'}</div>`;
   h+=`<div class="hmc bot"><div class="hmc-icon">🤖</div><div class="hmc-label">Bot Ne Diyor?</div><div class="hmc-desc">${esc(hr.bot_says||'AI yorumu yukleniyor...')}</div></div>`;
-  h+=`<div class="hmc watch"><div class="hmc-icon">👀</div><div class="hmc-label">Takip Et</div><div class="hmc-desc">${(hr.watch||[]).map(w=>`<div style="padding:2px 0;color:var(--t1)">• ${esc(w)}</div>`).join('')||'—'}</div></div>`;
+  h+=`<div class="hmc watch"><div class="hmc-icon">👀</div><div class="hmc-label">Takip Et</div><div class="hmc-desc">${(hr.watch||[]).map(w=>`<div style="padding:3px 0;color:var(--t1)">• ${esc(w)}</div>`).join('')||'—'}</div></div>`;
   h+=`</div>`;
 } else {
-  h+=`<div style="font-size:16px;font-weight:700;color:var(--t1);margin-bottom:6px">${hasSc?sc.items.length+' Hisse Analiz Edildi':'Analiz Baslatiliyor...'}</div>`;
-  h+=`<div style="color:var(--t2);font-size:13px">${hasSc?'Sonuclar hazir — asagi kaydir.':'40 hisselik BIST universe otomatik taraniyor...'}</div>`;
+  h+=`<div style="font-size:var(--fs-lg);font-weight:700;color:var(--t1);margin-bottom:8px">${hasSc?sc.items.length+' Hisse Analiz Edildi':'Analiz Baslatiliyor...'}</div>`;
+  h+=`<div style="color:var(--t2);font-size:var(--fs-base)">${hasSc?'Sonuclar hazir — asagi kaydir.':_rndLoad()}</div>`;
 }
 h+=`<div id="hSt"></div>`;
-h+=`<div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-grn" id="scanBtn" onclick="startScan()">🔄 YENiLE</button><button class="btn btn-blu" onclick="loadBriefing()">🤖 AI BRiFiNG</button></div>`;
+h+=`<div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap"><button class="btn btn-grn" id="scanBtn" onclick="startScan()">🔄 YENiLE</button><button class="btn btn-blu" onclick="loadBriefing()">🤖 AI BRiFiNG</button></div>`;
 h+=`</div>`;
 
-// 5. TOP PICKS
-if(hasD){h+=`<div class="g3" style="margin-bottom:14px"><div class="card"><div class="card-h"><span class="card-t">🏆 Gunun 3 Hissesi</span></div><div class="card-b">${d.top3.map(i=>`<div class="pkc"><div style="display:flex;justify-content:space-between;align-items:center"><span class="pkc-tick" onclick="loadTicker('${esc(i.ticker)}')">${esc(i.ticker)}</span><span class="pkc-score" style="color:${sC(i.overall)}">${i.overall}</span></div><div style="font-size:10px;color:var(--t3)">${esc(i.name||'')} · ${esc(i.style)}</div><div class="pkc-reason">${(i.positives||[]).map(p=>esc(p)).join(' · ')}</div></div>`).join('')}</div></div><div class="card"><div class="card-h"><span class="card-t">💡 3 Firsat</span></div><div class="card-b">${(d.opportunities||[]).map(i=>`<div class="pkc opp"><div style="display:flex;justify-content:space-between"><span class="pkc-tick" onclick="loadTicker('${esc(i.ticker)}')">${esc(i.ticker)}</span><span style="color:var(--ylw);font-family:'JetBrains Mono',monospace;font-size:12px">${i.overall}/100</span></div><div class="pkc-reason">${esc(i.reason||'')}</div></div>`).join('')||'<p style="color:var(--t3);font-size:12px">Scan sonrasi</p>'}</div></div><div class="card"><div class="card-h"><span class="card-t">⚠️ 3 Risk</span></div><div class="card-b">${(d.risks||[]).map(i=>`<div class="pkc risk"><div style="display:flex;justify-content:space-between"><span class="pkc-tick" onclick="loadTicker('${esc(i.ticker)}')">${esc(i.ticker)}</span><span style="color:var(--red);font-family:'JetBrains Mono',monospace;font-size:12px">${i.overall}/100</span></div><div class="pkc-reason">${esc(i.reason||'')}</div></div>`).join('')||'<p style="color:var(--t3);font-size:12px">Scan sonrasi</p>'}</div></div></div>`;}
+// === 3. TOP PICKS ===
+if(hasD){h+=`<div class="g3" style="margin-bottom:20px"><div class="card"><div class="card-h"><span class="card-t">🏆 Gunun 3 Hissesi</span></div><div class="card-b">${d.top3.map(i=>`<div class="pkc"><div style="display:flex;justify-content:space-between;align-items:center"><span class="pkc-tick" onclick="loadTicker('${esc(i.ticker)}')">${esc(i.ticker)}</span><span class="pkc-score" style="color:${sC(i.overall)}">${i.overall}</span></div><div style="font-size:var(--fs-xs);color:var(--t3)">${esc(i.name||'')} · ${esc(i.style)}</div><div class="pkc-reason">${(i.positives||[]).map(p=>esc(p)).join(' · ')}</div></div>`).join('')}</div></div><div class="card"><div class="card-h"><span class="card-t">💡 3 Firsat</span></div><div class="card-b">${(d.opportunities||[]).map(i=>`<div class="pkc opp"><div style="display:flex;justify-content:space-between"><span class="pkc-tick" onclick="loadTicker('${esc(i.ticker)}')">${esc(i.ticker)}</span><span style="color:var(--ylw);font-family:'JetBrains Mono',monospace;font-size:var(--fs-sm)">${i.overall}/100</span></div><div class="pkc-reason">${esc(i.reason||'')}</div></div>`).join('')||'<p style="color:var(--t3)">Tarama sonrasi</p>'}</div></div><div class="card"><div class="card-h"><span class="card-t">⚠️ 3 Risk</span></div><div class="card-b">${(d.risks||[]).map(i=>`<div class="pkc risk"><div style="display:flex;justify-content:space-between"><span class="pkc-tick" onclick="loadTicker('${esc(i.ticker)}')">${esc(i.ticker)}</span><span style="color:var(--red);font-family:'JetBrains Mono',monospace;font-size:var(--fs-sm)">${i.overall}/100</span></div><div class="pkc-reason">${esc(i.reason||'')}</div></div>`).join('')||'<p style="color:var(--t3)">Tarama sonrasi</p>'}</div></div></div>`;}
 
-// 6. MAKRO + SEKTOR
-h+=`<div class="g2" style="margin-bottom:14px"><div class="card"><div class="card-h"><span class="card-t">🌍 Makro Radar</span><button class="btn btn-sm btn-blu" onclick="goPage('makro')">DETAY →</button></div><div class="card-b"><div class="g4" id="macMini">${S.macro?renderMacMini(S.macro.items||[]):'<div class="ld"><div class="sp"></div><div class="ld-t">Macro...</div></div>'}</div></div></div><div class="card"><div class="card-h"><span class="card-t">🏢 Sektor</span></div><div class="card-b">${hr&&hr.strong_sectors?renderSectorCards(hr):(hasD&&d.sectors?renderSectors(d.sectors):'<p style="color:var(--t3);font-size:12px">Scan sonrasi</p>')}</div></div></div>`;
+// === 4. ARAÇLAR + MAKRO ===
+h+=`<div class="g3" style="margin-bottom:20px"><div class="card"><div class="card-h"><span class="card-t">⭐ Watchlist</span></div><div class="card-b">${S.wl.length?S.wl.map(t=>`<div class="wl-item"><span class="wl-tick" onclick="loadTicker('${esc(t)}')">${esc(t)}</span><button class="wl-rm" onclick="wlRm('${esc(t)}');renderHome()">✕</button></div>`).join(''):'<p style="color:var(--t3);font-size:var(--fs-sm)">Hisse detayinda ⭐ ile ekleyin</p>'}</div></div><div class="card"><div class="card-h"><span class="card-t">⚡ Sinyaller</span><button class="btn btn-sm btn-orn" onclick="goPage('cross')">TUMU →</button></div><div class="card-b">${S.cross&&S.cross.signals?S.cross.signals.slice(0,4).map(s=>`<div class="sigc ${s.signal_type==='bullish'?'bull':s.signal_type==='bearish'?'bear':''}"><div style="display:flex;justify-content:space-between"><span class="clk-t" style="font-size:var(--fs-sm)" onclick="loadTicker('${esc(s.ticker)}')">${esc(s.ticker)}</span><span style="color:var(--t3);font-size:var(--fs-xs);font-family:'JetBrains Mono',monospace">${'⭐'.repeat(s.stars||1)} ${esc(s.signal)}</span></div></div>`).join(''):'<p style="color:var(--t3);font-size:var(--fs-sm)">Cross → sinyal tara</p>'}</div></div><div class="card"><div class="card-h"><span class="card-t">🌍 Makro</span><button class="btn btn-sm btn-blu" onclick="goPage('makro')">DETAY →</button></div><div class="card-b"><div class="g4" id="macMini">${S.macro?renderMacMini(S.macro.items||[]):'<div class="ld"><div class="sp"></div><div class="ld-t">${_rndLoad()}</div></div>'}</div></div></div></div>`;
 
-// 6.5 HEATMAP
-h+=`<div class="card" style="margin-bottom:14px"><div class="card-h"><span class="card-t">🔥 Sektorel Isi Haritasi</span><button class="btn btn-sm btn-orn" onclick="S._heatLoaded=false;loadHeatmap()">🔄</button></div><div class="card-b">${S.heatmapHtml||'<div style="color:var(--t4);font-size:12px">Yukleniyor...</div>'}</div></div>`;
+// === 5. TOP 10 TABLE ===
+if(hasSc){h+=`<div class="card" style="margin-bottom:20px"><div class="card-h"><span class="card-t">📊 Top 10 — 9 Boyutlu Hibrit Analiz</span><button class="btn btn-sm btn-grn" onclick="goPage('radar')">TUMU →</button></div><div style="padding:8px 16px;background:var(--bg3);border-bottom:1px solid var(--bdr);font-size:var(--fs-xs);color:var(--t3)">🏛️ Deger: uzun vade temel guc · ⚡ Ivme: kisa vade momentum</div><div class="card-b" style="overflow-x:auto">${renderRadarTbl(sc.items.slice(0,10),S._radarSort||'deger')}</div></div>`;}
 
-// 7. TOOLS
-h+=`<div class="g3" style="margin-bottom:14px"><div class="card"><div class="card-h"><span class="card-t">⭐ Watchlist</span></div><div class="card-b">${S.wl.length?S.wl.map(t=>`<div class="wl-item"><span class="wl-tick" onclick="loadTicker('${esc(t)}')">${esc(t)}</span><button class="wl-rm" onclick="wlRm('${esc(t)}');renderHome()">✕</button></div>`).join(''):'<p style="color:var(--t3);font-size:12px">Hisse detayinda ⭐ ile ekleyin</p>'}</div></div><div class="card"><div class="card-h"><span class="card-t">🕐 Son Baktiklariniz</span></div><div class="card-b">${S.seen.length?S.seen.map(t=>`<span class="ls-item" onclick="loadTicker('${esc(t)}')">${esc(t)}</span>`).join(''):'<p style="color:var(--t3);font-size:12px">Henuz hisse incelemediniz</p>'}</div></div><div class="card"><div class="card-h"><span class="card-t">⚡ Sinyaller</span><button class="btn btn-sm btn-orn" onclick="goPage('cross')">TUMU →</button></div><div class="card-b">${S.cross&&S.cross.signals?S.cross.signals.slice(0,4).map(s=>`<div class="sigc ${s.signal_type==='bullish'?'bull':s.signal_type==='bearish'?'bear':''}"><div style="display:flex;justify-content:space-between"><span class="clk-t" style="font-size:12px" onclick="loadTicker('${esc(s.ticker)}')">${esc(s.ticker)}</span><span style="color:var(--t3);font-size:10px;font-family:'JetBrains Mono',monospace">${'⭐'.repeat(s.stars||1)} ${esc(s.signal)}</span></div></div>`).join(''):'<p style="color:var(--t3);font-size:12px">Cross → sinyal tara</p>'}</div></div></div>`;
+// === 6. SEKTÖR + HEATMAP ===
+h+=`<div class="g2" style="margin-bottom:20px"><div class="card"><div class="card-h"><span class="card-t">🏢 Sektor Guc Haritasi</span></div><div class="card-b">${hr&&hr.strong_sectors?renderSectorCards(hr):(hasD&&d.sectors?renderSectors(d.sectors):'<p style="color:var(--t3)">Tarama sonrasi</p>')}</div></div><div class="card"><div class="card-h"><span class="card-t">🔥 Sektorel Isi Haritasi</span><button class="btn btn-sm btn-orn" onclick="S._heatLoaded=false;loadHeatmap()">🔄</button></div><div class="card-b">${S.heatmapHtml||'<div style="color:var(--t4);font-size:var(--fs-sm)">Yukleniyor...</div>'}</div></div></div>`;
 
-// 8. TOP 10 TABLE
-if(hasSc){h+=`<div class="card" style="margin-bottom:14px"><div class="card-h"><span class="card-t">📊 Top 10 — 9 Boyutlu Hibrit Analiz</span><button class="btn btn-sm btn-grn" onclick="goPage('radar')">TUMU →</button></div><div style="padding:6px 14px;background:var(--bg3);border-bottom:1px solid var(--bdr);font-size:10px;color:var(--t3)">🏛️ Deger: uzun vade temel guc · ⚡ Ivme: kisa vade momentum</div><div class="card-b" style="overflow-x:auto">${renderRadarTbl(sc.items.slice(0,10),S._radarSort||'deger')}</div></div>`;}
-
-// 9. SISTEM
-const ls=S.liveStats||{};
-h+=`<div class="card" style="margin-bottom:14px"><div class="card-h"><span class="card-t">📡 Sistem</span></div><div class="card-b"><div class="g4"><div class="live-stat"><div class="live-num">${ls.scans_done||'—'}</div><div class="live-label">Analiz</div></div><div class="live-stat"><div class="live-num">${ls.signals_total||'—'}</div><div class="live-label">Sinyal</div></div><div class="live-stat"><div class="live-num">${ls.macro_tracked||'—'}</div><div class="live-label">Makro</div></div><div class="live-stat"><div class="live-num">${ls.uptime_hours||'—'}</div><div class="live-label">Uptime</div></div></div></div></div>`;
-
-// 10. KARSILASTIRMA TABLOSU
-h+=`<div class="card" style="margin-bottom:14px"><div class="card-h"><span class="card-t">📊 Neden BistBull?</span></div><div class="card-b" style="overflow-x:auto">`;
+// === 7. KARSILASTIRMA ===
+h+=`<div class="card" style="margin-bottom:20px"><div class="card-h"><span class="card-t">📊 Neden BistBull?</span></div><div class="card-b" style="overflow-x:auto">`;
 h+=`<table class="dtb" style="min-width:500px"><thead><tr><th style="min-width:140px">Ozellik</th><th style="text-align:center">Fintables</th><th style="text-align:center">Matriks</th><th style="text-align:center">TradingView</th><th style="text-align:center;color:var(--grn)">BistBull</th></tr></thead><tbody>`;
 const cmp=[
 ['Temel Analiz','⭐⭐⭐⭐⭐','⭐⭐⭐','⭐⭐','⭐⭐⭐⭐'],
@@ -343,13 +306,30 @@ const cmp=[
 ];
 cmp.forEach((row,i)=>{
 const bg=i%2===1?'background:var(--bg3)':'';
-const last=row[4];
 const isUnique=row[1]==='—'&&row[2]==='—'&&row[3]==='—';
-h+=`<tr style="${bg}"><td style="padding:10px 8px;font-size:12px;color:${isUnique?'var(--cyn)':'var(--t1)'};font-weight:${isUnique?'700':'500'}">${row[0]}</td><td style="text-align:center;font-size:11px;color:var(--t2)">${row[1]}</td><td style="text-align:center;font-size:11px;color:var(--t2)">${row[2]}</td><td style="text-align:center;font-size:11px;color:var(--t2)">${row[3]}</td><td style="text-align:center;font-size:11px;color:var(--grn);font-weight:700">${last}</td></tr>`;
+h+=`<tr style="${bg}"><td style="padding:12px 10px;font-size:var(--fs-sm);color:${isUnique?'var(--blu)':'var(--t1)'};font-weight:${isUnique?'700':'500'}">${row[0]}</td><td style="text-align:center;font-size:var(--fs-sm);color:var(--t2)">${row[1]}</td><td style="text-align:center;font-size:var(--fs-sm);color:var(--t2)">${row[2]}</td><td style="text-align:center;font-size:var(--fs-sm);color:var(--t2)">${row[3]}</td><td style="text-align:center;font-size:var(--fs-sm);color:var(--grn);font-weight:700">${row[4]}</td></tr>`;
 });
 h+=`</tbody></table>`;
-h+=`<div style="margin-top:12px;padding:10px;background:var(--bg3);border-radius:var(--rad);font-size:11px;color:var(--t2);line-height:1.5;text-align:center"><span style="color:var(--cyn)">Mavi satirlar</span> sadece BistBull'da var — 9 boyutlu hibrit skorlama, AI yatirim tezi ve DEGER/IVME ikili analiz baska hicbir platformda yok.</div>`;
+h+=`<div style="margin-top:14px;padding:12px;background:var(--bg3);border-radius:var(--rad);font-size:var(--fs-sm);color:var(--t2);line-height:1.6;text-align:center"><span style="color:var(--blu)">Mavi satirlar</span> sadece BistBull'da var — hibrit skorlama, AI yatirim tezi ve ikili analiz baska hicbir platformda yok.</div>`;
 h+=`</div></div>`;
+
+// === 8. KESFET — Nasil Calisir (dismissable) + Kitap + Soz ===
+const infoDismissed=localStorage.getItem('bb_info_dismissed');
+if(!infoDismissed){
+h+=`<div class="card" style="margin-bottom:20px;position:relative" id="infoCard"><button onclick="localStorage.setItem('bb_info_dismissed','1');document.getElementById('infoCard').remove()" style="position:absolute;top:10px;right:10px;background:var(--bg4);border:1px solid var(--bdr);border-radius:50%;width:28px;height:28px;color:var(--t3);cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center">✕</button><div class="card-h"><span class="card-t">🐂 BistBull Nasil Calisir?</span></div><div class="card-b" style="font-size:var(--fs-base);color:var(--t2);line-height:1.7"><b style="color:var(--blu)">9 boyutlu hibrit analiz</b> — iki ayri perspektif: <span style="color:var(--grn)">🏛️ DEĞER</span> (6 boyut: Value, Quality, Growth, Balance, Earnings, Moat — Piotroski, Altman, Beneish, Graham, Buffett) + <span style="color:var(--blu)">⚡ İVME</span> (3 boyut: Momentum, Teknik Kirilim, Kurum Akisi). Her hisse iki ayri skor alir: <span style="color:var(--grn)">Deger skoru</span> (uzun vade — ne almaliyim?) ve <span style="color:var(--blu)">Ivme skoru</span> (kisa vade — ne zaman girmeliyim?). 40 hisselik BIST universe otomatik taranir. <b style="color:var(--prp)">AI destekli yatirim tezi</b> ve <b style="color:var(--prp)">Eyyay Dede</b> ile profesyonel analiz herkesin erisiminde.</div></div>`;
+}
+// Kitap + Söz (keşfet alanı — alt)
+h+=`<div class="g2" style="margin-bottom:20px">`;
+if(S.book){h+=`<div class="card"><div class="card-h"><span class="card-t">📚 Gunun Kitabi</span></div><div class="card-b"><div style="display:flex;gap:14px;align-items:flex-start"><div style="font-size:32px;flex-shrink:0">📖</div><div><div style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-md);font-weight:700;color:var(--blu);margin-bottom:4px">${esc(S.book.title)}</div><div style="font-size:var(--fs-sm);color:var(--gold);margin-bottom:6px">${esc(S.book.author)}</div><div style="font-size:var(--fs-sm);color:var(--t2);line-height:1.6">${esc(S.book.description)}</div></div></div></div></div>`;}else{h+=`<div></div>`;}
+if(S.quote){h+=`<div class="card"><div class="card-h"><span class="card-t">💬 Gunun Sozu</span></div><div class="card-b"><div style="font-style:italic;color:var(--t2);font-size:var(--fs-base);line-height:1.7">"${esc(S.quote.text)}"</div><div style="margin-top:8px;color:var(--gold);font-weight:600;font-size:var(--fs-sm)">— ${esc(S.quote.author)}</div></div></div>`;}else{h+=`<div></div>`;}
+h+=`</div>`;
+
+// === 9. SON BAKTIKLARINIZ + SISTEM ===
+h+=`<div class="g2" style="margin-bottom:20px">`;
+h+=`<div class="card"><div class="card-h"><span class="card-t">🕐 Son Baktiklariniz</span></div><div class="card-b">${S.seen.length?S.seen.map(t=>`<span class="ls-item" onclick="loadTicker('${esc(t)}')">${esc(t)}</span>`).join(''):'<p style="color:var(--t3);font-size:var(--fs-sm)">Henuz hisse incelemediniz</p>'}</div></div>`;
+const ls=S.liveStats||{};
+h+=`<div class="card"><div class="card-h"><span class="card-t">📡 Sistem</span></div><div class="card-b"><div class="g4"><div class="live-stat"><div class="live-num">${ls.scans_done||'—'}</div><div class="live-label">Analiz</div></div><div class="live-stat"><div class="live-num">${ls.signals_total||'—'}</div><div class="live-label">Sinyal</div></div><div class="live-stat"><div class="live-num">${ls.macro_tracked||'—'}</div><div class="live-label">Makro</div></div><div class="live-stat"><div class="live-num">${ls.uptime_hours||'—'}</div><div class="live-label">Uptime</div></div></div></div></div>`;
+h+=`</div>`;
 
 pg.innerHTML=h;
 if(!S.macro)loadMacro();
@@ -396,7 +376,7 @@ function renderSosyalPage(){const pg=$('pg-sosyal');if(!S.social){pg.innerHTML='
 async function loadSocial(){try{S.social=await api('/api/social');renderSosyalPage();}catch(e){S.social={trending:[],summary:'Hata: '+e.message};renderSosyalPage();}}
 
 // ===== SCAN + BRIEFING =====
-async function startScan(){const btn=$('scanBtn');if(btn){btn.disabled=true;btn.textContent='⏳ TARANIYOR...';}try{S.scan=await api('/api/scan');S.dash=await api('/api/dashboard');try{S.hero=await api('/api/hero-summary');}catch(e){}updCnt(S.dash);renderHome();}catch(e){const t=$('scanBtn');if(t){t.textContent='HATA';}}if(btn){btn.disabled=false;btn.textContent='🔄 YENiLE';}}
+async function startScan(){const btn=$('scanBtn');if(btn){btn.disabled=true;btn.textContent='⏳ '+_rndLoad();}try{S.scan=await api('/api/scan');S.dash=await api('/api/dashboard');try{S.hero=await api('/api/hero-summary');}catch(e){}updCnt(S.dash);renderHome();}catch(e){const t=$('scanBtn');if(t){t.textContent='HATA';}}if(btn){btn.disabled=false;btn.textContent='🔄 YENiLE';}}
 function updCnt(d){if(!d)return;const c=d.counters||{};$('cnt-a').textContent=c.total_analyzed||0;$('cnt-s').textContent=c.cross_signals||0;$('cnt-c').textContent=c.cache_raw||0;if(d.asof)$('cnt-u').textContent=new Date(d.asof).toLocaleTimeString('tr-TR',{hour:'2-digit',minute:'2-digit'});}
 async function loadBriefing(){const box=$('hSt');if(!box)return;box.innerHTML='<div class="hero-strat" style="border-color:var(--prp);background:var(--prpd);color:var(--prp)">🤖 AI brifing yukleniyor...</div>';try{const d=await api('/api/briefing');box.innerHTML=d.briefing?`<div class="hero-strat">${esc(d.briefing).replace(/\n/g,'<br>')}</div>`:`<div class="hero-strat" style="border-color:var(--ylw);background:var(--ylwd);color:var(--ylw)">${esc(d.error||'AI key ekleyin')}</div>`;}catch(e){box.innerHTML='';}}
 
