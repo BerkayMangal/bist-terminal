@@ -394,6 +394,9 @@ def compute_metrics(symbol):
     asset_to = (revenue/total_assets) if revenue is not None and total_assets not in (None, 0) else None
     asset_to_p = (revenue_prev/total_assets_prev) if revenue_prev is not None and total_assets_prev not in (None, 0) else None
 
+    # V7: Institutional holders — yabanci/kurum proxy
+    inst_holders_pct = safe_num(info.get("heldPercentInstitutions"))
+
     m = {
         "symbol": symbol, "ticker": base_ticker(symbol),
         "name": str(info.get("shortName") or info.get("longName") or symbol),
@@ -428,6 +431,7 @@ def compute_metrics(symbol):
         "revenue_growth": rev_growth, "eps_growth": eps_growth, "ebitda_growth": ebit_growth,
         "peg": peg, "graham_fv": graham_fv, "margin_safety": mos,
         "share_change": share_ch, "asset_turnover": asset_to, "asset_turnover_prev": asset_to_p,
+        "inst_holders_pct": inst_holders_pct,  # V7: yabanci/kurum orani proxy
     }
     m["piotroski_f"] = compute_piotroski(m)
     m["altman_z"] = compute_altman(m)
@@ -521,23 +525,218 @@ def score_capital(m):
         dil,
     ])
 
+# ================================================================
+# V7: 3 YENi HIBRIT SKORLAR — Momentum, Technical Break, Institutional Flow
+# Teknik veriyi (compute_technical output) kullanir
+# ================================================================
+
+def score_momentum(m, tech):
+    """Momentum skoru (0-100) — fiyat trendi, hacim, RSI bazli
+    - RSI_14 > 50 → +30
+    - Price > MA50 ve MA50 > MA200 (Golden Cross pozisyon) → +30
+    - Volume ratio (5d/20d) > 2.0 → +25
+    - 20 gunluk fiyat degisimi > %15 → +15
+    """
+    if tech is None:
+        return None
+    pts = 0.0
+    components = 0
+
+    # RSI > 50 → momentum pozitif
+    rsi = safe_num(tech.get("rsi"))
+    if rsi is not None:
+        components += 1
+        if rsi > 70:
+            pts += 30  # cok guclu ama asiri alim riski — tam puan ver momentum icin
+        elif rsi > 50:
+            pts += 30 * ((rsi - 50) / 20)  # 50-70 arasi lineer interpolasyon (0-30)
+        # RSI < 50 → 0 puan
+
+    # Price > MA50 AND MA50 > MA200 → guclu yukari trend
+    price = safe_num(tech.get("price"))
+    ma50 = safe_num(tech.get("ma50"))
+    ma200 = safe_num(tech.get("ma200"))
+    if price is not None and ma50 is not None:
+        components += 1
+        if ma200 is not None and price > ma50 and ma50 > ma200:
+            pts += 30  # tam golden cross pozisyonu
+        elif price > ma50:
+            pts += 15  # sadece MA50 uzerinde
+
+    # Volume ratio — son 5 gunluk hacim / 20 gunluk ortalama
+    vol_ratio = safe_num(tech.get("vol_ratio"))
+    if vol_ratio is not None:
+        components += 1
+        if vol_ratio > 2.0:
+            pts += 25
+        elif vol_ratio > 1.5:
+            pts += 15
+        elif vol_ratio > 1.2:
+            pts += 8
+
+    # 20 gunluk fiyat degisimi (price_history'den hesapla)
+    ph = tech.get("price_history")
+    if ph and len(ph) >= 20 and price is not None:
+        components += 1
+        price_20d_ago = safe_num(ph[-20].get("close")) if len(ph) >= 20 else None
+        if price_20d_ago and price_20d_ago > 0:
+            chg_20d = (price - price_20d_ago) / price_20d_ago
+            if chg_20d > 0.15:
+                pts += 15
+            elif chg_20d > 0.08:
+                pts += 10
+            elif chg_20d > 0.03:
+                pts += 5
+
+    if components == 0:
+        return None
+    # Normalize: max 100 puan
+    return min(round(pts, 1), 100.0)
+
+
+def score_technical_break(m, tech):
+    """Technical Break skoru (0-100) — kirilim sinyalleri
+    - Fiyat direnc kirilimi (52W high'a %5 icinde veya uzerinde) → +40
+    - Golden Cross tespit edildi → +30
+    - Bollinger Upper Band kirilimi → +20
+    - Bullish RSI divergence (RSI yukselen + fiyat dusuk → basit proxy) → +10
+    """
+    if tech is None:
+        return None
+    pts = 0.0
+    components = 0
+
+    # Direnc kirilimi: 52W high'a yakinlik
+    price = safe_num(tech.get("price"))
+    pct_from_high = safe_num(tech.get("pct_from_high"))
+    if price is not None and pct_from_high is not None:
+        components += 1
+        if pct_from_high >= 0:
+            pts += 40  # 52W high'in UZERINDE — tam kirilim
+        elif pct_from_high >= -5:
+            pts += 30  # %5 icinde — kirilim yaklasiyor
+        elif pct_from_high >= -10:
+            pts += 15  # %10 icinde — potansiyel
+
+    # Golden Cross
+    cross_signal = tech.get("cross_signal")
+    if cross_signal is not None:
+        components += 1
+        if cross_signal == "GOLDEN_CROSS":
+            pts += 30
+    elif tech.get("ma50") and tech.get("ma200"):
+        components += 1
+        # MA50 > MA200 ama golden cross yeni olmasa da — trend puan
+        if safe_num(tech.get("ma50")) > safe_num(tech.get("ma200")):
+            pts += 15
+
+    # Bollinger Upper Band kirilimi
+    bb_pos = tech.get("bb_pos")
+    if bb_pos is not None:
+        components += 1
+        if bb_pos == "ABOVE":
+            pts += 20  # ust band kirildi — momentum guclu
+        elif bb_pos == "INSIDE":
+            pts += 5   # band icinde — notr
+
+    # Bullish RSI divergence proxy:
+    # RSI yukseliyor + MACD bullish cross → divergence sinyali
+    macd_cross = tech.get("macd_cross")
+    rsi = safe_num(tech.get("rsi"))
+    if macd_cross is not None and rsi is not None:
+        components += 1
+        if macd_cross == "BULLISH" and rsi < 60:
+            pts += 10  # MACD bullish cross + RSI henuz asiri alimda degil
+        elif macd_cross == "BULLISH":
+            pts += 5
+
+    if components == 0:
+        return None
+    return min(round(pts, 1), 100.0)
+
+
+def score_institutional_flow(m, tech):
+    """Institutional Flow skoru (0-100) — kurum/yabanci akisi proxy
+    Gercek MKK/takas verisi yok → yfinance proxy kullan:
+    - yfinance heldPercentInstitutions yuksekse → +40
+    - Hacim spike + fiyat artisi birlikteyse (kurum alim proxy) → +30
+    - Volume trend yukari + MA50 uzerinde (akümülasyon) → +30
+    """
+    pts = 0.0
+    components = 0
+
+    # Institutional ownership from yfinance (proxy for yabanci orani)
+    inst_pct = safe_num(m.get("inst_holders_pct"))
+    if inst_pct is not None:
+        components += 1
+        if inst_pct > 0.70:
+            pts += 40  # %70+ kurum/yabanci — cok guclu
+        elif inst_pct > 0.50:
+            pts += 30
+        elif inst_pct > 0.30:
+            pts += 20
+        elif inst_pct > 0.10:
+            pts += 10
+
+    if tech is not None:
+        # Hacim spike + fiyat artisi (kurum alim proxy)
+        vol_ratio = safe_num(tech.get("vol_ratio"))
+        ph = tech.get("price_history")
+        if vol_ratio is not None and ph and len(ph) >= 5:
+            components += 1
+            price_now = safe_num(ph[-1].get("close"))
+            price_5d = safe_num(ph[-5].get("close"))
+            if price_now and price_5d and price_5d > 0:
+                chg_5d = (price_now - price_5d) / price_5d
+                if vol_ratio > 1.5 and chg_5d > 0.03:
+                    pts += 30  # hacim yuksek + fiyat artiyor → kurum aliyor
+                elif vol_ratio > 1.2 and chg_5d > 0.01:
+                    pts += 15
+                elif vol_ratio > 1.5 and chg_5d < -0.03:
+                    pts += 0   # hacim yuksek + fiyat dusuyor → kurum satiyor
+
+        # Volume trend + MA50 uzerinde (akumulasyon)
+        price = safe_num(tech.get("price"))
+        ma50 = safe_num(tech.get("ma50"))
+        if price is not None and ma50 is not None and vol_ratio is not None:
+            components += 1
+            if price > ma50 and vol_ratio > 1.0:
+                pts += 30  # fiyat MA50 uzerinde + hacim ortalamanin uzerinde
+            elif price > ma50:
+                pts += 15  # fiyat MA50 uzerinde ama hacim dusuk
+            elif vol_ratio > 1.5:
+                pts += 5   # fiyat altinda ama hacim yuksek — potansiyel dip alim
+
+    if components == 0:
+        return None
+    return min(round(pts, 1), 100.0)
+
+
 def confidence_score(m):
+    # V7: yeni metrikler eklendi
     keys = ["pe","pb","fcf_yield","roe","roic","operating_margin","revenue_growth","eps_growth",
-            "net_debt_ebitda","interest_coverage","cfo_to_ni","piotroski_f","altman_z","peg","margin_safety"]
+            "net_debt_ebitda","interest_coverage","cfo_to_ni","piotroski_f","altman_z","peg","margin_safety",
+            "inst_holders_pct"]
     have = sum(1 for k in keys if safe_num(m.get(k)) is not None)
     return round(100 * have / len(keys), 1)
 
 def style_label(scores):
     v, q, g, moat = scores["value"], scores["quality"], scores["growth"], scores["moat"]
     bal = scores["balance"]
+    mom = scores.get("momentum", 50)
+    tb = scores.get("tech_break", 50)
+    # V7: Momentum-bazli yeni stiller eklendi
+    if mom >= 75 and tb >= 70 and g >= 55: return "Momentum Leader"
     if q >= 75 and g >= 60 and v >= 40 and moat >= 60: return "Quality Compounder"
     if q >= 72 and moat >= 65 and v < 40: return "Premium Compounder"
     if v >= 75 and bal >= 55: return "Deep Value"
     if g >= 70 and v >= 45: return "GARP"
+    if mom >= 65 and tb >= 60 and v < 45: return "Teknik Breakout"
     if g >= 65 and q >= 55 and v < 45: return "Growth"
     if v >= 70 and q < 45: return "Value Trap Risk"
     if bal < 40 and g >= 50: return "High-Risk Turnaround"
     if scores.get("capital", 50) >= 70 and q >= 55: return "Income / Dividend"
+    if mom < 30 and tb < 30: return "Momentum Zayif"
     return "Balanced"
 
 def legendary_labels(m, scores):
@@ -563,6 +762,10 @@ def drivers(scores, confidence):
     if scores["moat"] >= 65: pos.append("Signs of pricing power / margin stability")
     if scores["capital"] >= 65: pos.append("Shareholder-friendly capital allocation")
     if scores["growth"] >= 70: pos.append("Strong growth trajectory")
+    # V7: Yeni boyutlar
+    if scores.get("momentum", 50) >= 70: pos.append("Guclu momentum — fiyat ve hacim destekli")
+    if scores.get("tech_break", 50) >= 70: pos.append("Teknik kirilim sinyali aktif")
+    if scores.get("inst_flow", 50) >= 65: pos.append("Kurumsal/yabanci alis akisi pozitif")
     if not pos: pos.append("Balanced profile, no single elite category")
     if scores["value"] < 40: neg.append("Valuation looks expensive")
     if scores["quality"] < 40: neg.append("Low profitability — margins or ROIC weak")
@@ -570,22 +773,59 @@ def drivers(scores, confidence):
     if scores["balance"] < 40: neg.append("Debt / liquidity needs watch")
     if scores["earnings"] < 40: neg.append("Cash flow trails accounting profits")
     if scores["moat"] < 35: neg.append("Margin stability weak — no pricing power")
+    # V7: Yeni negatifler
+    if scores.get("momentum", 50) < 30: neg.append("Momentum cok zayif — dusus trendinde")
+    if scores.get("tech_break", 50) < 25: neg.append("Teknik goruntu olumsuz — direnc uzak")
+    if scores.get("inst_flow", 50) < 25: neg.append("Kurumsal ilgi dusuk veya satis baskisi")
     if confidence < 65: neg.append("Some metrics missing; treat with caution")
     if not neg: neg.append("No major red flag right now")
-    return pos[:4], neg[:4]
+    return pos[:5], neg[:5]  # V7: 4'ten 5'e cikardi — daha fazla insight
 
 # ================================================================
-# ANALYZE — verbatim from fa_bot.py
+# ANALYZE — V7: 9 Boyutlu Hibrit Skorlama
+# Temel 7 boyut korundu + Momentum, Technical Break, Institutional Flow eklendi
 # ================================================================
 def analyze_symbol(symbol):
     if symbol in ANALYSIS_CACHE: return ANALYSIS_CACHE[symbol]
     m = compute_metrics(symbol)
+
+    # V7: Teknik veriyi al — yeni 3 boyut icin gerekli
+    tech = None
+    try:
+        tech = compute_technical(symbol)
+    except Exception as e:
+        log.debug(f"analyze_symbol tech for {symbol}: {e}")
+
+    # Mevcut 7 temel boyut (korundu)
     scores = {k: round((f(m) or 50), 1) for k, f in [
         ("value", score_value), ("quality", score_quality), ("growth", score_growth),
         ("balance", score_balance), ("earnings", score_earnings), ("moat", score_moat), ("capital", score_capital),
     ]}
-    overall = (0.20*scores["value"] + 0.22*scores["quality"] + 0.15*scores["growth"]
-              + 0.20*scores["balance"] + 0.10*scores["earnings"] + 0.08*scores["moat"] + 0.05*scores["capital"])
+
+    # V7: Yeni 3 hibrit boyut — teknik veri gerektirir
+    mom = score_momentum(m, tech)
+    tb = score_technical_break(m, tech)
+    inst = score_institutional_flow(m, tech)
+    scores["momentum"] = round(mom, 1) if mom is not None else 50.0
+    scores["tech_break"] = round(tb, 1) if tb is not None else 50.0
+    scores["inst_flow"] = round(inst, 1) if inst is not None else 50.0
+
+    # V7: 9 Boyutlu Agirlikli Ortalama (toplam %100)
+    # Value:14 Quality:14 Growth:12 Balance:12 Earnings:10 Moat:10
+    # Momentum:12 Tech Break:10 Inst Flow:6
+    overall = (
+        0.14 * scores["value"]
+      + 0.14 * scores["quality"]
+      + 0.12 * scores["growth"]
+      + 0.12 * scores["balance"]
+      + 0.10 * scores["earnings"]
+      + 0.10 * scores["moat"]
+      + 0.12 * scores["momentum"]
+      + 0.10 * scores["tech_break"]
+      + 0.06 * scores["inst_flow"]
+    )
+
+    # Penalti / bonus kuralları korundu
     if m.get("equity") is not None and m["equity"] < 0: overall -= 12
     if m.get("net_income") is not None and m["net_income"] < 0: overall -= 8
     if m.get("operating_cf") is not None and m["operating_cf"] < 0: overall -= 8
