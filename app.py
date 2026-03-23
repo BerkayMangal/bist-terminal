@@ -50,9 +50,9 @@ except ImportError:
 
 AI_AVAILABLE = len(AI_PROVIDERS) > 0
 
-BOT_VERSION = "V7.6"
+BOT_VERSION = "V8.0"
 APP_NAME = "BISTBULL TERMINAL"
-CONFIDENCE_MIN = 55
+CONFIDENCE_MIN = 50  # V8: 55→50 (daha geniş universe, daha toleranslı)
 
 # ================================================================
 # ENV VARS
@@ -104,14 +104,33 @@ def ai_call(prompt, max_tokens=200):
     return None
 
 # ================================================================
-# UNIVERSE
+# UNIVERSE — BIST 100 (V8 genişletilmiş)
 # ================================================================
-UNIVERSE = [
+UNIVERSE_BIST30 = [
     "ASELS","THYAO","BIMAS","KCHOL","SISE","EREGL","TUPRS","AKBNK","ISCTR","YKBNK",
     "GARAN","SAHOL","MGROS","FROTO","TOASO","TCELL","KRDMD","PETKM","ENKAI","TAVHL",
-    "PGSUS","EKGYO","INDES","TTKOM","ARCLK","VESTL","DOHOL","AYGAZ","LOGO","SOKM",
-    "TKFEN","KONTR","ODAS","GUBRF","SASA","ISMEN","OYAKC","CIMSA","MPARK","AKSEN",
+    "PGSUS","EKGYO","ARCLK","TTKOM","SOKM","TKFEN","KONTR","AKSEN","KOZAL","HEKTS",
 ]
+UNIVERSE_EXTRA = [
+    # Sanayi / Otomotiv
+    "VESTL","DOHOL","AYGAZ","LOGO","INDES","ODAS","GUBRF","SASA","CIMSA","MPARK",
+    "OYAKC","ISMEN","TTRAK","AEFES","KOZAA","DOAS","AGHOL",
+    # Enerji / Maden
+    "GESAN","ZOREN","ENJSA","AYDEM",
+    # Finans (holding + sigorta + GYO)
+    "HALKB","VAKBN","TSKB","SKBNK","ALBRK","ANHYT","AGESA",
+    # Perakende / Tüketici
+    "ULKER","CCOLA","PNSUT","MAVI","BIZIM",
+    # Teknoloji / Telekom
+    "NETAS","KRONT","ALARK","ASTOR",
+    # İnşaat / GYO
+    "ISGYO","HLGYO","KLGYO",
+    # Ulaştırma
+    "CLEBI","RYSAS",
+    # Diğer
+    "BRYAT","EUPWR","ISMEN","BRSAN","SARKY","GEDZA","BUCIM",
+]
+UNIVERSE = UNIVERSE_BIST30 + UNIVERSE_EXTRA
 
 # ================================================================
 # CACHES + LOGGING
@@ -439,46 +458,235 @@ def compute_metrics(symbol):
     return m
 
 # ================================================================
-# SCORING — verbatim from fa_bot.py (BIST-calibrated V5.1)
+# SCORING — BIST-calibrated V8.0 with Sector Thresholds
 # ================================================================
-def score_value(m):
+
+# Sektör-bazlı eşik override sistemi
+# Her sektör grubu için farklı "harika/iyi/orta/kötü" eşikleri
+# Format: (bad/great, ok/good, good/ok, great/bad) — score_higher ve score_lower'a direkt girer
+SECTOR_THRESHOLDS = {
+    "banka": {
+        "pe": (12, 8, 5, 3),          # bankalar düşük P/E normaldir
+        "pb": (1.8, 1.2, 0.8, 0.5),   # PD/DD banka için en önemli
+        "roe": (0.08, 0.14, 0.20, 0.28),
+        "net_margin": (0.05, 0.12, 0.20, 0.30),
+        "ev_ebitda": None,              # bankalar için anlamsız
+        "debt_equity": None,            # bankalar için anlamsız
+        "current_ratio": None,          # bankalar için anlamsız
+    },
+    "holding": {
+        "pe": (18, 12, 8, 5),
+        "pb": (1.8, 1.3, 0.9, 0.5),
+        "roe": (0.04, 0.08, 0.14, 0.20),
+        "net_margin": (0.03, 0.06, 0.12, 0.20),
+    },
+    "savunma": {
+        "pe": (30, 20, 14, 8),          # savunma pahalı olabilir
+        "ev_ebitda": (16, 12, 8, 5),
+        "roe": (0.06, 0.12, 0.18, 0.25),
+        "revenue_growth": (-0.02, 0.08, 0.18, 0.30),
+    },
+    "enerji": {
+        "pe": (10, 7, 4, 2),            # enerji/emtia döngüsel, ucuz olmalı
+        "ev_ebitda": (10, 7, 5, 3),
+        "net_margin": (0.01, 0.04, 0.08, 0.15),
+        "net_debt_ebitda": (3.5, 2.5, 1.5, 0.5),
+    },
+    "perakende": {
+        "pe": (22, 16, 10, 6),
+        "net_margin": (0.01, 0.03, 0.06, 0.10),
+        "revenue_growth": (-0.03, 0.08, 0.15, 0.25),
+        "asset_turnover": (0.5, 0.9, 1.4, 2.0),
+    },
+    "ulasim": {
+        "pe": (12, 8, 5, 3),
+        "ev_ebitda": (8, 6, 4, 3),
+        "roe": (0.05, 0.10, 0.16, 0.24),
+        "net_debt_ebitda": (3.5, 2.5, 1.5, 0.5),
+    },
+    "sanayi": {
+        "pe": (20, 14, 8, 5),
+        "roe": (0.04, 0.10, 0.16, 0.22),
+        "roic": (0.03, 0.08, 0.13, 0.18),
+        "net_margin": (0.02, 0.06, 0.10, 0.16),
+        "ev_ebitda": (12, 8, 5, 3),
+    },
+}
+
+# yfinance sector string → bizim sektör grubu
+def _map_sector(sector_str):
+    s = (sector_str or "").lower()
+    if any(k in s for k in ["bank", "financial serv"]): return "banka"
+    if any(k in s for k in ["holding", "conglomerate", "industrial conglomerate"]): return "holding"
+    if any(k in s for k in ["defense", "aerospace"]): return "savunma"
+    if any(k in s for k in ["energy", "oil", "gas", "refin", "mining", "metals"]): return "enerji"
+    if any(k in s for k in ["retail", "consumer", "food", "beverage", "household"]): return "perakende"
+    if any(k in s for k in ["airline", "transport", "logistic", "shipping"]): return "ulasim"
+    return "sanayi"  # default
+
+def _get_threshold(sector_group, metric_key, default):
+    """Sektör override varsa onu döndür, yoksa default eşik"""
+    grp = SECTOR_THRESHOLDS.get(sector_group, {})
+    val = grp.get(metric_key)
+    if val is None and metric_key in grp:
+        return None  # explicitly disabled for this sector (e.g. banks: EV/EBITDA)
+    return val if val else default
+
+# ================================================================
+# KADEMELİ RİSK PENALTI TABLOSU
+# ================================================================
+def _graduated_penalty(value, thresholds):
+    """Kademeli penalti: [(eşik, penalti), ...] — ilk eşleşen uygulanır"""
+    if value is None: return 0
+    for threshold, penalty in thresholds:
+        if value >= threshold: return penalty
+    return 0
+
+_PENALTY_ND_EBITDA = [(5.0, -25), (4.0, -18), (3.0, -12), (2.5, -8), (2.0, -4)]
+_PENALTY_INT_COV = [(0, 0)]  # reverse: düşük = kötü
+_PENALTY_INT_COV_LOW = [(0, -25), (1.0, -18), (1.5, -12), (2.0, -8), (3.0, -4)]
+_PENALTY_DILUTION = [(0.20, -20), (0.10, -12), (0.05, -6), (0.02, -3)]
+_PENALTY_BENEISH = [(-1.5, -18), (-1.78, -10), (-2.22, -3)]
+
+def _compute_risk_penalties(m):
+    """Kademeli risk penaltileri hesapla — toplam döndür"""
+    total = 0
+    reasons = []
+    # Negatif özsermaye — en ağır
+    if m.get("equity") is not None and m["equity"] < 0:
+        total -= 15; reasons.append("Negatif özsermaye (-15)")
+    # Net zarar
+    if m.get("net_income") is not None and m["net_income"] < 0:
+        total -= 10; reasons.append("Net zarar (-10)")
+    # Negatif nakit akış
+    if m.get("operating_cf") is not None and m["operating_cf"] < 0:
+        total -= 8; reasons.append("Negatif nakit akışı (-8)")
+    # NB/FAVÖK kademeli
+    nd = m.get("net_debt_ebitda")
+    if nd is not None and nd > 0:
+        p = _graduated_penalty(nd, _PENALTY_ND_EBITDA)
+        if p: total += p; reasons.append(f"Yüksek NB/FAVÖK {nd:.1f}x ({p:+d})")
+    # Faiz karşılama kademeli (düşük = kötü)
+    ic = m.get("interest_coverage")
+    if ic is not None and ic < 3.0:
+        p = 0
+        if ic < 1.0: p = -20
+        elif ic < 1.5: p = -12
+        elif ic < 2.0: p = -8
+        elif ic < 3.0: p = -4
+        if p: total += p; reasons.append(f"Düşük faiz karşılama {ic:.1f}x ({p:+d})")
+    # Beneish kademeli
+    bm = m.get("beneish_m")
+    if bm is not None and bm > -2.22:
+        p = _graduated_penalty(bm, _PENALTY_BENEISH)
+        if p: total += p; reasons.append(f"Beneish risk {bm:.2f} ({p:+d})")
+    # Hisse seyreltme
+    sc = m.get("share_change")
+    if sc is not None and sc > 0.02:
+        p = _graduated_penalty(sc, _PENALTY_DILUTION)
+        if p: total += p; reasons.append(f"Hisse seyreltme %{sc*100:.0f} ({p:+d})")
+    # Bonus: net nakit pozisyonu
+    if m.get("total_debt") is not None and m.get("cash") is not None:
+        if m["cash"] > (m["total_debt"] or 0) * 1.2:
+            total += 4; reasons.append("Güçlü net nakit pozisyonu (+4)")
+    return total, reasons
+
+# ================================================================
+# LABEL SİSTEMİ — Zamanlama + Kalite + Karar
+# ================================================================
+def timing_label(ivme_score, momentum_score=None):
+    """İVME skoruna göre zamanlama etiketi"""
+    s = ivme_score or 50
+    if s < 30: return "ERKEN"       # henüz kimse fark etmedi
+    if s < 55: return "GELİŞİYOR"   # sinyaller oluşuyor
+    if s < 75: return "TEYİTLİ"     # trend başladı
+    if s < 88: return "GEÇ"         # fiyatlanmış olabilir
+    return "AŞIRI"                   # çok geç, dikkat
+
+def quality_label(deger_score):
+    """DEĞER skoruna göre kalite etiketi"""
+    s = deger_score or 50
+    if s >= 78: return "ELİT"
+    if s >= 62: return "GÜÇLÜ"
+    if s >= 45: return "ORTA"
+    if s >= 30: return "ZAYIF"
+    return "RİSKLİ"
+
+def decision_engine(deger, ivme, risk_penalty):
+    """DEĞER + İVME + Risk → AL/İZLE/BEKLE/KAÇIN kararı"""
+    d, i, r = deger or 50, ivme or 50, risk_penalty or 0
+
+    # Ağır risk → otomatik KAÇIN
+    if r <= -25: return "KAÇIN"
+    if d < 30: return "KAÇIN"
+
+    # Güçlü temel + erken/teyitli momentum
+    if d >= 70 and i >= 40 and i < 80 and r > -15:
+        return "AL"
+    # Güçlü temel + çok erken (henüz momentum yok)
+    if d >= 65 and i < 40 and r > -10:
+        return "İZLE"
+    # İyi temel + teyitli momentum ama geç
+    if d >= 60 and i >= 75:
+        return "BEKLE"
+    # Orta temel + güçlü momentum
+    if d >= 50 and i >= 55 and r > -15:
+        return "İZLE"
+    # Orta/zayıf her şey
+    if d >= 45 and r > -20:
+        return "BEKLE"
+    return "KAÇIN"
+def score_value(m, sector_group=None):
+    th_pe = _get_threshold(sector_group, "pe", (25, 16, 10, 6))
+    th_pb = _get_threshold(sector_group, "pb", (4.5, 2.5, 1.5, 0.8))
+    th_ev = _get_threshold(sector_group, "ev_ebitda", (16, 11, 7, 4))
     ev_sales = None
     if m.get("market_cap") and m.get("total_debt") and m.get("cash") and m.get("revenue"):
         ev = m["market_cap"] + (m["total_debt"] or 0) - (m["cash"] or 0)
         if m["revenue"] > 0:
             ev_sales = ev / m["revenue"]
-    return avg([
-        score_lower(m.get("pe"), 6, 10, 16, 25) if (m.get("pe") or 0) > 0 else None,
-        score_lower(m.get("pb"), 0.8, 1.5, 2.5, 4.5) if (m.get("pb") or 0) > 0 else None,
-        score_lower(m.get("ev_ebitda"), 4, 7, 11, 16) if (m.get("ev_ebitda") or 0) > 0 else None,
+    parts = [
+        score_lower(m.get("pe"), *th_pe) if th_pe and (m.get("pe") or 0) > 0 else None,
+        score_lower(m.get("pb"), *th_pb) if th_pb and (m.get("pb") or 0) > 0 else None,
+        score_lower(m.get("ev_ebitda"), *th_ev) if th_ev and (m.get("ev_ebitda") or 0) > 0 else None,
         score_lower(ev_sales, 0.5, 1.2, 2.5, 5.0) if ev_sales is not None and ev_sales > 0 else None,
         score_higher(m.get("fcf_yield"), 0, 0.02, 0.05, 0.08),
         score_higher(m.get("margin_safety"), -0.2, 0, 0.15, 0.30),
-    ])
+    ]
+    return avg(parts)
 
-def score_quality(m):
+def score_quality(m, sector_group=None):
+    th_roe = _get_threshold(sector_group, "roe", (0.01, 0.06, 0.12, 0.20))
+    th_roic = _get_threshold(sector_group, "roic", (0.01, 0.06, 0.10, 0.16))
+    th_nm = _get_threshold(sector_group, "net_margin", (0.005, 0.03, 0.08, 0.15))
     return avg([
-        score_higher(m.get("roe"), 0.01, 0.06, 0.12, 0.20),
-        score_higher(m.get("roic"), 0.01, 0.06, 0.10, 0.16),
+        score_higher(m.get("roe"), *th_roe) if th_roe else None,
+        score_higher(m.get("roic"), *th_roic) if th_roic else None,
         score_higher(m.get("gross_margin"), 0.08, 0.15, 0.25, 0.40),
         score_higher(m.get("operating_margin"), 0.02, 0.06, 0.12, 0.20),
-        score_higher(m.get("net_margin"), 0.005, 0.03, 0.08, 0.15),
+        score_higher(m.get("net_margin"), *th_nm) if th_nm else None,
     ])
 
-def score_growth(m):
+def score_growth(m, sector_group=None):
+    th_rg = _get_threshold(sector_group, "revenue_growth", (-0.05, 0.05, 0.15, 0.30))
     return avg([
-        score_higher(m.get("revenue_growth"), -0.05, 0.05, 0.15, 0.30),
+        score_higher(m.get("revenue_growth"), *th_rg) if th_rg else None,
         score_higher(m.get("eps_growth"), -0.10, 0.05, 0.15, 0.30),
         score_higher(m.get("ebitda_growth"), -0.05, 0.05, 0.12, 0.25),
         score_lower(m.get("peg"), 0.5, 1.0, 1.8, 3.0) if (m.get("peg") or 0) > 0 else None,
     ])
 
-def score_balance(m):
+def score_balance(m, sector_group=None):
+    th_nde = _get_threshold(sector_group, "net_debt_ebitda", (0.5, 1.5, 2.5, 4.0))
+    th_de = _get_threshold(sector_group, "debt_equity", (30, 80, 150, 300))
+    th_cr = _get_threshold(sector_group, "current_ratio", (0.8, 1.1, 1.5, 2.2))
     nde = m.get("net_debt_ebitda")
-    nde_s = 100.0 if nde is not None and nde < 0 else score_lower(nde, 0.5, 1.5, 2.5, 4.0)
+    nde_s = None
+    if th_nde:
+        nde_s = 100.0 if nde is not None and nde < 0 else score_lower(nde, *th_nde)
     return avg([nde_s,
-        score_lower(m.get("debt_equity"), 30, 80, 150, 300),
-        score_higher(m.get("current_ratio"), 0.8, 1.1, 1.5, 2.2),
+        score_lower(m.get("debt_equity"), *th_de) if th_de else None,
+        score_higher(m.get("current_ratio"), *th_cr) if th_cr else None,
         score_higher(m.get("interest_coverage"), 1.5, 3.0, 6.0, 12.0),
         score_higher(m.get("altman_z"), 1.2, 1.8, 3.0, 4.5),
     ])
@@ -753,59 +961,69 @@ def legendary_labels(m, scores):
         az_l = "N/A (Banka)"
     return {"piotroski": pf_l, "altman": az_l, "beneish": bm_l, "peg": peg_l, "graham_mos": mos_l, "buffett_filter": buffett, "graham_filter": graham}
 
-def drivers(scores, confidence):
+def drivers(scores, confidence, m=None, sector_group=None):
     pos, neg = [], []
-    if scores["quality"] >= 70: pos.append("Good business quality (ROIC / margins strong)")
-    if scores["earnings"] >= 65: pos.append("Cash flow supports earnings")
-    if scores["balance"] >= 70: pos.append("Balance sheet solid")
-    if scores["value"] >= 70: pos.append("Looks cheap vs fundamentals")
-    if scores["moat"] >= 65: pos.append("Signs of pricing power / margin stability")
-    if scores["capital"] >= 65: pos.append("Shareholder-friendly capital allocation")
-    if scores["growth"] >= 70: pos.append("Strong growth trajectory")
-    # V7: Yeni boyutlar
-    if scores.get("momentum", 50) >= 70: pos.append("Guclu momentum — fiyat ve hacim destekli")
-    if scores.get("tech_break", 50) >= 70: pos.append("Teknik kirilim sinyali aktif")
-    if scores.get("inst_flow", 50) >= 65: pos.append("Kurumsal/yabanci alis akisi pozitif")
-    if not pos: pos.append("Balanced profile, no single elite category")
-    if scores["value"] < 40: neg.append("Valuation looks expensive")
-    if scores["quality"] < 40: neg.append("Low profitability — margins or ROIC weak")
-    if scores["growth"] < 40: neg.append("Growth weak or inconsistent")
-    if scores["balance"] < 40: neg.append("Debt / liquidity needs watch")
-    if scores["earnings"] < 40: neg.append("Cash flow trails accounting profits")
-    if scores["moat"] < 35: neg.append("Margin stability weak — no pricing power")
-    # V7: Yeni negatifler
-    if scores.get("momentum", 50) < 30: neg.append("Momentum cok zayif — dusus trendinde")
-    if scores.get("tech_break", 50) < 25: neg.append("Teknik goruntu olumsuz — direnc uzak")
-    if scores.get("inst_flow", 50) < 25: neg.append("Kurumsal ilgi dusuk veya satis baskisi")
-    if confidence < 65: neg.append("Some metrics missing; treat with caution")
-    if not neg: neg.append("No major red flag right now")
-    return pos[:5], neg[:5]  # V7: 4'ten 5'e cikardi — daha fazla insight
+    # Spesifik açıklamalar (rakam kullan)
+    roe = m.get("roe") if m else None
+    pe = m.get("pe") if m else None
+    nd = m.get("net_debt_ebitda") if m else None
+    rg = m.get("revenue_growth") if m else None
+    fcfy = m.get("fcf_yield") if m else None
+    if scores["quality"] >= 70:
+        pos.append(f"Yüksek iş kalitesi{f' — ROE %{roe*100:.0f}' if roe else ''}")
+    if scores["earnings"] >= 65: pos.append("Nakit akış kârı destekliyor")
+    if scores["balance"] >= 70:
+        pos.append(f"Sağlam bilanço{f' — NB/FAVÖK {nd:.1f}x' if nd is not None else ''}")
+    if scores["value"] >= 70:
+        pos.append(f"Ucuz değerleme{f' — F/K {pe:.1f}' if pe else ''}")
+    if scores["moat"] >= 65: pos.append("Fiyatlama gücü ve marj stabilitesi")
+    if scores["growth"] >= 70:
+        pos.append(f"Güçlü büyüme{f' — gelir +%{rg*100:.0f}' if rg else ''}")
+    if scores.get("momentum", 50) >= 70: pos.append("Güçlü momentum — fiyat ve hacim destekli")
+    if scores.get("tech_break", 50) >= 70: pos.append("Teknik kırılım sinyali aktif")
+    if scores.get("inst_flow", 50) >= 65: pos.append("Kurumsal alış akışı pozitif")
+    if not pos: pos.append("Dengeli profil, öne çıkan kategorisi yok")
+    if scores["value"] < 40:
+        neg.append(f"Pahalı değerleme{f' — F/K {pe:.1f}' if pe else ''}")
+    if scores["quality"] < 40: neg.append("Düşük kârlılık — marjlar veya ROIC zayıf")
+    if scores["growth"] < 40: neg.append("Büyüme zayıf veya tutarsız")
+    if scores["balance"] < 40:
+        neg.append(f"Borç/likidite riski{f' — NB/FAVÖK {nd:.1f}x' if nd is not None else ''}")
+    if scores["earnings"] < 40: neg.append("Nakit akış muhasebe kârının gerisinde")
+    if scores["moat"] < 35: neg.append("Marj stabilitesi zayıf — fiyatlama gücü yok")
+    if scores.get("momentum", 50) < 30: neg.append("Momentum çok zayıf — düşüş trendinde")
+    if scores.get("tech_break", 50) < 25: neg.append("Teknik görünüm olumsuz")
+    if scores.get("inst_flow", 50) < 25: neg.append("Kurumsal ilgi düşük veya satış baskısı")
+    if confidence < 65: neg.append("Bazı veriler eksik — dikkatli değerlendir")
+    if not neg: neg.append("Şu an belirgin bir risk yok")
+    return pos[:5], neg[:5]
 
 # ================================================================
-# ANALYZE — V7.1: DEĞER/İVME İkili Skorlama Sistemi
-# DEĞER (6 boyut, uzun vade): Ne almalıyım?
-# İVME (3 boyut, kısa vade): Ne zaman girmeliyim?
-# Combined overall = DEĞER × 0.55 + İVME × 0.45
+# ANALYZE — V8.0: Sektör-bazlı + Label + Decision Engine
 # ================================================================
 def analyze_symbol(symbol):
     if symbol in ANALYSIS_CACHE: return ANALYSIS_CACHE[symbol]
     m = compute_metrics(symbol)
+    sector_group = _map_sector(m.get("sector", ""))
 
-    # Teknik veriyi al — İVME boyutlari icin gerekli
+    # Teknik veriyi al
     tech = None
     try:
         tech = compute_technical(symbol)
     except Exception as e:
         log.debug(f"analyze_symbol tech for {symbol}: {e}")
 
-    # --- DEĞER: 6 temel boyut ---
-    scores = {k: round((f(m) or 50), 1) for k, f in [
-        ("value", score_value), ("quality", score_quality), ("growth", score_growth),
-        ("balance", score_balance), ("earnings", score_earnings), ("moat", score_moat), ("capital", score_capital),
-    ]}
+    # --- DEĞER: 6 temel boyut (sektör-bazlı eşiklerle) ---
+    scores = {}
+    scores["value"] = round((score_value(m, sector_group) or 50), 1)
+    scores["quality"] = round((score_quality(m, sector_group) or 50), 1)
+    scores["growth"] = round((score_growth(m, sector_group) or 50), 1)
+    scores["balance"] = round((score_balance(m, sector_group) or 50), 1)
+    scores["earnings"] = round((score_earnings(m) or 50), 1)
+    scores["moat"] = round((score_moat(m) or 50), 1)
+    scores["capital"] = round((score_capital(m) or 50), 1)
 
-    # DEĞER agirlikli skoru (toplam %100 kendi icinde)
-    # Value:23 Quality:23 Growth:18 Balance:18 Earnings:10 Moat:8
+    # DEĞER ağırlıklı skoru
     deger_raw = (
         0.23 * scores["value"]
       + 0.23 * scores["quality"]
@@ -814,15 +1032,9 @@ def analyze_symbol(symbol):
       + 0.10 * scores["earnings"]
       + 0.08 * scores["moat"]
     )
-    # Penaltiler sadece DEĞER skoruna uygulanir
-    if m.get("equity") is not None and m["equity"] < 0: deger_raw -= 12
-    if m.get("net_income") is not None and m["net_income"] < 0: deger_raw -= 8
-    if m.get("operating_cf") is not None and m["operating_cf"] < 0: deger_raw -= 8
-    if m.get("interest_coverage") is not None and m["interest_coverage"] < 1.5: deger_raw -= 5
-    if m.get("beneish_m") is not None and m["beneish_m"] > -1.78: deger_raw -= 5
-    if m.get("total_debt") is not None and m.get("cash") is not None:
-        if m["cash"] > (m["total_debt"] or 0):
-            deger_raw += 3
+    # Kademeli penaltiler
+    risk_penalty, risk_reasons = _compute_risk_penalties(m)
+    deger_raw += risk_penalty
     deger_score = round(max(1, min(99, deger_raw)), 1)
 
     # --- İVME: 3 teknik boyut ---
@@ -833,26 +1045,32 @@ def analyze_symbol(symbol):
     scores["tech_break"] = round(tb, 1) if tb is not None else 50.0
     scores["inst_flow"] = round(inst, 1) if inst is not None else 50.0
 
-    # İVME agirlikli skoru (toplam %100 kendi icinde)
-    # Momentum:40 TechBreak:35 InstFlow:25
     ivme_score = round(max(1, min(99,
         0.40 * scores["momentum"]
       + 0.35 * scores["tech_break"]
       + 0.25 * scores["inst_flow"]
     )), 1)
 
-    # --- COMBINED OVERALL ---
+    # --- COMBINED ---
     overall = round(max(1, min(99, deger_score * 0.55 + ivme_score * 0.45)), 1)
+
+    # --- LABELS + DECISION ---
+    t_label = timing_label(ivme_score, scores.get("momentum"))
+    q_label = quality_label(deger_score)
+    decision = decision_engine(deger_score, ivme_score, risk_penalty)
 
     confidence = confidence_score(m)
     style = style_label(scores)
     legends = legendary_labels(m, scores)
-    pos, neg = drivers(scores, confidence)
+    pos, neg = drivers(scores, confidence, m, sector_group)
+
     r = {
         "symbol": symbol, "ticker": base_ticker(symbol), "name": m["name"], "currency": m["currency"],
-        "sector": m.get("sector", ""), "industry": m.get("industry", ""),
+        "sector": m.get("sector", ""), "sector_group": sector_group, "industry": m.get("industry", ""),
         "metrics": m, "scores": scores, "overall": overall, "confidence": confidence,
-        "deger": deger_score, "ivme": ivme_score,  # V7.1: ikili skor
+        "deger": deger_score, "ivme": ivme_score,
+        "timing": t_label, "quality_tag": q_label, "decision": decision,  # V8
+        "risk_penalty": risk_penalty, "risk_reasons": risk_reasons,        # V8
         "style": style, "legendary": legends, "positives": pos, "negatives": neg,
     }
     ANALYSIS_CACHE[symbol] = r
@@ -1694,12 +1912,16 @@ async def api_ai_summary(ticker: str):
         raise HTTPException(status_code=500, detail="AI ozet alinamadi")
 
 def _build_scan_item(r):
-    """Build a lightweight scan result item with DEĞER/İVME scores"""
+    """Build a lightweight scan result item — V8: labels + decision"""
     return {
         "ticker": r["ticker"], "name": r["name"],
         "overall": r["overall"], "confidence": r["confidence"],
-        "deger": r.get("deger", r["overall"]),  # V7.1: DEĞER skoru
-        "ivme": r.get("ivme", 50),               # V7.1: İVME skoru
+        "deger": r.get("deger", r["overall"]),
+        "ivme": r.get("ivme", 50),
+        "timing": r.get("timing", ""),          # V8: ERKEN/TEYİTLİ/GEÇ
+        "quality_tag": r.get("quality_tag", ""), # V8: ELİT/GÜÇLÜ/ORTA
+        "decision": r.get("decision", ""),       # V8: AL/İZLE/BEKLE/KAÇIN
+        "sector_group": r.get("sector_group", ""),
         "style": r["style"], "scores": r["scores"],
         "sector": r.get("sector", ""), "industry": r.get("industry", ""),
         "legendary": r["legendary"],
