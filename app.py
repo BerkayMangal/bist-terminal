@@ -1800,6 +1800,31 @@ async def api_market_status():
     return ms
 
 # ================================================================
+# ANALYTICS TRACKING — simple event counter
+# ================================================================
+TRACK_EVENTS = defaultdict(int)
+TRACK_LOG = []  # last 500 events
+
+@app.get("/api/track")
+async def api_track(e: str = ""):
+    """Simple event tracking — no database, memory only"""
+    if e:
+        TRACK_EVENTS[e] += 1
+        TRACK_LOG.append({"event": e, "ts": dt.datetime.now(dt.timezone.utc).isoformat()})
+        if len(TRACK_LOG) > 500:
+            TRACK_LOG.pop(0)
+    return {"ok": True}
+
+@app.get("/api/analytics")
+async def api_analytics():
+    """View tracked events"""
+    return {
+        "events": dict(TRACK_EVENTS),
+        "total": sum(TRACK_EVENTS.values()),
+        "recent": TRACK_LOG[-20:],
+    }
+
+# ================================================================
 # MACRO RADAR — expanded with EM indices + YTD/1M/1W
 # ================================================================
 MACRO_CACHE = TTLCache(maxsize=50, ttl=600)  # 10 min cache
