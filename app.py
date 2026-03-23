@@ -109,12 +109,12 @@ def ai_call(prompt, max_tokens=200):
 UNIVERSE_BIST30 = [
     "ASELS","THYAO","BIMAS","KCHOL","SISE","EREGL","TUPRS","AKBNK","ISCTR","YKBNK",
     "GARAN","SAHOL","MGROS","FROTO","TOASO","TCELL","KRDMD","PETKM","ENKAI","TAVHL",
-    "PGSUS","EKGYO","ARCLK","TTKOM","SOKM","TKFEN","KONTR","AKSEN","KOZAL","HEKTS",
+    "PGSUS","EKGYO","ARCLK","TTKOM","SOKM","TKFEN","KONTR","AKSEN","HEKTS",
 ]
 UNIVERSE_EXTRA = [
     # Sanayi / Otomotiv
     "VESTL","DOHOL","AYGAZ","LOGO","INDES","ODAS","GUBRF","SASA","CIMSA","MPARK",
-    "OYAKC","ISMEN","TTRAK","AEFES","KOZAA","DOAS","AGHOL",
+    "OYAKC","ISMEN","TTRAK","AEFES","DOAS","AGHOL",
     # Enerji / Maden
     "GESAN","ZOREN","ENJSA","AYDEM",
     # Finans (holding + sigorta + GYO)
@@ -128,7 +128,7 @@ UNIVERSE_EXTRA = [
     # Ulaştırma
     "CLEBI","RYSAS",
     # Diğer
-    "BRYAT","EUPWR","ISMEN","BRSAN","SARKY","GEDZA","BUCIM",
+    "BRYAT","EUPWR","BRSAN","SARKY","GEDZA","BUCIM",
 ]
 UNIVERSE = UNIVERSE_BIST30 + UNIVERSE_EXTRA
 
@@ -2031,7 +2031,7 @@ async def api_market_status():
 TRACK_EVENTS = defaultdict(int)
 TRACK_LOG = []  # last 500 events
 
-@app.get("/api/track")
+@app.api_route("/api/track", methods=["GET", "POST"])
 async def api_track(e: str = ""):
     """Simple event tracking — no database, memory only"""
     if e:
