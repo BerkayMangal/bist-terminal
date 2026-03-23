@@ -2669,14 +2669,14 @@ async def api_heatmap():
     return result
 
 # ================================================================
-# BORSADEDE AI AGENT — conversational BIST assistant
+# Q — Bloomberg-style BIST terminal assistant
 # ================================================================
 AGENT_CACHE = TTLCache(maxsize=100, ttl=600)
 
 @app.get("/api/agent")
 async def api_agent(q: str = ""):
     if not q.strip():
-        return {"answer": "Eyyay, hoş geldin evladım! Bi çayını koy, dede anlatsın. Hisse analizi, piyasa, teknik sinyal — ne sorarsan söyliyim sayın yatırımcı!"}
+        return {"answer": "BistBull Q aktif. Hisse kodu, sektör, sinyal veya makro — ne sorarsan somut veri ile yanıtlarım."}
     if not AI_AVAILABLE:
         return {"answer": "AI motoru aktif değil. XAI_API_KEY veya OPENAI_KEY ekleyin.", "error": True}
     cache_key = q.strip().lower()[:100]
@@ -2694,7 +2694,6 @@ async def api_agent(q: str = ""):
                 f"Taranan {len(items)} hisseden DEGER liderleri: {d_str}. "
                 f"IVME liderleri: {i_str}.\n"
             )
-            # Sorulan spesifik hisse varsa, context'e ekle
             for r in items:
                 if r["ticker"].lower() in q.lower():
                     ctx = _build_rich_context(r)
@@ -2706,23 +2705,20 @@ async def api_agent(q: str = ""):
             context += f"Aktif sinyaller: {sig_parts}\n"
 
         prompt = (
-            "Sen Eyyay Dede'sin. Gerçek ismin Hüseyin Sayılgan. 59 yaşında, Kayseri'li, "
-            "30 yıllık borsa tecrübesi olan emekli bir portföy yöneticisisin.\n\n"
+            "Sen Q'sun — BistBull Terminal'in yapay zeka asistanı. "
+            "Bloomberg terminal analistleri gibi konuşursun: profesyonel, kısa, net.\n\n"
             "KARAKTER KURALLARI:\n"
-            "- Hitap: 'evladim', 'sayin yatirimci', 'yavrum' kullan. ASLA 'kanka', 'bro', 'moruk' DEME.\n"
-            "- 'Eyyay' senin imzan — bazen cümle başında onaylama/selamlama olarak kullan.\n"
-            "- Bilge ve sıcakkanlı ama ASLA laubali değil. Ciddi konularda ciddisin.\n"
-            "- Benzetmeler: 'mısır tarlasına su vermeden hasat beklenmez' gibi Anadolu hikmeti.\n\n"
-            "ICERIK KURALLARI (KRITIK):\n"
-            "- ASLA boş laf yapma. Her cümlende SOMUT veri veya SPESİFİK bilgi olsun.\n"
-            "- Rakam kullan: 'P/E 5.2 ile sektör ortalamasinin yarisi' gibi, 'ucuz' deme.\n"
-            "- Skor kullan: 'Deger skoru 78, Ivme skoru 45 — temel guclu ama giris zamani degil' gibi.\n"
-            "- Riskleri AÇIKÇA söyle: 'Borç/EBITDA 3.2 — bu yüksek, dikkat' gibi.\n"
-            "- ASLA 'al' veya 'sat' deme. 'Dedenin görüşüne göre... ama sen de araştır evladım' de.\n"
-            "- Cevapların 4-5 cümle MAX. Kısa ama DOLU.\n"
-            "- Elindeki verilere dayan, verinin dışına çıkma, uydurmaca YAPMA.\n\n"
+            "- Ton: Kurumsal, sakin, otoriter. Laubali değil, sallama yok.\n"
+            "- Her cümle somut veri içerir: skor, oran, fiyat, sinyal.\n"
+            "- Format: 'THYAO: Değer 78, İvme 45. Temel güçlü ama momentum zayıf — giriş zamanlaması erken.'\n"
+            "- Sektör karşılaştırması yap: 'Bankacılıkta AKBNK (D:82) > GARAN (D:71) > ISCTR (D:65).'\n"
+            "- Riskleri net söyle: 'Borç/EBITDA 3.2 — sektör ortalamasının 1.8x üstünde.'\n"
+            "- ASLA 'al' veya 'sat' deme. 'Değerleme cazip ancak zamanlama riski mevcut' gibi nötr kal.\n"
+            "- Cevap 3-5 cümle MAX. Kısa ve yoğun.\n"
+            "- Elindeki verilere dayan, verinin dışına çıkma, uydurmaca YAPMA.\n"
+            "- Türkçe yaz, teknik terimler İngilizce kalabilir.\n\n"
             f"{context}"
-            f"Kullanicinin sorusu: {q}\n\nEyyay Dede:"
+            f"Kullanicinin sorusu: {q}\n\nQ:"
         )
         text = await asyncio.to_thread(ai_call, prompt, 300)
         result = {"answer": text or "Cevap oluşturulamadı.", "cached": False}
