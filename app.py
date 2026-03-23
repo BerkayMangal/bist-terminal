@@ -50,7 +50,7 @@ except ImportError:
 
 AI_AVAILABLE = len(AI_PROVIDERS) > 0
 
-BOT_VERSION = "V7"
+BOT_VERSION = "V7.6"
 APP_NAME = "BISTBULL TERMINAL"
 CONFIDENCE_MIN = 55
 
@@ -1123,11 +1123,15 @@ def _build_rich_context(r, tech=None):
         f"Graham MoS:{L.get('graham_mos','N/A')} Buffett:{L.get('buffett_filter','N/A')} Graham:{L.get('graham_filter','N/A')}",
     ]
     if tech:
+        rsi_val = tech.get('rsi')
+        rsi_str = f"{rsi_val:.0f}" if isinstance(rsi_val, (int, float)) else '?'
+        vol_val = tech.get('vol_ratio')
+        vol_str = f"{vol_val:.1f}x" if isinstance(vol_val, (int, float)) else '?'
         lines.append(
-            f"Teknik: RSI={tech.get('rsi','?'):.0f if isinstance(tech.get('rsi'),float) else '?'}, "
+            f"Teknik: RSI={rsi_str}, "
             f"MACD={'bullish' if tech.get('macd_bullish') else 'bearish'}, "
             f"{'MA50 uzerinde' if (tech.get('price',0) or 0) > (tech.get('ma50') or 0) else 'MA50 altinda'}, "
-            f"BB:{tech.get('bb_pos','?')}, Hacim:{tech.get('vol_ratio','?'):.1f}x, "
+            f"BB:{tech.get('bb_pos','?')}, Hacim:{vol_str}, "
             f"52W High'a {abs(tech.get('pct_from_high',0)):.0f}% mesafe"
         )
     lines.append(f"Guclu: {', '.join(r.get('positives',[]))}")
@@ -2573,9 +2577,9 @@ async def api_hero_summary():
     bot_says = None
     if AI_AVAILABLE and items:
         try:
-            d_top = [f"{r['ticker']}(D:{r.get('deger',r['overall']):.0f})" for r in (deger_leaders or items[:3])]
+            d_top = [f"{r['ticker']}(D:{r.get('deger',50):.0f})" for r in (deger_leaders or items[:3])]
             i_top = [f"{r['ticker']}(I:{r.get('ivme',50):.0f})" for r in (ivme_leaders or items[:3])]
-            bot3 = [f"{r['ticker']}(D:{r.get('deger',r['overall']):.0f})" for r in sorted(items, key=lambda x: x.get('deger', x['overall']))[:3]]
+            bot3 = [f"{r['ticker']}(D:{r.get('deger',r.get('overall',50)):.0f})" for r in sorted(items, key=lambda x: x.get('deger', x.get('overall',50)))[:3]]
             macro_str = ", ".join([f"{m['name']}:{m.get('change_pct',0):+.1f}%" for m in macro_items[:6]])
             prompt = (
                 "Sen BistBull Terminal'in piyasa stratejistisin. Kurumsal, somut, sallama YOK. Turkce yaz.\n"
@@ -2673,6 +2677,13 @@ async def api_batch(tickers: str):
 
 # Serve frontend — read index.html from same directory as app.py, no static/ folder needed
 _INDEX_HTML_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "index.html")
+
+# Suppress browser favicon/icon 404s
+@app.get("/favicon.ico")
+@app.get("/apple-touch-icon.png")
+@app.get("/apple-touch-icon-precomposed.png")
+async def _suppress_icon():
+    return Response(status_code=204)
 
 @app.get("/", response_class=HTMLResponse)
 async def serve_index():
