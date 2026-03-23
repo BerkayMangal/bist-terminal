@@ -1841,7 +1841,7 @@ def clean_for_json(obj):
 # ================================================================
 @asynccontextmanager
 async def lifespan(app):
-    log.info(f"BISTBULL TERMINAL V7 starting | Universe: {len(UNIVERSE)} | AI: {','.join(AI_PROVIDERS) or 'OFF'} | Chart: {'ON' if CHART_AVAILABLE else 'OFF'}")
+    log.info(f"{APP_NAME} {BOT_VERSION} starting | Universe: {len(UNIVERSE)} | AI: {','.join(AI_PROVIDERS) or 'OFF'} | Chart: {'ON' if CHART_AVAILABLE else 'OFF'}")
     task = asyncio.create_task(_background_scanner())
     yield
     task.cancel()
