@@ -6,8 +6,8 @@
 # Telegram removed → REST API endpoints
 # ================================================================
 
-import sys, os, re, math, asyncio, logging, datetime as dt, io, time, json, base64
-from collections import defaultdict, OrderedDict
+import sys, os, re, math, asyncio, logging, datetime as dt, io, time, json, base64, zoneinfo, requests
+from collections import defaultdict, OrderedDict, deque
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import numpy as np
@@ -50,7 +50,7 @@ except ImportError:
 
 AI_AVAILABLE = len(AI_PROVIDERS) > 0
 
-BOT_VERSION = "V8.0"
+BOT_VERSION = "V8.1"
 APP_NAME = "BISTBULL TERMINAL"
 CONFIDENCE_MIN = 50  # V8: 55→50 (daha geniş universe, daha toleranslı)
 
@@ -109,11 +109,11 @@ def ai_call(prompt, max_tokens=200):
 UNIVERSE_BIST30 = [
     "ASELS","THYAO","BIMAS","KCHOL","SISE","EREGL","TUPRS","AKBNK","ISCTR","YKBNK",
     "GARAN","SAHOL","MGROS","FROTO","TOASO","TCELL","KRDMD","PETKM","ENKAI","TAVHL",
-    "PGSUS","EKGYO","ARCLK","TTKOM","SOKM","TKFEN","KONTR","AKSEN","HEKTS",
+    "PGSUS","EKGYO","ARCLK","TTKOM","SOKM","TKFEN","KONTR","AKSEN","HEKTS","SASA",
 ]
 UNIVERSE_EXTRA = [
     # Sanayi / Otomotiv
-    "VESTL","DOHOL","AYGAZ","LOGO","INDES","ODAS","GUBRF","SASA","CIMSA","MPARK",
+    "VESTL","DOHOL","AYGAZ","LOGO","INDES","ODAS","GUBRF","CIMSA","MPARK",
     "OYAKC","ISMEN","TTRAK","AEFES","DOAS","AGHOL",
     # Enerji / Maden
     "GESAN","ZOREN","ENJSA","AYDEM",
@@ -527,10 +527,10 @@ def _map_sector(sector_str):
 def _get_threshold(sector_group, metric_key, default):
     """Sektör override varsa onu döndür, yoksa default eşik"""
     grp = SECTOR_THRESHOLDS.get(sector_group, {})
-    val = grp.get(metric_key)
-    if val is None and metric_key in grp:
-        return None  # explicitly disabled for this sector (e.g. banks: EV/EBITDA)
-    return val if val else default
+    if metric_key not in grp:
+        return default
+    val = grp[metric_key]
+    return val  # None ise disabled, tuple ise override
 
 # ================================================================
 # KADEMELİ RİSK PENALTI TABLOSU
@@ -933,29 +933,29 @@ def style_label(scores):
     bal = scores["balance"]
     mom = scores.get("momentum", 50)
     tb = scores.get("tech_break", 50)
-    # V7: Momentum-bazli yeni stiller eklendi
-    if mom >= 75 and tb >= 70 and g >= 55: return "Momentum Leader"
-    if q >= 75 and g >= 60 and v >= 40 and moat >= 60: return "Quality Compounder"
-    if q >= 72 and moat >= 65 and v < 40: return "Premium Compounder"
-    if v >= 75 and bal >= 55: return "Deep Value"
+    # V8.1: Türkçe stil etiketleri
+    if mom >= 75 and tb >= 70 and g >= 55: return "Momentum Lideri"
+    if q >= 75 and g >= 60 and v >= 40 and moat >= 60: return "Kaliteli Bileşik"
+    if q >= 72 and moat >= 65 and v < 40: return "Premium Kalite"
+    if v >= 75 and bal >= 55: return "Derin Değer"
     if g >= 70 and v >= 45: return "GARP"
-    if mom >= 65 and tb >= 60 and v < 45: return "Teknik Breakout"
-    if g >= 65 and q >= 55 and v < 45: return "Growth"
-    if v >= 70 and q < 45: return "Value Trap Risk"
-    if bal < 40 and g >= 50: return "High-Risk Turnaround"
-    if scores.get("capital", 50) >= 70 and q >= 55: return "Income / Dividend"
-    if mom < 30 and tb < 30: return "Momentum Zayif"
-    return "Balanced"
+    if mom >= 65 and tb >= 60 and v < 45: return "Teknik Kırılım"
+    if g >= 65 and q >= 55 and v < 45: return "Büyüme Odaklı"
+    if v >= 70 and q < 45: return "Değer Tuzağı Riski"
+    if bal < 40 and g >= 50: return "Yüksek Riskli Dönüş"
+    if scores.get("capital", 50) >= 70 and q >= 55: return "Temettü / Gelir"
+    if mom < 30 and tb < 30: return "Momentum Zayıf"
+    return "Dengeli"
 
 def legendary_labels(m, scores):
     pf, az, bm, peg_v, mos = m.get("piotroski_f"), m.get("altman_z"), m.get("beneish_m"), m.get("peg"), m.get("margin_safety")
-    pf_l = "N/A" if pf is None else (f"{int(pf)}/9 (Strong)" if pf >= 7 else f"{int(pf)}/9 (Okay)" if pf >= 5 else f"{int(pf)}/9 (Weak)")
-    az_l = "N/A" if az is None else (f"{az:.2f} (Safe)" if az >= 3 else f"{az:.2f} (Grey)" if az >= 1.8 else f"{az:.2f} (Risk)")
-    bm_l = "N/A" if bm is None else (f"{bm:.2f} (Low risk)" if bm < -2.22 else f"{bm:.2f} (Watch)" if bm < -1.78 else f"{bm:.2f} (Higher risk)")
-    peg_l = "N/A" if peg_v is None else (f"{peg_v:.2f} (Cheap)" if peg_v < 1 else f"{peg_v:.2f} (Fair)" if peg_v <= 2 else f"{peg_v:.2f} (Rich)")
-    mos_l = "N/A" if mos is None else ("High" if mos >= 0.20 else "Medium" if mos >= 0 else "Low")
-    buffett = "Pass" if (scores["quality"] >= 75 and scores["moat"] >= 65 and scores["balance"] >= 60 and scores["capital"] >= 55) else ("Borderline" if scores["quality"] >= 60 and scores["moat"] >= 50 else "Fail")
-    graham = "Pass" if (scores["value"] >= 70 and scores["balance"] >= 60 and (mos or -1) >= 0) else ("Borderline" if scores["value"] >= 55 else "Fail")
+    pf_l = "N/A" if pf is None else (f"{int(pf)}/9 (Güçlü)" if pf >= 7 else f"{int(pf)}/9 (Orta)" if pf >= 5 else f"{int(pf)}/9 (Zayıf)")
+    az_l = "N/A" if az is None else (f"{az:.2f} (Güvenli)" if az >= 3 else f"{az:.2f} (Gri Bölge)" if az >= 1.8 else f"{az:.2f} (Riskli)")
+    bm_l = "N/A" if bm is None else (f"{bm:.2f} (Düşük risk)" if bm < -2.22 else f"{bm:.2f} (İzle)" if bm < -1.78 else f"{bm:.2f} (Yüksek risk)")
+    peg_l = "N/A" if peg_v is None else (f"{peg_v:.2f} (Ucuz)" if peg_v < 1 else f"{peg_v:.2f} (Makul)" if peg_v <= 2 else f"{peg_v:.2f} (Pahalı)")
+    mos_l = "N/A" if mos is None else ("Yüksek" if mos >= 0.20 else "Orta" if mos >= 0 else "Düşük")
+    buffett = "Geçti" if (scores["quality"] >= 75 and scores["moat"] >= 65 and scores["balance"] >= 60 and scores["capital"] >= 55) else ("Sınırda" if scores["quality"] >= 60 and scores["moat"] >= 50 else "Kaldı")
+    graham = "Geçti" if (scores["value"] >= 70 and scores["balance"] >= 60 and (mos or -1) >= 0) else ("Sınırda" if scores["value"] >= 55 else "Kaldı")
     is_bank = "bank" in (m.get("industry") or "").lower() or "sigorta" in (m.get("industry") or "").lower()
     if is_bank:
         az_l = "N/A (Banka)"
@@ -971,7 +971,7 @@ def drivers(scores, confidence, m=None, sector_group=None):
     fcfy = m.get("fcf_yield") if m else None
     if scores["quality"] >= 70:
         pos.append(f"Yüksek iş kalitesi{f' — ROE %{roe*100:.0f}' if roe else ''}")
-    if scores["earnings"] >= 65: pos.append("Nakit akış kârı destekliyor")
+    if scores["earnings"] >= 65: pos.append("Nakit akışı kârı destekliyor")
     if scores["balance"] >= 70:
         pos.append(f"Sağlam bilanço{f' — NB/FAVÖK {nd:.1f}x' if nd is not None else ''}")
     if scores["value"] >= 70:
@@ -1163,30 +1163,30 @@ def compute_technical(symbol, hist_df=None):
         tech_score = 50.0
         components = []
         if rsi_val is not None:
-            if 40 <= rsi_val <= 60: components.append({"name": "RSI", "score": 50, "desc": "Notr"})
-            elif 30 <= rsi_val < 40: components.append({"name": "RSI", "score": 65, "desc": "Oversold yakinlasma"})
-            elif rsi_val < 30: components.append({"name": "RSI", "score": 85, "desc": "Asiri satim"})
-            elif 60 < rsi_val <= 70: components.append({"name": "RSI", "score": 40, "desc": "Overbought yakinlasma"})
-            else: components.append({"name": "RSI", "score": 20, "desc": "Asiri alim"})
+            if 40 <= rsi_val <= 60: components.append({"name": "RSI", "score": 50, "desc": "Nötr"})
+            elif 30 <= rsi_val < 40: components.append({"name": "RSI", "score": 65, "desc": "Aşırı satıma yaklaşıyor"})
+            elif rsi_val < 30: components.append({"name": "RSI", "score": 85, "desc": "Aşırı satım"})
+            elif 60 < rsi_val <= 70: components.append({"name": "RSI", "score": 40, "desc": "Aşırı alıma yaklaşıyor"})
+            else: components.append({"name": "RSI", "score": 20, "desc": "Aşırı alım"})
         if ma50_val:
             if price > ma50_val:
-                components.append({"name": "MA50", "score": 70, "desc": "Fiyat MA50 uzerinde"})
+                components.append({"name": "MA50", "score": 70, "desc": "Fiyat MA50 üzerinde"})
             else:
-                components.append({"name": "MA50", "score": 30, "desc": "Fiyat MA50 altinda"})
+                components.append({"name": "MA50", "score": 30, "desc": "Fiyat MA50 altında"})
         if ma200_val:
             if price > ma200_val:
-                components.append({"name": "MA200", "score": 75, "desc": "Fiyat MA200 uzerinde"})
+                components.append({"name": "MA200", "score": 75, "desc": "Fiyat MA200 üzerinde"})
             else:
-                components.append({"name": "MA200", "score": 25, "desc": "Fiyat MA200 altinda"})
+                components.append({"name": "MA200", "score": 25, "desc": "Fiyat MA200 altında"})
         if ma50_val and ma200_val:
             if ma50_val > ma200_val:
-                components.append({"name": "Trend", "score": 80, "desc": "MA50 > MA200 (Yukari)"})
+                components.append({"name": "Trend", "score": 80, "desc": "MA50 > MA200 (Yukarı)"})
             else:
-                components.append({"name": "Trend", "score": 20, "desc": "MA50 < MA200 (Asagi)"})
+                components.append({"name": "Trend", "score": 20, "desc": "MA50 < MA200 (Aşağı)"})
         if macd_bullish:
-            components.append({"name": "MACD", "score": 70, "desc": "Bullish"})
+            components.append({"name": "MACD", "score": 70, "desc": "Yükseliş"})
         else:
-            components.append({"name": "MACD", "score": 30, "desc": "Bearish"})
+            components.append({"name": "MACD", "score": 30, "desc": "Düşüş"})
         if vol_ratio and vol_ratio > 1.5:
             components.append({"name": "Hacim", "score": 75, "desc": f"{vol_ratio:.1f}x ortalama"})
         elif vol_ratio:
@@ -1369,15 +1369,15 @@ def ai_trader_summary(r, tech=None):
     try:
         ctx = _build_rich_context(r, tech)
         prompt = (
-            "Sen kurumsal BIST analisti ve portfoy yoneticisisin. 20 yillik tecrüben var.\n"
-            "Asagidaki veriye dayanarak bu hisse icin YAPILANDIRILMIS yatirim tezi yaz. Turkce.\n"
-            "ASLA sallama, SADECE verideki rakamlara dayan. Gercekci ve spesifik ol.\n\n"
+            "Sen kurumsal BIST analisti ve portföy yöneticisisin. 20 yıllık tecrüben var.\n"
+            "Aşağıdaki veriye dayanarak bu hisse için YAPILANDIRILMIŞ yatırım tezi yaz. Türkçe.\n"
+            "ASLA sallama, SADECE verideki rakamlara dayan. Gerçekçi ve spesifik ol.\n\n"
             f"{ctx}\n\n"
             "Su formatta yaz (her satir ayri, baska HICBIR SEY yazma):\n"
-            "KARAR: [Guclu Al / Al / Tut / Dikkat / Uzak Dur] (birini sec)\n"
-            "TEZ: 1 spesifik cumle — NEDEN bu karar? (rakam kullan, 'iyi' gibi bos kelime yok)\n"
-            "RISK: 1 spesifik cumle — en buyuk risk nedir? (rakam kullan)\n"
-            "ZAMANLAMA: 1 cumle — Ivme skoruna gore giris zamani uygun mu?\n"
+            "KARAR: [Güçlü Al / Al / Tut / Dikkat / Uzak Dur] (birini seç)\n"
+            "TEZ: 1 spesifik cümle — NEDEN bu karar? (rakam kullan, 'iyi' gibi boş kelime yok)\n"
+            "RISK: 1 spesifik cümle — en büyük risk nedir? (rakam kullan)\n"
+            "ZAMANLAMA: 1 cümle — İvme skoruna göre giriş zamanı uygun mu?\n"
         )
         text = ai_call(prompt, max_tokens=250)
         if text:
@@ -1486,27 +1486,27 @@ class CrossHunter:
         new_signals = []
         all_signals = {}
 
-        # V7.1: 14 sinyal — güvenilirlik yıldızları (1-5)
+        # V8.1: 14 sinyal — güvenilirlik yıldızları (1-5)
         SIGNAL_INFO = {
             # === MEVCUT (güvenilirlik kalibrasyonu eklendi) ===
-            "Golden Cross":       {"icon": "bullish", "stars": 5, "explanation": "MA50 yukari kesti MA200'u — orta/uzun vade yukari donusu. Nadir ve guclu sinyal."},
-            "Death Cross":        {"icon": "bearish", "stars": 5, "explanation": "MA50 asagi kesti MA200'u — orta/uzun vade asagi donusu. Ciddi uyari."},
-            "MACD Bullish Cross":  {"icon": "bullish", "stars": 3, "explanation": "MACD sinyal cizgisini yukari kesti — kisa vadeli momentum artiyor."},
-            "MACD Bearish Cross":  {"icon": "bearish", "stars": 3, "explanation": "MACD sinyal cizgisini asagi kesti — kisa vadeli momentum zayifliyor."},
-            "RSI Asiri Alim":     {"icon": "bearish", "stars": 1, "explanation": "RSI 70+ — asiri alim bolgesi. BIST'te false positive orani yuksek, dikkatli ol."},
-            "RSI Asiri Satim":    {"icon": "bullish", "stars": 1, "explanation": "RSI 30- — asiri satim bolgesi. Dip firsati olabilir ama teyit bekle."},
-            "BB Ust Band Kirilim": {"icon": "neutral", "stars": 2, "explanation": "Fiyat Bollinger ust bandini kirdi — momentum guclu ama geri cekilme riski var."},
-            "BB Alt Band Kirilim": {"icon": "neutral", "stars": 2, "explanation": "Fiyat Bollinger alt bandini kirdi — oversold veya trend devam edebilir."},
+            "Golden Cross":       {"icon": "bullish", "stars": 5, "explanation": "MA50 yukarı kesti MA200'ü — orta/uzun vade yukarı dönüşü. Nadir ve güçlü sinyal."},
+            "Death Cross":        {"icon": "bearish", "stars": 5, "explanation": "MA50 aşağı kesti MA200'ü — orta/uzun vade aşağı dönüşü. Ciddi uyarı."},
+            "MACD Bullish Cross":  {"icon": "bullish", "stars": 3, "explanation": "MACD sinyal çizgisini yukarı kesti — kısa vadeli momentum artıyor."},
+            "MACD Bearish Cross":  {"icon": "bearish", "stars": 3, "explanation": "MACD sinyal çizgisini aşağı kesti — kısa vadeli momentum zayıflıyor."},
+            "RSI Aşırı Alım":     {"icon": "bearish", "stars": 1, "explanation": "RSI 70+ — aşırı alım bölgesi. BIST'te false positive oranı yüksek, dikkatli ol."},
+            "RSI Aşırı Satım":    {"icon": "bullish", "stars": 1, "explanation": "RSI 30- — aşırı satım bölgesi. Dip fırsatı olabilir ama teyit bekle."},
+            "BB Üst Band Kırılım": {"icon": "neutral", "stars": 2, "explanation": "Fiyat Bollinger üst bandını kırdı — momentum güçlü ama geri çekilme riski var."},
+            "BB Alt Band Kırılım": {"icon": "neutral", "stars": 2, "explanation": "Fiyat Bollinger alt bandını kırdı — oversold veya trend devam edebilir."},
             # === YENİ V2 SİNYALLERİ ===
-            "Ichimoku Kumo Breakout": {"icon": "bullish", "stars": 5, "explanation": "Fiyat Ichimoku bulutu (kumo) uzerine cikti — guclu trend degisimi. BIST'te en guvenilir sinyallerden biri."},
-            "Ichimoku Kumo Breakdown": {"icon": "bearish", "stars": 5, "explanation": "Fiyat Ichimoku bulutu altina dustu — trend asagi donuyor."},
-            "Ichimoku TK Cross":  {"icon": "bullish", "stars": 4, "explanation": "Tenkan-sen Kijun-sen'i yukari kesti — Ichimoku'nun golden cross'u, orta vade pozitif."},
-            "VCP Kirilim":        {"icon": "bullish", "stars": 5, "explanation": "Volatilite daralma paterni (VCP) kirilimi — BIST trend piyasasinda cok guclu. Hacimle teyit onemli."},
-            "Rectangle Breakout": {"icon": "bullish", "stars": 4, "explanation": "Konsolidasyon kirilimi — dar araligi yukari kirdi. Devam formasyonu."},
-            "Rectangle Breakdown": {"icon": "bearish", "stars": 4, "explanation": "Konsolidasyon kirilimi — dar araligi asagi kirdi."},
-            "52W High Breakout":  {"icon": "bullish", "stars": 5, "explanation": "52 haftalik zirveyi kirdi — yeni alan aciyor, trend takipcileri icin en guclu sinyal."},
-            "Direnc Kirilimi":    {"icon": "bullish", "stars": 4, "explanation": "Pivot direnc seviyesi kirildi — yukari potansiyel aciyor."},
-            "Destek Kirilimi":    {"icon": "bearish", "stars": 4, "explanation": "Pivot destek seviyesi kirildi — asagi risk artiyor."},
+            "Ichimoku Kumo Breakout": {"icon": "bullish", "stars": 5, "explanation": "Fiyat Ichimoku bulutu (kumo) üzerine çıktı — güçlü trend değişimi. BIST'te en güvenilir sinyallerden biri."},
+            "Ichimoku Kumo Breakdown": {"icon": "bearish", "stars": 5, "explanation": "Fiyat Ichimoku bulutu altına düştü — trend aşağı dönüyor."},
+            "Ichimoku TK Cross":  {"icon": "bullish", "stars": 4, "explanation": "Tenkan-sen Kijun-sen'i yukarı kesti — Ichimoku'nun golden cross'u, orta vade pozitif."},
+            "VCP Kırılım":        {"icon": "bullish", "stars": 5, "explanation": "Volatilite daralma paterni (VCP) kırılımı — BIST trend piyasasında çok güçlü. Hacimle teyit önemli."},
+            "Rectangle Breakout": {"icon": "bullish", "stars": 4, "explanation": "Konsolidasyon kırılımı — dar aralığı yukarı kırdı. Devam formasyonu."},
+            "Rectangle Breakdown": {"icon": "bearish", "stars": 4, "explanation": "Konsolidasyon kırılımı — dar aralığı aşağı kırdı."},
+            "52W High Breakout":  {"icon": "bullish", "stars": 5, "explanation": "52 haftalık zirveyi kırdı — yeni alan açıyor, trend takipçileri için en güçlü sinyal."},
+            "Direnç Kırılımı":    {"icon": "bullish", "stars": 4, "explanation": "Pivot direnç seviyesi kırıldı — yukarı potansiyel açıyor."},
+            "Destek Kırılımı":    {"icon": "bearish", "stars": 4, "explanation": "Pivot destek seviyesi kırıldı — aşağı risk artıyor."},
         }
 
         # Batch download
@@ -1543,12 +1543,12 @@ class CrossHunter:
                 # --- MEVCUT 8 sinyal ---
                 if tech.get("cross_signal") == "GOLDEN_CROSS": signals.add("Golden Cross")
                 if tech.get("cross_signal") == "DEATH_CROSS": signals.add("Death Cross")
-                if tech.get("rsi") and tech["rsi"] > 70: signals.add("RSI Asiri Alim")
-                if tech.get("rsi") and tech["rsi"] < 30: signals.add("RSI Asiri Satim")
+                if tech.get("rsi") and tech["rsi"] > 70: signals.add("RSI Aşırı Alım")
+                if tech.get("rsi") and tech["rsi"] < 30: signals.add("RSI Aşırı Satım")
                 if tech.get("macd_cross") == "BULLISH": signals.add("MACD Bullish Cross")
                 if tech.get("macd_cross") == "BEARISH": signals.add("MACD Bearish Cross")
-                if tech.get("bb_pos") == "ABOVE": signals.add("BB Ust Band Kirilim")
-                if tech.get("bb_pos") == "BELOW": signals.add("BB Alt Band Kirilim")
+                if tech.get("bb_pos") == "ABOVE": signals.add("BB Üst Band Kırılım")
+                if tech.get("bb_pos") == "BELOW": signals.add("BB Alt Band Kırılım")
 
                 # --- YENİ V2: Ichimoku ---
                 if hist_df is not None and len(hist_df) >= 52:
@@ -1567,7 +1567,7 @@ class CrossHunter:
 
                 # --- YENİ V2: VCP ---
                 if hist_df is not None and _detect_vcp(hist_df):
-                    signals.add("VCP Kirilim")
+                    signals.add("VCP Kırılım")
 
                 # --- YENİ V2: Rectangle ---
                 if hist_df is not None:
@@ -1584,9 +1584,9 @@ class CrossHunter:
                 if hist_df is not None:
                     resistance, support = _find_pivot_levels(hist_df)
                     if resistance and price > resistance * 0.998:
-                        signals.add("Direnc Kirilimi")
+                        signals.add("Direnç Kırılımı")
                     if support and price < support * 1.002:
-                        signals.add("Destek Kirilimi")
+                        signals.add("Destek Kırılımı")
 
                 all_signals[t] = signals
                 prev = self.prev_signals.get(t, set())
@@ -1636,7 +1636,7 @@ def _analyze_safe(ticker):
 
 def scan_universe_blocking():
     ranked = []
-    with ThreadPoolExecutor(max_workers=15) as pool:
+    with ThreadPoolExecutor(max_workers=min(25, len(UNIVERSE))) as pool:
         futures = {pool.submit(_analyze_safe, t): t for t in UNIVERSE}
         for future in as_completed(futures):
             r = future.result()
@@ -1651,7 +1651,6 @@ def scan_universe_blocking():
 # ================================================================
 # PIYASA DURUMU — tatil, seans saati, açık/kapalı kontrolü
 # ================================================================
-import zoneinfo
 
 _IST = zoneinfo.ZoneInfo("Europe/Istanbul")
 
@@ -1666,20 +1665,21 @@ _FIXED_HOLIDAYS_MD = {
     (10, 29),  # 29 Ekim
 }
 
-# Dini bayramlar (2025-2027 arası, her yıl guncelle)
+# Dini bayramlar (2025-2027 arası, her yıl güncelle)
+# Dict: tarih → bayram adı (hicri takvim kaymasına karşı güvenli)
 _RELIGIOUS_HOLIDAYS = {
-    # 2025 Ramazan Bayrami
-    dt.date(2025, 3, 30), dt.date(2025, 3, 31), dt.date(2025, 4, 1),
-    # 2025 Kurban Bayrami
-    dt.date(2025, 6, 6), dt.date(2025, 6, 7), dt.date(2025, 6, 8), dt.date(2025, 6, 9),
-    # 2026 Ramazan Bayrami
-    dt.date(2026, 3, 19), dt.date(2026, 3, 20), dt.date(2026, 3, 21),
-    # 2026 Kurban Bayrami
-    dt.date(2026, 5, 26), dt.date(2026, 5, 27), dt.date(2026, 5, 28), dt.date(2026, 5, 29),
-    # 2027 Ramazan Bayrami
-    dt.date(2027, 3, 9), dt.date(2027, 3, 10), dt.date(2027, 3, 11),
-    # 2027 Kurban Bayrami
-    dt.date(2027, 5, 16), dt.date(2027, 5, 17), dt.date(2027, 5, 18), dt.date(2027, 5, 19),
+    # 2025 Ramazan Bayramı
+    dt.date(2025, 3, 30): "Ramazan Bayramı", dt.date(2025, 3, 31): "Ramazan Bayramı", dt.date(2025, 4, 1): "Ramazan Bayramı",
+    # 2025 Kurban Bayramı
+    dt.date(2025, 6, 6): "Kurban Bayramı", dt.date(2025, 6, 7): "Kurban Bayramı", dt.date(2025, 6, 8): "Kurban Bayramı", dt.date(2025, 6, 9): "Kurban Bayramı",
+    # 2026 Ramazan Bayramı
+    dt.date(2026, 3, 19): "Ramazan Bayramı", dt.date(2026, 3, 20): "Ramazan Bayramı", dt.date(2026, 3, 21): "Ramazan Bayramı",
+    # 2026 Kurban Bayramı
+    dt.date(2026, 5, 26): "Kurban Bayramı", dt.date(2026, 5, 27): "Kurban Bayramı", dt.date(2026, 5, 28): "Kurban Bayramı", dt.date(2026, 5, 29): "Kurban Bayramı",
+    # 2027 Ramazan Bayramı
+    dt.date(2027, 3, 9): "Ramazan Bayramı", dt.date(2027, 3, 10): "Ramazan Bayramı", dt.date(2027, 3, 11): "Ramazan Bayramı",
+    # 2027 Kurban Bayramı
+    dt.date(2027, 5, 16): "Kurban Bayramı", dt.date(2027, 5, 17): "Kurban Bayramı", dt.date(2027, 5, 18): "Kurban Bayramı", dt.date(2027, 5, 19): "Kurban Bayramı",
 }
 
 # Bayram arife gunleri (yari gun seans: 10:00-12:30)
@@ -1708,9 +1708,8 @@ def get_market_status():
 
     # Dini bayram
     if today in _RELIGIOUS_HOLIDAYS:
-        # Hangi bayram?
-        bayram = "Ramazan Bayrami" if today.month <= 4 else "Kurban Bayrami"
-        # Sonraki acik gun
+        bayram = _RELIGIOUS_HOLIDAYS[today]
+        # Sonraki açık gün
         check = today + dt.timedelta(days=1)
         while check in _RELIGIOUS_HOLIDAYS or check.weekday() >= 5 or (check.month, check.day) in _FIXED_HOLIDAYS_MD:
             check += dt.timedelta(days=1)
@@ -1724,8 +1723,8 @@ def get_market_status():
 
     # Sabit tatil
     if (today.month, today.day) in _FIXED_HOLIDAYS_MD:
-        names = {(1,1):"Yilbasi",(4,23):"23 Nisan",(5,1):"1 Mayis",(5,19):"19 Mayis",(7,15):"15 Temmuz",(8,30):"30 Agustos",(10,29):"29 Ekim"}
-        name = names.get((today.month, today.day), "Resmi tatil")
+        names = {(1,1):"Yılbaşı",(4,23):"23 Nisan",(5,1):"1 Mayıs",(5,19):"19 Mayıs",(7,15):"15 Temmuz",(8,30):"30 Ağustos",(10,29):"29 Ekim"}
+        name = names.get((today.month, today.day), "Resmî tatil")
         check = today + dt.timedelta(days=1)
         while check.weekday() >= 5 or (check.month, check.day) in _FIXED_HOLIDAYS_MD or check in _RELIGIOUS_HOLIDAYS:
             check += dt.timedelta(days=1)
@@ -1740,35 +1739,35 @@ def get_market_status():
     hour, minute = now_ist.hour, now_ist.minute
     t = hour * 60 + minute  # dakika cinsinden
 
-    # Yari gun (arife)
+    # Yarı gün (arife)
     if today in _HALF_DAYS:
-        if t < 600:  # 10:00 oncesi
-            return {"status": "pre_market", "reason": "Arife — yari gun seans", "reason_detail": "Seans 10:00-12:30", "ist_time": now_ist.strftime("%H:%M"), "global_open": False, "half_day": True}
+        if t < 600:  # 10:00 öncesi
+            return {"status": "pre_market", "reason": "Arife — yarı gün seans", "reason_detail": "Seans 10:00-12:30", "ist_time": now_ist.strftime("%H:%M"), "global_open": False, "half_day": True}
         elif t <= 750:  # 12:30'a kadar
-            return {"status": "open", "reason": "Arife — yari gun seans", "reason_detail": "Kapanış 12:30", "ist_time": now_ist.strftime("%H:%M"), "global_open": False, "half_day": True}
+            return {"status": "open", "reason": "Arife — yarı gün seans", "reason_detail": "Kapanış 12:30", "ist_time": now_ist.strftime("%H:%M"), "global_open": False, "half_day": True}
         else:
-            return {"status": "closed", "reason": "Arife — seans bitti", "reason_detail": "Yari gun seans 12:30'da kapandi", "ist_time": now_ist.strftime("%H:%M"), "global_open": True, "half_day": True}
+            return {"status": "closed", "reason": "Arife — seans bitti", "reason_detail": "Yarı gün seans 12:30'da kapandı", "ist_time": now_ist.strftime("%H:%M"), "global_open": True, "half_day": True}
 
-    # Normal gun seans saatleri (10:00-18:00 surekli islem)
-    if t < 595:  # 09:55 oncesi
-        return {"status": "pre_market", "reason": "Seans oncesi", "reason_detail": "BIST 10:00'da acilir", "ist_time": now_ist.strftime("%H:%M"), "global_open": False}
+    # Normal gün seans saatleri (10:00-18:00 sürekli işlem)
+    if t < 595:  # 09:55 öncesi
+        return {"status": "pre_market", "reason": "Seans öncesi", "reason_detail": "BIST 10:00'da açılır", "ist_time": now_ist.strftime("%H:%M"), "global_open": False}
     elif t <= 1080:  # 18:00'a kadar
-        return {"status": "open", "reason": "Seans acik", "reason_detail": "Surekli islem", "ist_time": now_ist.strftime("%H:%M"), "global_open": False}
+        return {"status": "open", "reason": "Seans açık", "reason_detail": "Sürekli işlem", "ist_time": now_ist.strftime("%H:%M"), "global_open": False}
     else:
-        return {"status": "after_hours", "reason": "Seans kapandi", "reason_detail": f"Kapanis 18:00 — Yarin 10:00'da acilir", "ist_time": now_ist.strftime("%H:%M"), "global_open": True}
+        return {"status": "after_hours", "reason": "Seans kapandı", "reason_detail": f"Kapanış 18:00 — Yarın 10:00'da açılır", "ist_time": now_ist.strftime("%H:%M"), "global_open": True}
 
 def is_scan_worthwhile():
-    """Scan yapmaya deger mi? Piyasa aciksa veya ilk scan yapilmadiysa True"""
+    """Scan yapmaya değer mi? Piyasa açıksa veya ilk scan yapılmadıysa True"""
     if TOP10_CACHE["asof"] is None:
         return True  # ilk scan her zaman yap
     ms = get_market_status()
-    # Piyasa aciksa veya kapandiktan sonra ilk 30dk icindeyse (kapanis verisi icin)
+    # Piyasa açıksa veya kapandıktan sonra ilk 30dk içindeyse (kapanış verisi için)
     if ms["status"] in ("open", "pre_market"):
         return True
     if ms["status"] == "after_hours":
         now_ist = dt.datetime.now(_IST)
         if now_ist.hour == 18 and now_ist.minute <= 30:
-            return True  # kapanis sonrasi 30dk icinde son scan
+            return True  # kapanış sonrası 30dk içinde son scan
     return False
 
 
@@ -1780,10 +1779,22 @@ async def _background_scanner():
     while True:
         try:
             if is_scan_worthwhile():
-                log.info("Background scan basladi...")
+                log.info("Background scan başladı...")
+
+                # P1 FIX: Batch history'yi bir kere indir, HISTORY_CACHE'e yaz
+                # scan_universe → analyze_symbol → compute_technical HISTORY_CACHE'den okur
+                # cross_hunter.scan_all da HISTORY_CACHE'den okur (TECH_CACHE hit eder)
+                symbols = [normalize_symbol(t) for t in UNIVERSE]
+                history_map = await asyncio.to_thread(
+                    batch_download_history, symbols, "1y", "1d"
+                )
+                for sym, hist_df in history_map.items():
+                    HISTORY_CACHE[sym] = hist_df
+                log.info(f"Batch history indirildi: {len(history_map)} sembol")
+
                 await asyncio.to_thread(scan_universe_blocking)
                 await asyncio.to_thread(cross_hunter.scan_all)
-                log.info(f"Background scan tamamlandi. {len(TOP10_CACHE['items'])} hisse, {len(cross_hunter.last_results)} sinyal")
+                log.info(f"Background scan tamamlandı. {len(TOP10_CACHE['items'])} hisse, {len(cross_hunter.last_results)} sinyal")
 
                 # Pre-compute top 5 AI summaries
                 if AI_AVAILABLE and TOP10_CACHE["items"]:
@@ -1802,9 +1813,9 @@ async def _background_scanner():
                 ms = get_market_status()
                 log.info(f"Scan atlanıyor — {ms['reason']} ({ms['ist_time']} IST)")
         except Exception as e:
-            log.error(f"Background scan hatasi: {e}")
+            log.error(f"Background scan hatası: {e}")
 
-        # Akıllı bekleme: piyasa aciksa 1 saat, kapaliysa 3 saat
+        # Akıllı bekleme: piyasa açıksa 1 saat, kapalıysa 3 saat
         ms = get_market_status()
         wait = 3600 if ms["status"] in ("open",) else 10800
         await asyncio.sleep(wait)
@@ -1869,7 +1880,7 @@ async def api_analyze(ticker: str):
         return JSONResponse(content=clean_for_json(r))
     except Exception as e:
         log.warning(f"analyze {ticker}: {e}")
-        raise HTTPException(status_code=404, detail=f"Veri alinamadi: {base_ticker(ticker)}")
+        raise HTTPException(status_code=404, detail=f"Veri alınamadı: {base_ticker(ticker)}")
 
 @app.get("/api/technical/{ticker}")
 async def api_technical(ticker: str):
@@ -1882,7 +1893,7 @@ async def api_technical(ticker: str):
         return JSONResponse(content=clean_for_json(tech))
     except Exception as e:
         log.warning(f"technical {ticker}: {e}")
-        raise HTTPException(status_code=404, detail=f"Teknik veri alinamadi: {base_ticker(ticker)}")
+        raise HTTPException(status_code=404, detail=f"Teknik veri alınamadı: {base_ticker(ticker)}")
 
 @app.get("/api/chart/{ticker}")
 async def api_chart(ticker: str):
@@ -1896,7 +1907,7 @@ async def api_chart(ticker: str):
         raise ValueError("Chart generation failed")
     except Exception as e:
         log.warning(f"chart {ticker}: {e}")
-        raise HTTPException(status_code=500, detail="Chart olusturulamadi")
+        raise HTTPException(status_code=500, detail="Grafik oluşturulamadı")
 
 @app.get("/api/ai-summary/{ticker}")
 async def api_ai_summary(ticker: str):
@@ -1906,10 +1917,10 @@ async def api_ai_summary(ticker: str):
         r = await asyncio.to_thread(analyze_symbol, symbol)
         tech = await asyncio.to_thread(compute_technical, symbol)
         text = await asyncio.to_thread(ai_trader_summary, r, tech)
-        return {"ticker": base_ticker(ticker), "summary": text or "AI ozet olusturulamadi (API key kontrol edin)"}
+        return {"ticker": base_ticker(ticker), "summary": text or "AI özet oluşturulamadı (API key kontrol edin)"}
     except Exception as e:
         log.warning(f"ai-summary {ticker}: {e}")
-        raise HTTPException(status_code=500, detail="AI ozet alinamadi")
+        raise HTTPException(status_code=500, detail="AI özet alınamadı")
 
 def _build_scan_item(r):
     """Build a lightweight scan result item — V8: labels + decision"""
@@ -1951,7 +1962,7 @@ async def api_scan():
         return {"asof": TOP10_CACHE["asof"].isoformat() if TOP10_CACHE["asof"] else None, "items": clean_for_json(items), "total_scanned": len(UNIVERSE)}
     except Exception as e:
         log.error(f"scan: {e}")
-        raise HTTPException(status_code=500, detail="Scan basarisiz")
+        raise HTTPException(status_code=500, detail="Scan başarısız")
 
 @app.get("/api/cross")
 async def api_cross():
@@ -1973,11 +1984,11 @@ async def api_cross():
                     ticker_groups[s["ticker"]].append(f"{s['signal']}({'*'*s.get('stars',1)})")
                 sig_summary = "; ".join(f"{t}: {', '.join(sigs)}" for t, sigs in list(ticker_groups.items())[:8])
                 prompt = (
-                    "Sen BistBull Cross Hunter'in sinyal analistisin. Turkce, somut, sallama YOK.\n"
+                    "Sen BistBull Cross Hunter'ın sinyal analistisin. Türkçe, somut, sallama YOK.\n"
                     f"Bugun {len(new_signals)} yeni sinyal tespit edildi ({bullish} yukari, {bearish} asagi).\n"
                     f"Sinyaller: {sig_summary}\n\n"
-                    "2-3 cumle yaz: Hangi sinyal(ler) gercekten dikkat cekici? Hangisi gürültü? "
-                    "Hacim teyidi olan sinyalleri vurgula. Spesifik hisse ismi ve sinyal adi kullan."
+                    "2-3 cümle yaz: Hangi sinyal(ler) gerçekten dikkat çekici? Hangisi gürültü? "
+                    "Hacim teyidi olan sinyalleri vurgula. Spesifik hisse ismi ve sinyal adı kullan."
                 )
                 ai_commentary = await asyncio.to_thread(ai_call, prompt, 250)
             except Exception as e:
@@ -1995,7 +2006,7 @@ async def api_cross():
         }
     except Exception as e:
         log.error(f"cross: {e}")
-        raise HTTPException(status_code=500, detail="Cross Hunter hatasi")
+        raise HTTPException(status_code=500, detail="Cross Hunter hatası")
 
 @app.get("/api/health")
 async def api_health():
@@ -2029,7 +2040,7 @@ async def api_market_status():
 # ANALYTICS TRACKING — simple event counter
 # ================================================================
 TRACK_EVENTS = defaultdict(int)
-TRACK_LOG = []  # last 500 events
+TRACK_LOG = deque(maxlen=500)  # O(1) append + auto-trim
 
 @app.api_route("/api/track", methods=["GET", "POST"])
 async def api_track(e: str = ""):
@@ -2037,8 +2048,6 @@ async def api_track(e: str = ""):
     if e:
         TRACK_EVENTS[e] += 1
         TRACK_LOG.append({"event": e, "ts": dt.datetime.now(dt.timezone.utc).isoformat()})
-        if len(TRACK_LOG) > 500:
-            TRACK_LOG.pop(0)
     return {"ok": True}
 
 @app.get("/api/analytics")
@@ -2047,7 +2056,7 @@ async def api_analytics():
     return {
         "events": dict(TRACK_EVENTS),
         "total": sum(TRACK_EVENTS.values()),
-        "recent": TRACK_LOG[-20:],
+        "recent": list(TRACK_LOG)[-20:],
     }
 
 # ================================================================
@@ -2080,54 +2089,72 @@ MACRO_SYMBOLS = {
     "NIKKEI": {"symbol": "^N225", "name": "Nikkei 225 (Japonya)", "category": "global", "flag": "🇯🇵"},
     # Emtia & Volatilite
     "BRENT": {"symbol": "BZ=F", "name": "Brent Petrol", "category": "emtia", "flag": "🛢️"},
-    "GOLD": {"symbol": "GC=F", "name": "Altin (oz)", "category": "emtia", "flag": "🥇"},
-    "SILVER": {"symbol": "SI=F", "name": "Gumus (oz)", "category": "emtia", "flag": "🥈"},
+    "GOLD": {"symbol": "GC=F", "name": "Altın (oz)", "category": "emtia", "flag": "🥇"},
+    "SILVER": {"symbol": "SI=F", "name": "Gümüş (oz)", "category": "emtia", "flag": "🥈"},
     "DXY": {"symbol": "DX-Y.NYB", "name": "Dolar Endeksi", "category": "emtia", "flag": "💵"},
     "VIX": {"symbol": "^VIX", "name": "VIX (Korku)", "category": "emtia", "flag": "😱"},
 }
 
-def _fetch_macro_item(key, info):
+def _fetch_all_macro():
+    """Batch download all macro symbols in a single yf.download call"""
+    now = dt.datetime.now()
+    ytd_start = dt.datetime(now.year, 1, 1).strftime("%Y-%m-%d")
+    symbols = [info["symbol"] for info in MACRO_SYMBOLS.values()]
+    results = []
     try:
-        tk = yf.Ticker(info["symbol"])
-        # Get YTD data (from Jan 1 to now)
-        now = dt.datetime.now()
-        ytd_start = dt.datetime(now.year, 1, 1)
-        h = tk.history(start=ytd_start, interval="1d")
-        if h is None or h.empty or len(h) < 2:
-            return None
-        price = float(h["Close"].iloc[-1])
-        prev = float(h["Close"].iloc[-2])
-        change = price - prev
-        change_pct = (change / prev * 100) if prev != 0 else 0
+        df = yf.download(symbols, start=ytd_start, interval="1d",
+                         group_by="ticker", progress=False, threads=True)
+        if df is None or df.empty:
+            return results
+        for key, info in MACRO_SYMBOLS.items():
+            try:
+                sym = info["symbol"]
+                if len(symbols) == 1:
+                    ticker_df = df
+                else:
+                    if sym in df.columns.get_level_values(0):
+                        ticker_df = df[sym].dropna(how="all")
+                    else:
+                        continue
+                if ticker_df is None or ticker_df.empty or len(ticker_df) < 2:
+                    continue
+                h = ticker_df
+                price = float(h["Close"].iloc[-1])
+                prev = float(h["Close"].iloc[-2])
+                change = price - prev
+                change_pct = (change / prev * 100) if prev != 0 else 0
 
-        # YTD performance
-        first_close = float(h["Close"].iloc[0])
-        ytd_pct = ((price - first_close) / first_close * 100) if first_close != 0 else 0
+                # YTD performance
+                first_close = float(h["Close"].iloc[0])
+                ytd_pct = ((price - first_close) / first_close * 100) if first_close != 0 else 0
 
-        # 1M performance (last ~22 trading days)
-        m1_pct = None
-        if len(h) >= 22:
-            m1_close = float(h["Close"].iloc[-22])
-            m1_pct = ((price - m1_close) / m1_close * 100) if m1_close != 0 else 0
+                # 1M performance (last ~22 trading days)
+                m1_pct = None
+                if len(h) >= 22:
+                    m1_close = float(h["Close"].iloc[-22])
+                    m1_pct = ((price - m1_close) / m1_close * 100) if m1_close != 0 else 0
 
-        # 1W performance (last ~5 trading days)
-        w1_pct = None
-        if len(h) >= 5:
-            w1_close = float(h["Close"].iloc[-5])
-            w1_pct = ((price - w1_close) / w1_close * 100) if w1_close != 0 else 0
+                # 1W performance (last ~5 trading days)
+                w1_pct = None
+                if len(h) >= 5:
+                    w1_close = float(h["Close"].iloc[-5])
+                    w1_pct = ((price - w1_close) / w1_close * 100) if w1_close != 0 else 0
 
-        return {
-            "key": key, "name": info["name"], "category": info["category"],
-            "flag": info.get("flag", ""),
-            "price": round(price, 4), "change": round(change, 4),
-            "change_pct": round(change_pct, 2),
-            "ytd_pct": round(ytd_pct, 2),
-            "m1_pct": round(m1_pct, 2) if m1_pct is not None else None,
-            "w1_pct": round(w1_pct, 2) if w1_pct is not None else None,
-        }
+                results.append({
+                    "key": key, "name": info["name"], "category": info["category"],
+                    "flag": info.get("flag", ""),
+                    "price": round(price, 4), "change": round(change, 4),
+                    "change_pct": round(change_pct, 2),
+                    "ytd_pct": round(ytd_pct, 2),
+                    "m1_pct": round(m1_pct, 2) if m1_pct is not None else None,
+                    "w1_pct": round(w1_pct, 2) if w1_pct is not None else None,
+                })
+            except Exception as e:
+                log.debug(f"Macro {key}: {e}")
+                continue
     except Exception as e:
-        log.debug(f"Macro {key}: {e}")
-        return None
+        log.warning(f"Macro batch download: {e}")
+    return results
 
 @app.get("/api/macro")
 async def api_macro():
@@ -2135,19 +2162,13 @@ async def api_macro():
     if cache_key in MACRO_CACHE:
         return MACRO_CACHE[cache_key]
     try:
-        results = []
-        with ThreadPoolExecutor(max_workers=8) as pool:
-            futures = {pool.submit(_fetch_macro_item, k, v): k for k, v in MACRO_SYMBOLS.items()}
-            for f in as_completed(futures):
-                r = f.result()
-                if r:
-                    results.append(r)
+        results = await asyncio.to_thread(_fetch_all_macro)
         result = {"timestamp": dt.datetime.now(dt.timezone.utc).isoformat(), "items": clean_for_json(results)}
         MACRO_CACHE[cache_key] = result
         return result
     except Exception as e:
         log.error(f"macro: {e}")
-        raise HTTPException(status_code=500, detail="Macro veri alinamadi")
+        raise HTTPException(status_code=500, detail="Makro veri alınamadı")
 
 # ================================================================
 # DASHBOARD SUMMARY — aggregated hero data
@@ -2243,7 +2264,7 @@ async def api_briefing():
     try:
         items = TOP10_CACHE.get("items", [])
         if not items:
-            return {"briefing": "Henuz tarama yapilmadi. Once SCAN calistirin.", "generated": False}
+            return {"briefing": "Henüz tarama yapılmadı. Önce SCAN çalıştırın.", "generated": False}
 
         top5 = items[:5]
         top3_deger = sorted(items, key=lambda x: x.get("deger", x["overall"]), reverse=True)[:3]
@@ -2262,7 +2283,7 @@ async def api_briefing():
         sig_str = ", ".join(f"{s['ticker']}:{s['signal']}" for s in cross_data[:3])
 
         prompt = (
-            "Sen BistBull Terminal'in baş piyasa analistisin. Kurumsal ton, somut veri, sallama YOK. Turkce yaz.\n\n"
+            "Sen BistBull Terminal'in baş piyasa analistisin. Kurumsal ton, somut veri, sallama YOK. Türkçe yaz.\n\n"
             f"TARAMA: {len(items)} BIST hissesi tarandi.\n"
             f"DEGER Liderleri (uzun vade): {deger_str}\n"
             f"IVME Liderleri (kisa vade): {ivme_str}\n"
@@ -2270,10 +2291,10 @@ async def api_briefing():
             f"Top 5 detay:\n" + "\n".join(summary_parts) + "\n"
             f"Aktif sinyal: {len(cross_data)} adet ({sig_str})\n\n"
             "YAPILANDIRILMIS BRIFING YAZ (her baslik ayri satirda):\n"
-            "OZET: 2-3 cumle genel durum (rakam kullan, 'iyi/kotu' gibi bos sifat degil)\n"
-            "YATIRIMCI: 2 cumle — uzun vadeciye ne one cikar? (DEGER skorlarina dayan)\n"
-            "TRADER: 2 cumle — kisa vadeciye ne one cikar? (IVME skorlarina ve sinyallere dayan)\n"
-            "DIKKAT: 1 cumle — en buyuk risk (spesifik hisse veya makro)\n"
+            "ÖZET: 2-3 cümle genel durum (rakam kullan, 'iyi/kötü' gibi boş sıfat değil)\n"
+            "YATIRIMCI: 2 cümle — uzun vadeciye ne öne çıkar? (DEĞER skorlarına dayan)\n"
+            "TRADER: 2 cümle — kısa vadeciye ne öne çıkar? (İVME skorlarına ve sinyallere dayan)\n"
+            "DİKKAT: 1 cümle — en büyük risk (spesifik hisse veya makro)\n"
         )
         text = await asyncio.to_thread(ai_call, prompt, 400)
         result = {"briefing": text, "generated": True, "timestamp": dt.datetime.now(dt.timezone.utc).isoformat()}
@@ -2303,7 +2324,7 @@ async def api_macro_commentary():
     try:
         macro_data = MACRO_CACHE.get("macro_all")
         if not macro_data or not macro_data.get("items"):
-            return {"commentary": "Makro veri henuz yuklenmedi. Sayfayi yenileyin.", "generated": False}
+            return {"commentary": "Makro veri henüz yüklenmedi. Sayfayı yenileyin.", "generated": False}
 
         items = macro_data["items"]
         lines = []
@@ -2311,14 +2332,14 @@ async def api_macro_commentary():
             lines.append(f"{m.get('flag','')} {m['name']}: {m['price']}, gun:{m['change_pct']}%, YTD:{m.get('ytd_pct','?')}%")
 
         prompt = (
-            "Sen BistBull Terminal'in makro stratejistisin. Kurumsal ton, somut, sallama YOK. Turkce yaz.\n"
-            "Asagidaki verilere DAYANARAK (sadece verideki rakamlari kullan):\n\n"
+            "Sen BistBull Terminal'in makro stratejistisin. Kurumsal ton, somut, sallama YOK. Türkçe yaz.\n"
+            "Aşağıdaki verilere DAYANARAK (sadece verideki rakamları kullan):\n\n"
             + "\n".join(lines[:20]) + "\n\n"
             "YAPILANDIRILMIS YORUM YAZ (her baslik ayri satirda):\n"
-            "TABLO: 2 cumle — bugunun makro tablosu (DXY, VIX, petrol, altin hareketleri + rakamlari)\n"
-            "EM: 1 cumle — Turkiye EM akranlarina karsi nerede? (YTD rakamlariyla kiyasla)\n"
-            "BIST: 1 cumle — bu makro tablo BIST icin ne anlama geliyor? (spesifik etki)\n"
-            "STRATEJI: 1 cumle — yatirimci ne yapmali? (somut, 'dikkatli ol' gibi bos laf degil)\n"
+            "TABLO: 2 cümle — bugünün makro tablosu (DXY, VIX, petrol, altın hareketleri + rakamları)\n"
+            "EM: 1 cümle — Türkiye EM akranlarına karşı nerede? (YTD rakamlarıyla kıyasla)\n"
+            "BIST: 1 cümle — bu makro tablo BIST için ne anlama geliyor? (spesifik etki)\n"
+            "STRATEJİ: 1 cümle — yatırımcı ne yapmalı? (somut, 'dikkatli ol' gibi boş laf değil)\n"
         )
         text = await asyncio.to_thread(ai_call, prompt, 300)
         result = {"commentary": text, "generated": True, "timestamp": dt.datetime.now(dt.timezone.utc).isoformat()}
@@ -2336,7 +2357,6 @@ TAKAS_CACHE = TTLCache(maxsize=50, ttl=1800)  # 30 min cache
 
 def _fetch_takas_isyatirim():
     """İş Yatırım hisse ekranından yabancı payı verisi çek"""
-    import requests
     url = "https://www.isyatirim.com.tr/_layouts/15/Isyatirim.Website/Common/Data.aspx/StockScreener"
     try:
         headers = {
@@ -2414,7 +2434,7 @@ async def api_takas():
             data = await asyncio.to_thread(_fetch_takas_yfinance)
             source = "yfinance"
         if not data:
-            return {"items": [], "source": None, "error": "Takas verisi alinamadi. isyatirim.com.tr domain whitelist'e ekleyin."}
+            return {"items": [], "source": None, "error": "Takas verisi alınamadı. isyatirim.com.tr domain whitelist'e ekleyin."}
 
         # Sort by foreign_pct descending (en yüksek yabancı payı önce)
         data = [d for d in data if d.get("foreign_pct") is not None]
@@ -2430,7 +2450,7 @@ async def api_takas():
         return result
     except Exception as e:
         log.error(f"takas: {e}")
-        raise HTTPException(status_code=500, detail="Takas verisi alinamadi")
+        raise HTTPException(status_code=500, detail="Takas verisi alınamadı")
 
 # ================================================================
 # SOSYAL MEDYA — X/Twitter sentiment via Grok + twscrape ready
@@ -2448,20 +2468,19 @@ async def api_social():
     if AI_AVAILABLE and "grok" in AI_PROVIDERS:
         try:
             prompt = (
-                "Sen bir BIST sosyal medya analistisin. X (Twitter) uzerindeki BIST hisse senedi tartismalarini analiz et.\n"
-                "Su anda X'te en cok konusulan BIST hisseleri hangileri? Genel sentiment nedir?\n"
-                "Asagidaki formatta JSON olarak cevap ver, SADECE JSON, baska birsey yazma:\n"
+                "Sen bir BIST sosyal medya analistisin. X (Twitter) üzerindeki BIST hisse senedi tartışmalarını analiz et.\n"
+                "Şu anda X'te en çok konuşulan BIST hisseleri hangileri? Genel sentiment nedir?\n"
+                "Aşağıdaki formatta JSON olarak cevap ver, SADECE JSON, başka bir şey yazma:\n"
                 '{"trending": [{"ticker": "THYAO", "sentiment": "bullish", "score": 78, "reason": "Yolcu rekoru haberleri"}, ...], '
                 '"overall_sentiment": "cautious_bullish", '
                 '"summary": "BIST\'te genel hava temkinli pozitif...", '
                 '"hot_topics": ["faiz kararı", "enflasyon verisi", "yabancı girişi"]}\n'
                 "En az 5 hisse, en fazla 10 hisse. score 0-100 arasi. sentiment: bullish/bearish/neutral.\n"
-                "Gercekci ol, sallama."
+                "Gerçekçi ol, sallama."
             )
             text = await asyncio.to_thread(ai_call, prompt, 500)
             if text:
                 # Try to parse JSON from response
-                import json as _json
                 # Clean potential markdown fences
                 clean = text.strip()
                 if clean.startswith("```"): clean = clean.split("\n", 1)[1] if "\n" in clean else clean[3:]
@@ -2469,7 +2488,7 @@ async def api_social():
                 clean = clean.strip()
                 if clean.startswith("json"): clean = clean[4:].strip()
                 try:
-                    data = _json.loads(clean)
+                    data = json.loads(clean)
                     result = {
                         "timestamp": dt.datetime.now(dt.timezone.utc).isoformat(),
                         "source": "grok_ai",
@@ -2480,7 +2499,7 @@ async def api_social():
                     }
                     SOCIAL_CACHE[cache_key] = result
                     return result
-                except _json.JSONDecodeError:
+                except json.JSONDecodeError:
                     # Grok didn't return valid JSON — return text as summary
                     result = {
                         "timestamp": dt.datetime.now(dt.timezone.utc).isoformat(),
@@ -2505,7 +2524,7 @@ async def api_social():
         "source": None,
         "trending": [],
         "overall_sentiment": "unavailable",
-        "summary": "Sosyal medya verisi icin XAI_API_KEY (Grok) ekleyin. Grok, X/Twitter verisine erisim saglar.",
+        "summary": "Sosyal medya verisi için XAI_API_KEY (Grok) ekleyin. Grok, X/Twitter verisine erişim sağlar.",
         "hot_topics": [],
         "error": "XAI_API_KEY gerekli"
     }
@@ -2514,30 +2533,30 @@ async def api_social():
 # GÜNÜN SÖZÜ — rotating finance wisdom
 # ================================================================
 FINANCE_QUOTES = [
-    {"text": "Fiyat ne odediginizdir, deger ne aldiginizdir.", "author": "Warren Buffett"},
-    {"text": "Piyasa kisa vadede oylama makinesi, uzun vadede tarti makinesidir.", "author": "Benjamin Graham"},
-    {"text": "En iyi yatirim kendinize yapacaginiz yatirimdir.", "author": "Warren Buffett"},
-    {"text": "Borsa sabirlidan sabirsiza para transferi yapar.", "author": "Warren Buffett"},
-    {"text": "Risk, ne yaptiginizi bilmemekten kaynaklanir.", "author": "Warren Buffett"},
-    {"text": "Harika sirketi makul fiyata almak, makul sirketi harika fiyata almaktan iyidir.", "author": "Warren Buffett"},
-    {"text": "Herkes acgozlu iken korkun, herkes korkak iken acgozlu olun.", "author": "Warren Buffett"},
-    {"text": "Basitlik, sofistikelikin nihai formudur.", "author": "Charlie Munger"},
-    {"text": "Bildiginizi alin, aldiginizi bilin.", "author": "Peter Lynch"},
-    {"text": "En iyi zaman agac dikmek icin 20 yil onceydi. Ikinci en iyi zaman bugun.", "author": "Cin Atasozu"},
-    {"text": "Getiri pesinde kosmay in, riski yonetin. Getiri kendiligin den gelir.", "author": "Benjamin Graham"},
-    {"text": "Piyasadaki en tehlikeli dort kelime: Bu sefer farkli olacak.", "author": "Sir John Templeton"},
-    {"text": "Sabir, yatirimcinin en guclu silahidir.", "author": "Jesse Livermore"},
-    {"text": "Trendin arkadasindir, ta ki donene kadar.", "author": "Ed Seykota"},
-    {"text": "Bilesik faiz dunyanin sekizinci harikasidir.", "author": "Albert Einstein"},
-    {"text": "Bir hisseyi 10 yil tutmayi dusunmuyorsaniz, 10 dakika bile tutmayin.", "author": "Warren Buffett"},
-    {"text": "Kazananlari tut, kaybedenleri kes.", "author": "William O'Neil"},
+    {"text": "Fiyat ne ödediğinizdir, değer ne aldığınızdır.", "author": "Warren Buffett"},
+    {"text": "Piyasa kısa vadede oylama makinesi, uzun vadede tartı makinesidir.", "author": "Benjamin Graham"},
+    {"text": "En iyi yatırım kendinize yapacağınız yatırımdır.", "author": "Warren Buffett"},
+    {"text": "Borsa sabırlıdan sabırsıza para transferi yapar.", "author": "Warren Buffett"},
+    {"text": "Risk, ne yaptığınızı bilmemekten kaynaklanır.", "author": "Warren Buffett"},
+    {"text": "Harika şirketi makul fiyata almak, makul şirketi harika fiyata almaktan iyidir.", "author": "Warren Buffett"},
+    {"text": "Herkes açgözlü iken korkun, herkes korkak iken açgözlü olun.", "author": "Warren Buffett"},
+    {"text": "Basitlik, sofistikeliğin nihai formudur.", "author": "Charlie Munger"},
+    {"text": "Bildiğinizi alın, aldığınızı bilin.", "author": "Peter Lynch"},
+    {"text": "En iyi zaman ağaç dikmek için 20 yıl önceydi. İkinci en iyi zaman bugün.", "author": "Çin Atasözü"},
+    {"text": "Getiri peşinde koşmayın, riski yönetin. Getiri kendiliğinden gelir.", "author": "Benjamin Graham"},
+    {"text": "Piyasadaki en tehlikeli dört kelime: Bu sefer farklı olacak.", "author": "Sir John Templeton"},
+    {"text": "Sabır, yatırımcının en güçlü silahıdır.", "author": "Jesse Livermore"},
+    {"text": "Trendin arkadaşındır, ta ki dönene kadar.", "author": "Ed Seykota"},
+    {"text": "Bileşik faiz dünyanın sekizinci harikasıdır.", "author": "Albert Einstein"},
+    {"text": "Bir hisseyi 10 yıl tutmayı düşünmüyorsanız, 10 dakika bile tutmayın.", "author": "Warren Buffett"},
+    {"text": "Kazananları tut, kaybedenleri kes.", "author": "William O'Neil"},
     {"text": "Nakit pozisyon da bir pozisyondur.", "author": "Jesse Livermore"},
-    {"text": "Enflasyon sessiz bir hirsizdir.", "author": "Milton Friedman"},
-    {"text": "Iyi sirketler kotu zamanlarda buyur.", "author": "Shelby Davis"},
-    {"text": "Yatirimda en onemli kalite mizactir, zeka degil.", "author": "Warren Buffett"},
-    {"text": "Batmamak icin cesitlendir, zengin olmak icin yogunlas.", "author": "Andrew Carnegie"},
-    {"text": "Piyasa size ders verecekse en pahalisi verir.", "author": "Wall Street Atasozu"},
-    {"text": "Yalniz kalabal igin tersine gitmeye hazir olan buyuk kazanclar elde edebilir.", "author": "Sir John Templeton"},
+    {"text": "Enflasyon sessiz bir hırsızdır.", "author": "Milton Friedman"},
+    {"text": "İyi şirketler kötü zamanlarda büyür.", "author": "Shelby Davis"},
+    {"text": "Yatırımda en önemli kalite mizaçtır, zekâ değil.", "author": "Warren Buffett"},
+    {"text": "Batmamak için çeşitlendir, zengin olmak için yoğunlaş.", "author": "Andrew Carnegie"},
+    {"text": "Piyasa size ders verecekse en pahalısını verir.", "author": "Wall Street Atasözü"},
+    {"text": "Yalnız kalabalığın tersine gitmeye hazır olan büyük kazançlar elde edebilir.", "author": "Sir John Templeton"},
 ]
 
 @app.get("/api/quote")
@@ -2550,21 +2569,21 @@ async def api_quote():
 # GÜNÜN FİNANS KİTABI — rotating book recommendations
 # ================================================================
 FINANCE_BOOKS = [
-    {"title": "Akilli Yatirimci", "author": "Benjamin Graham", "description": "Deger yatiriminin kutsal kitabi. Graham, hisse secimi ve risk yonetimini basit ama derin anlatir. Buffett'in 'hayatimi degistiren kitap' dedigi eser.", "level": "Baslangic-Orta"},
-    {"title": "Borsada Teknik Analiz", "author": "John J. Murphy", "description": "Teknik analizin ansiklopedisi. Grafik okuma, trend analizi, gostergeler — hepsi tek kitapta. Terminal kullanan herkesin rafinda olmali.", "level": "Orta"},
-    {"title": "Bir Adim Once", "author": "Peter Lynch", "description": "Efsanevi Magellan Fund yoneticisi, siradan yatirimcinin Wall Street'i nasil yenebilecegini anlatiyor. 'Bildiginizi alin' felsefesinin temeli.", "level": "Baslangic"},
-    {"title": "Piyasa Buyuculeri", "author": "Jack D. Schwager", "description": "Dunyanin en basarili trader'lariyla roportajlar. Her birinin farkli stratejisi ama ortak noktasi: disiplin ve risk yonetimi.", "level": "Orta-Ileri"},
-    {"title": "Zengin Baba Yoksul Baba", "author": "Robert Kiyosaki", "description": "Para, yatirim ve finansal ozgurluk hakkinda temel bakis acisi. Borsa oncesi herkesin okumasi gereken finansal okuryazarlik kitabi.", "level": "Baslangic"},
-    {"title": "Kayip Trader'in Gunlugu", "author": "Jim Paul", "description": "75 milyon dolar kaybeden bir trader'in hikayesi. Kazanmaktan cok kaybetmeyi anlamak icin muhtesem ders kitabi.", "level": "Herkes"},
-    {"title": "Borsanin Sinirlari", "author": "Nassim N. Taleb", "description": "Siyah Kugu teorisinin babasi, risk, belirsizlik ve piyasalardaki rastlantiyi gozler onune seriyor. Dusunce tarzinizi degistirir.", "level": "Ileri"},
-    {"title": "Para Psikolojisi", "author": "Morgan Housel", "description": "Yatirim kararlari mantik degil psikoloji ile alinir. Neden bazi insanlar zenginlesir, bazilari zenginligi koruyamaz?", "level": "Baslangic"},
-    {"title": "Hisselerde Uzun Vadeli Yatirim", "author": "Jeremy Siegel", "description": "200 yillik veriyle hisse senetlerinin neden uzun vadede en iyi yatirim araci oldugunu kanitliyor. Sabirin kitabi.", "level": "Orta"},
-    {"title": "Babil'in En Zengin Adami", "author": "George S. Clason", "description": "5000 yillik para bilgeligi modern hikayelerle. 'Kazandiginizin onda birini biriktirin' kuraliyla basliyor. Kisa ve etkili.", "level": "Baslangic"},
-    {"title": "Deger Yatiriminin Kucuk Kitabi", "author": "Christopher Browne", "description": "Graham-Buffett okulunun modern ozeti. Ucuz ve kaliteli hisse nasil bulunur, adim adim anlatiliyor.", "level": "Baslangic-Orta"},
-    {"title": "Flash Boys", "author": "Michael Lewis", "description": "Yuksek frekanli trading dunyasinin icerisinden bir hikaye. Piyasalarin gercekte nasil calistigini gosteren nefes kesen anlati.", "level": "Herkes"},
-    {"title": "Trader Vic", "author": "Victor Sperandeo", "description": "40 yillik tecrubesiyle Sperandeo, trend takibi ve risk yonetimini pratikte nasil uygulayacaginizi ogretiyor.", "level": "Orta-Ileri"},
-    {"title": "Warren Buffett ve Finansal Tablolarin Yorumu", "author": "Mary Buffett", "description": "Buffett'in gelini, ustanin bilanco okuma yontemini herkesin anlayacagi dilde aktariyor. Temel analize giris icin ideal.", "level": "Baslangic"},
-    {"title": "Kapital", "author": "Thomas Piketty", "description": "Servet esitsizligi ve kapitalizmin dinamikleri. Makro dusunmeyi ogreten, yatirim kararlarinda buyuk resmi gormeni saglayan eser.", "level": "Ileri"},
+    {"title": "Akıllı Yatırımcı", "author": "Benjamin Graham", "description": "Değer yatırımının kutsal kitabı. Graham, hisse seçimi ve risk yönetimini basit ama derin anlatır. Buffett'ın 'hayatımı değiştiren kitap' dediği eser.", "level": "Başlangıç-Orta"},
+    {"title": "Borsada Teknik Analiz", "author": "John J. Murphy", "description": "Teknik analizin ansiklopedisi. Grafik okuma, trend analizi, göstergeler — hepsi tek kitapta. Terminal kullanan herkesin rafında olmalı.", "level": "Orta"},
+    {"title": "Bir Adım Önce", "author": "Peter Lynch", "description": "Efsanevi Magellan Fund yöneticisi, sıradan yatırımcının Wall Street'i nasıl yenebileceğini anlatıyor. 'Bildiğinizi alın' felsefesinin temeli.", "level": "Başlangıç"},
+    {"title": "Piyasa Büyücüleri", "author": "Jack D. Schwager", "description": "Dünyanın en başarılı trader'larıyla röportajlar. Her birinin farklı stratejisi ama ortak noktası: disiplin ve risk yönetimi.", "level": "Orta-İleri"},
+    {"title": "Zengin Baba Yoksul Baba", "author": "Robert Kiyosaki", "description": "Para, yatırım ve finansal özgürlük hakkında temel bakış açısı. Borsa öncesi herkesin okuması gereken finansal okuryazarlık kitabı.", "level": "Başlangıç"},
+    {"title": "Kaybeden Trader'ın Günlüğü", "author": "Jim Paul", "description": "75 milyon dolar kaybeden bir trader'ın hikâyesi. Kazanmaktan çok kaybetmeyi anlamak için müthiş ders kitabı.", "level": "Herkes"},
+    {"title": "Borsanın Sınırları", "author": "Nassim N. Taleb", "description": "Siyah Kuğu teorisinin babası, risk, belirsizlik ve piyasalardaki rastlantıyı gözler önüne seriyor. Düşünce tarzınızı değiştirir.", "level": "İleri"},
+    {"title": "Para Psikolojisi", "author": "Morgan Housel", "description": "Yatırım kararları mantık değil psikoloji ile alınır. Neden bazı insanlar zenginleşir, bazıları zenginliği koruyamaz?", "level": "Başlangıç"},
+    {"title": "Hisselerde Uzun Vadeli Yatırım", "author": "Jeremy Siegel", "description": "200 yıllık veriyle hisse senetlerinin neden uzun vadede en iyi yatırım aracı olduğunu kanıtlıyor. Sabrın kitabı.", "level": "Orta"},
+    {"title": "Babil'in En Zengin Adamı", "author": "George S. Clason", "description": "5000 yıllık para bilgeliği modern hikâyelerle. 'Kazandığınızın onda birini biriktirin' kuralıyla başlıyor. Kısa ve etkili.", "level": "Başlangıç"},
+    {"title": "Değer Yatırımının Küçük Kitabı", "author": "Christopher Browne", "description": "Graham-Buffett okulunun modern özeti. Ucuz ve kaliteli hisse nasıl bulunur, adım adım anlatılıyor.", "level": "Başlangıç-Orta"},
+    {"title": "Flash Boys", "author": "Michael Lewis", "description": "Yüksek frekanslı trading dünyasının içerisinden bir hikâye. Piyasaların gerçekte nasıl çalıştığını gösteren nefes kesen anlatı.", "level": "Herkes"},
+    {"title": "Trader Vic", "author": "Victor Sperandeo", "description": "40 yıllık tecrübesiyle Sperandeo, trend takibi ve risk yönetimini pratikte nasıl uygulayacağınızı öğretiyor.", "level": "Orta-İleri"},
+    {"title": "Warren Buffett ve Finansal Tabloların Yorumu", "author": "Mary Buffett", "description": "Buffett'ın gelini, ustanın bilanço okuma yöntemini herkesin anlayacağı dilde aktarıyor. Temel analize giriş için ideal.", "level": "Başlangıç"},
+    {"title": "Kapital", "author": "Thomas Piketty", "description": "Servet eşitsizliği ve kapitalizmin dinamikleri. Makro düşünmeyi öğreten, yatırım kararlarında büyük resmi görmeni sağlayan eser.", "level": "İleri"},
 ]
 
 @app.get("/api/book")
@@ -2582,8 +2601,7 @@ def _fetch_heatmap_data():
     """Batch download 1-day data for all universe stocks"""
     symbols = [normalize_symbol(t) for t in UNIVERSE]
     try:
-        import yfinance as _yf
-        df = _yf.download(symbols, period="2d", group_by="ticker", progress=False, threads=True)
+        df = yf.download(symbols, period="2d", group_by="ticker", progress=False, threads=True)
         results = []
         for t in UNIVERSE:
             sym = normalize_symbol(t)
@@ -2658,9 +2676,9 @@ AGENT_CACHE = TTLCache(maxsize=100, ttl=600)
 @app.get("/api/agent")
 async def api_agent(q: str = ""):
     if not q.strip():
-        return {"answer": "Eyyay, hos geldin evladim! Bi cayini koy, dede anlatsin. Hisse analizi, piyasa, teknik sinyal — ne sorarsan soyliyim sayin yatirimci!"}
+        return {"answer": "Eyyay, hoş geldin evladım! Bi çayını koy, dede anlatsın. Hisse analizi, piyasa, teknik sinyal — ne sorarsan söyliyim sayın yatırımcı!"}
     if not AI_AVAILABLE:
-        return {"answer": "AI motoru aktif degil. XAI_API_KEY veya OPENAI_KEY ekleyin.", "error": True}
+        return {"answer": "AI motoru aktif değil. XAI_API_KEY veya OPENAI_KEY ekleyin.", "error": True}
     cache_key = q.strip().lower()[:100]
     if cache_key in AGENT_CACHE:
         return AGENT_CACHE[cache_key]
@@ -2688,26 +2706,26 @@ async def api_agent(q: str = ""):
             context += f"Aktif sinyaller: {sig_parts}\n"
 
         prompt = (
-            "Sen Eyyay Dede'sin. Gercek ismin Huseyin Sayilgan. 59 yasinda, Kayseri'li, "
-            "30 yillik borsa tecrubesi olan emekli bir portfoy yoneticisisin.\n\n"
+            "Sen Eyyay Dede'sin. Gerçek ismin Hüseyin Sayılgan. 59 yaşında, Kayseri'li, "
+            "30 yıllık borsa tecrübesi olan emekli bir portföy yöneticisisin.\n\n"
             "KARAKTER KURALLARI:\n"
             "- Hitap: 'evladim', 'sayin yatirimci', 'yavrum' kullan. ASLA 'kanka', 'bro', 'moruk' DEME.\n"
-            "- 'Eyyay' senin imzan — bazen cumle basinda onaylama/selamlama olarak kullan.\n"
-            "- Bilge ve sicakkanli ama ASLA laubali degil. Ciddi konularda ciddisin.\n"
-            "- Benzetmeler: 'misir tarlasina su vermeden hasat beklenmez' gibi Anadolu hikmeti.\n\n"
+            "- 'Eyyay' senin imzan — bazen cümle başında onaylama/selamlama olarak kullan.\n"
+            "- Bilge ve sıcakkanlı ama ASLA laubali değil. Ciddi konularda ciddisin.\n"
+            "- Benzetmeler: 'mısır tarlasına su vermeden hasat beklenmez' gibi Anadolu hikmeti.\n\n"
             "ICERIK KURALLARI (KRITIK):\n"
-            "- ASLA bos laf yapma. Her cumlende SOMUT veri veya SPESIFIK bilgi olsun.\n"
+            "- ASLA boş laf yapma. Her cümlende SOMUT veri veya SPESİFİK bilgi olsun.\n"
             "- Rakam kullan: 'P/E 5.2 ile sektör ortalamasinin yarisi' gibi, 'ucuz' deme.\n"
             "- Skor kullan: 'Deger skoru 78, Ivme skoru 45 — temel guclu ama giris zamani degil' gibi.\n"
-            "- Riskleri ACIKCA soyle: 'Borc/EBITDA 3.2 — bu yuksek, dikkat' gibi.\n"
-            "- ASLA 'al' veya 'sat' deme. 'Dedenin gorusune gore... ama sen de arastir evladim' de.\n"
-            "- Cevaplarin 4-5 cumle MAX. Kisa ama DOLU.\n"
-            "- Elindeki verilere dayan, verinin disina cikma, uydurmaca YAPMA.\n\n"
+            "- Riskleri AÇIKÇA söyle: 'Borç/EBITDA 3.2 — bu yüksek, dikkat' gibi.\n"
+            "- ASLA 'al' veya 'sat' deme. 'Dedenin görüşüne göre... ama sen de araştır evladım' de.\n"
+            "- Cevapların 4-5 cümle MAX. Kısa ama DOLU.\n"
+            "- Elindeki verilere dayan, verinin dışına çıkma, uydurmaca YAPMA.\n\n"
             f"{context}"
             f"Kullanicinin sorusu: {q}\n\nEyyay Dede:"
         )
         text = await asyncio.to_thread(ai_call, prompt, 300)
-        result = {"answer": text or "Cevap olusturulamadi.", "cached": False}
+        result = {"answer": text or "Cevap oluşturulamadı.", "cached": False}
         AGENT_CACHE[cache_key] = result
         return result
     except Exception as e:
@@ -2786,13 +2804,13 @@ async def api_hero_summary():
 
     # Watch list
     watch = []
-    if strong_sectors: watch.append(f"{strong_sectors[0][0]} sektoru guclu")
+    if strong_sectors: watch.append(f"{strong_sectors[0][0]} sektörü güçlü")
     macro_items = macro_data.get("items", [])
     for mi in macro_items:
-        if mi.get("key") == "VIX" and mi.get("change_pct", 0) > 3: watch.append("VIX yukseliyor — dikkat")
-        if mi.get("key") == "DXY" and mi.get("change_pct", 0) > 0.5: watch.append("DXY yukseliste — TL baskisi")
+        if mi.get("key") == "VIX" and mi.get("change_pct", 0) > 3: watch.append("VIX yükseliyor — dikkat")
+        if mi.get("key") == "DXY" and mi.get("change_pct", 0) > 0.5: watch.append("DXY yükselişte — TL baskısı")
     if cross_data: watch.append(f"{len(cross_data)} teknik sinyal aktif")
-    if not watch: watch = ["Piyasa sakin, secici izle"]
+    if not watch: watch = ["Piyasa sakin, seçici izle"]
 
     # AI-powered story + commentary — V7.1: rich dual context
     story = None
@@ -2804,23 +2822,27 @@ async def api_hero_summary():
             bot3 = [f"{r['ticker']}(D:{r.get('deger',r.get('overall',50)):.0f})" for r in sorted(items, key=lambda x: x.get('deger', x.get('overall',50)))[:3]]
             macro_str = ", ".join([f"{m['name']}:{m.get('change_pct',0):+.1f}%" for m in macro_items[:6]])
             prompt = (
-                "Sen BistBull Terminal'in piyasa stratejistisin. Kurumsal, somut, sallama YOK. Turkce yaz.\n"
+                "Sen BistBull Terminal'in piyasa stratejistisin. Kurumsal, somut, sallama YOK. Türkçe yaz.\n"
                 f"Piyasa: {mode_label}. {total} hisse, {bullish_count} pozitif, {bearish_count} zayif.\n"
                 f"DEGER liderleri: {', '.join(d_top)}. IVME liderleri: {', '.join(i_top)}.\n"
                 f"Zayiflar: {', '.join(bot3)}. Makro: {macro_str}\n"
-                f"Guclu sektorler: {', '.join([s[0] for s in strong_sectors])}. {len(cross_data)} sinyal aktif.\n\n"
+                f"Güçlü sektörler: {', '.join([s[0] for s in strong_sectors])}. {len(cross_data)} sinyal aktif.\n\n"
                 "3 satir yaz, HER BIRINI AYRI SATIRDA:\n"
-                "HIKAYE: 2 cumle — bugunun piyasa hikayesi (spesifik rakam ve hisse ismi kullan)\n"
-                "YORUM: 2 cumle — DEGER ve IVME perspektifinden strateji (hangi hisseyi neden, somut)\n"
-                "FIRSAT: 1 cumle — hem DEGER hem IVME skoru yuksek en iyi firsat (altin kesisim)"
+                "HİKÂYE: 2 cümle — bugünün piyasa hikâyesi (spesifik rakam ve hisse ismi kullan)\n"
+                "YORUM: 2 cümle — DEĞER ve İVME perspektifinden strateji (hangi hisseyi neden, somut)\n"
+                "FIRSAT: 1 cümle — hem DEĞER hem İVME skoru yüksek en iyi fırsat (altın kesişim)"
             )
             text = await asyncio.to_thread(ai_call, prompt, 300)
             if text:
                 for line in text.split("\n"):
                     line = line.strip()
-                    if line.upper().startswith("HIKAYE:"): story = line[7:].strip()
-                    elif line.upper().startswith("YORUM:"): bot_says = line[6:].strip()
-                    elif line.upper().startswith("FIRSAT:") and opp: opp["ai_reason"] = line[7:].strip()
+                    lu = line.upper()
+                    if lu.startswith("HİKÂYE:") or lu.startswith("HIKAYE:") or lu.startswith("HİKAYE:"):
+                        story = line.split(":", 1)[1].strip()
+                    elif lu.startswith("YORUM:"):
+                        bot_says = line[6:].strip()
+                    elif lu.startswith("FIRSAT:") or lu.startswith("FIRSAT:"):
+                        if opp: opp["ai_reason"] = line.split(":", 1)[1].strip()
                 if not story: story = text[:200]
                 if not bot_says: bot_says = text[200:400] if len(text) > 200 else None
         except Exception as e:
@@ -2828,12 +2850,12 @@ async def api_hero_summary():
 
     result = {
         "mode": mode, "mode_label": mode_label, "mode_color": mode_color,
-        "story": story or f"{total} hisse tarandi. {bullish_count} hisse pozitif bolgede, {bearish_count} hisse zayif.",
+        "story": story or f"{total} hisse tarandı. {bullish_count} hisse pozitif bölgede, {bearish_count} hisse zayıf.",
         "opportunity": clean_for_json(opp),
         "risk": clean_for_json(risk_item),
         "deger_leaders": clean_for_json(deger_leaders),  # V7.1
         "ivme_leaders": clean_for_json(ivme_leaders),    # V7.1
-        "bot_says": bot_says or f"Piyasa {mode_label.lower()} modda. {'Secici al stratejisi uygun.' if mode != 'RISKLI' else 'Defansif pozisyon onerilir.'}",
+        "bot_says": bot_says or f"Piyasa {mode_label.lower()} modda. {'Seçici al stratejisi uygun.' if mode != 'RISKLI' else 'Defansif pozisyon önerilir.'}",
         "watch": watch[:4],
         "strong_sectors": [{"name": s[0], "score": round(s[1], 1)} for s in strong_sectors],
         "weak_sectors": [{"name": s[0], "score": round(s[1], 1)} for s in weak_sectors],
