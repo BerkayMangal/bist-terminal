@@ -2915,8 +2915,10 @@ async def api_batch(tickers: str):
             results.append({"ticker": t, "error": str(e)})
     return {"items": clean_for_json(results)}
 
-# Serve frontend — read index.html from same directory as app.py, no static/ folder needed
-_INDEX_HTML_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "index.html")
+# Serve frontend — landing page at /, terminal at /terminal
+_BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+_INDEX_HTML_PATH = os.path.join(_BASE_DIR, "index.html")
+_LANDING_HTML_PATH = os.path.join(_BASE_DIR, "landing.html")
 
 # Suppress browser favicon/icon 404s
 @app.get("/favicon.ico")
@@ -2926,7 +2928,16 @@ async def _suppress_icon():
     return Response(status_code=204)
 
 @app.get("/", response_class=HTMLResponse)
-async def serve_index():
+async def serve_landing():
+    try:
+        with open(_LANDING_HTML_PATH, "r", encoding="utf-8") as f:
+            return HTMLResponse(content=f.read())
+    except FileNotFoundError:
+        # Fallback to terminal if landing.html missing
+        return await serve_terminal()
+
+@app.get("/terminal", response_class=HTMLResponse)
+async def serve_terminal():
     try:
         with open(_INDEX_HTML_PATH, "r", encoding="utf-8") as f:
             return HTMLResponse(content=f.read())
