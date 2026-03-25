@@ -124,21 +124,25 @@ UNIVERSE_BIST30 = [
 UNIVERSE_EXTRA = [
     # Sanayi / Otomotiv
     "VESTL","DOHOL","AYGAZ","LOGO","INDES","ODAS","GUBRF","CIMSA","MPARK",
-    "OYAKC","ISMEN","TTRAK","AEFES","DOAS","AGHOL",
+    "OYAKC","ISMEN","TTRAK","AEFES","DOAS","AGHOL","OTKAR","VESBE","EGEEN","TMSN",
     # Enerji / Maden
-    "GESAN","ZOREN","ENJSA","AYDEM",
+    "GESAN","ZOREN","ENJSA","AYDEM","KOZAL","KOZAA","ISDMR",
     # Finans (holding + sigorta + GYO)
-    "HALKB","VAKBN","TSKB","SKBNK","ALBRK","ANHYT","AGESA",
+    "HALKB","VAKBN","TSKB","SKBNK","ALBRK","ANHYT","AGESA","TURSG","ANSGR","GLYHO","BERA",
     # Perakende / Tüketici
-    "ULKER","CCOLA","PNSUT","MAVI","BIZIM",
+    "ULKER","CCOLA","PNSUT","MAVI","BIZIM","YATAS","ADEL",
     # Teknoloji / Telekom
-    "NETAS","KRONT","ALARK","ASTOR",
-    # İnşaat / GYO
-    "ISGYO","HLGYO","KLGYO",
+    "NETAS","KRONT","ALARK","ASTOR","PAPIL",
+    # İnşaat / GYO / Çimento
+    "ISGYO","HLGYO","KLGYO","AKFGY","BTCIM","BAGFS",
     # Ulaştırma
     "CLEBI","RYSAS",
-    # Diğer
-    "BRYAT","EUPWR","BRSAN","SARKY","GEDZA","BUCIM",
+    # Enerji Yeni / Yenilenebilir
+    "CWENE","SMRTG","KCAER",
+    # Sanayi / Kağıt / Metal / Diğer
+    "BRYAT","EUPWR","BRSAN","SARKY","GEDZA","BUCIM","KORDS","KARTN","DEVA",
+    # V9.2: 100'e tamamlama
+    "CANTE","CEMTS","NUHCM","PRKME","AKSA","GOLTS","ERBOS","MIATK","QUAGR","FORTE","RGYAS",
 ]
 UNIVERSE = UNIVERSE_BIST30 + UNIVERSE_EXTRA
 
@@ -666,46 +670,81 @@ def _compute_risk_penalties(m, sector_group=None):
 def timing_label(ivme_score, momentum_score=None):
     """İVME skoruna göre zamanlama etiketi"""
     s = ivme_score or 50
-    if s < 30: return "ERKEN"       # henüz kimse fark etmedi
-    if s < 55: return "GELİŞİYOR"   # sinyaller oluşuyor
-    if s < 75: return "TEYİTLİ"     # trend başladı
-    if s < 88: return "GEÇ"         # fiyatlanmış olabilir
-    return "AŞIRI"                   # çok geç, dikkat
+    if s < 30: return "ERKEN"
+    if s < 55: return "GELİŞİYOR"
+    if s < 75: return "TEYİTLİ"
+    if s < 88: return "GEÇ"
+    return "AŞIRI"
 
-def quality_label(deger_score):
-    """DEĞER skoruna göre kalite etiketi"""
-    s = deger_score or 50
+def quality_label(fa_pure):
+    """Saf FA skoruna göre kalite etiketi"""
+    s = fa_pure or 50
     if s >= 78: return "ELİT"
     if s >= 62: return "GÜÇLÜ"
     if s >= 45: return "ORTA"
     if s >= 30: return "ZAYIF"
     return "RİSKLİ"
 
-def decision_engine(deger, ivme, risk_penalty):
-    """DEĞER + İVME + Risk → AL/İZLE/BEKLE/KAÇIN kararı"""
-    d, i, r = deger or 50, ivme or 50, risk_penalty or 0
+def entry_quality_label(fa_pure, ivme, risk_penalty):
+    """V9.2 FINAL: Giriş kalitesi — FA + Momentum + Risk kombinasyonu.
+    Bu label 'tüyo mu duydun?' kısmının kalbi."""
+    fa = fa_pure or 50
+    iv = ivme or 50
+    rp = risk_penalty or 0
+
+    # HYPE: zayıf temel + güçlü momentum = tehlike
+    if fa < 40 and iv >= 65:
+        return "SPEKÜLATİF"
+    # KAÇIN: zayıf temel + ağır risk
+    if fa < 30 or rp <= -25:
+        return "KAÇIN"
+    # TEYİTLİ: güçlü temel + momentum başlamış = en iyi giriş
+    if fa >= 60 and iv >= 45 and iv < 80 and rp > -15:
+        return "TEYİTLİ"
+    # ERKEN: güçlü temel ama momentum yok = sabırlı yatırımcı
+    if fa >= 55 and iv < 45:
+        return "ERKEN"
+    # GEÇ: iyi temel ama fiyat çoktan yükselmiş
+    if fa >= 50 and iv >= 80:
+        return "GEÇ"
+    # FIRSAT: orta temel + uygun momentum
+    if fa >= 45 and iv >= 40 and iv < 70 and rp > -15:
+        return "FIRSAT"
+    # BEKLE: diğer her şey
+    return "BEKLE"
+
+def decision_engine(fa_pure, ivme, risk_penalty, entry_label):
+    """V9.2 FINAL: KARAR motoru — FA + İvme + Risk + Entry Label"""
+    fa = fa_pure or 50
+    iv = ivme or 50
+    rp = risk_penalty or 0
+
+    # Entry label zaten hype/kaçın dediyse
+    if entry_label == "SPEKÜLATİF": return "KAÇIN"
+    if entry_label == "KAÇIN": return "KAÇIN"
 
     # Ağır risk → otomatik KAÇIN
-    if r <= -25: return "KAÇIN"
-    if d < 30: return "KAÇIN"
+    if rp <= -25: return "KAÇIN"
+    if fa < 30: return "KAÇIN"
 
-    # Güçlü temel + erken/teyitli momentum
-    if d >= 70 and i >= 40 and i < 80 and r > -15:
+    # TEYİTLİ giriş = AL
+    if entry_label == "TEYİTLİ" and fa >= 60 and rp > -15:
         return "AL"
-    # Güçlü temel + çok erken (henüz momentum yok)
-    if d >= 65 and i < 40 and r > -10:
+    # ERKEN = İZLE (bekle momentum gelsin)
+    if entry_label == "ERKEN" and fa >= 55:
         return "İZLE"
-    # İyi temel + teyitli momentum ama geç
-    if d >= 60 and i >= 75:
+    # GEÇ = BEKLE (düzeltme bekle)
+    if entry_label == "GEÇ":
         return "BEKLE"
-    # Orta temel + güçlü momentum
-    if d >= 50 and i >= 55 and r > -15:
+    # FIRSAT = İZLE
+    if entry_label == "FIRSAT":
         return "İZLE"
-    # Orta/zayıf her şey
-    if d >= 45 and r > -20:
+    # Orta kalite
+    if fa >= 45 and rp > -20:
         return "BEKLE"
     return "KAÇIN"
 def score_value(m, sector_group=None):
+    """V9.2 PRO: Değerleme — ucuz mu pahalı mı? Graham ağırlığı azaltıldı."""
     th_pe = _get_threshold(sector_group, "pe", (25, 16, 10, 6))
     th_pb = _get_threshold(sector_group, "pb", (4.5, 2.5, 1.5, 0.8))
     th_ev = _get_threshold(sector_group, "ev_ebitda", (16, 11, 7, 4))
@@ -714,25 +753,27 @@ def score_value(m, sector_group=None):
         ev = m["market_cap"] + (m["total_debt"] or 0) - (m["cash"] or 0)
         if m["revenue"] > 0:
             ev_sales = ev / m["revenue"]
+    # Graham MoS: cap at 70 (was 100) → reduces pull on average ≈ %10 effective weight
+    mos_raw = score_higher(m.get("margin_safety"), -0.2, 0, 0.15, 0.30)
+    mos_capped = min(mos_raw, 70) if mos_raw is not None else None
     parts = [
         score_lower(m.get("pe"), *th_pe) if th_pe and (m.get("pe") or 0) > 0 else None,
         score_lower(m.get("pb"), *th_pb) if th_pb and (m.get("pb") or 0) > 0 else None,
         score_lower(m.get("ev_ebitda"), *th_ev) if th_ev and (m.get("ev_ebitda") or 0) > 0 else None,
         score_lower(ev_sales, 0.5, 1.2, 2.5, 5.0) if ev_sales is not None and ev_sales > 0 else None,
         score_higher(m.get("fcf_yield"), 0, 0.02, 0.05, 0.08),
-        score_higher(m.get("margin_safety"), -0.2, 0, 0.15, 0.30),
+        mos_capped,
     ]
     return avg(parts)
 
 def score_quality(m, sector_group=None):
+    """V9.2 PRO: İş kalitesi — SADECE kârlılık oranları. Margin'ler Moat'a taşındı (double counting fix)."""
     th_roe = _get_threshold(sector_group, "roe", (0.01, 0.06, 0.12, 0.20))
     th_roic = _get_threshold(sector_group, "roic", (0.01, 0.06, 0.10, 0.16))
     th_nm = _get_threshold(sector_group, "net_margin", (0.005, 0.03, 0.08, 0.15))
     return avg([
         score_higher(m.get("roe"), *th_roe) if th_roe else None,
         score_higher(m.get("roic"), *th_roic) if th_roic else None,
-        score_higher(m.get("gross_margin"), 0.08, 0.15, 0.25, 0.40),
-        score_higher(m.get("operating_margin"), 0.02, 0.06, 0.12, 0.20),
         score_higher(m.get("net_margin"), *th_nm) if th_nm else None,
     ])
 
@@ -749,7 +790,7 @@ def score_balance(m, sector_group=None):
     th_nde = _get_threshold(sector_group, "net_debt_ebitda", (0.5, 1.5, 2.5, 4.0))
     th_de = _get_threshold(sector_group, "debt_equity", (30, 80, 150, 300))
     th_cr = _get_threshold(sector_group, "current_ratio", (0.8, 1.1, 1.5, 2.2))
-    th_az = _get_threshold(sector_group, "altman_z", (1.2, 1.8, 3.0, 4.5))  # V9.2: sektör-bazlı
+    th_az = _get_threshold(sector_group, "altman_z", (1.2, 1.8, 3.0, 4.5))
     nde = m.get("net_debt_ebitda")
     nde_s = None
     if th_nde:
@@ -758,10 +799,11 @@ def score_balance(m, sector_group=None):
         score_lower(m.get("debt_equity"), *th_de) if th_de else None,
         score_higher(m.get("current_ratio"), *th_cr) if th_cr else None,
         score_higher(m.get("interest_coverage"), 1.5, 3.0, 6.0, 12.0),
-        score_higher(m.get("altman_z"), *th_az) if th_az else None,  # V9.2: sektör-aware
+        score_higher(m.get("altman_z"), *th_az) if th_az else None,
     ])
 
 def score_earnings(m):
+    """V9.2 PRO: Kâr kalitesi — nakit akış odaklı. Margin burada değil (double counting fix)."""
     bm = m.get("beneish_m")
     bm_s = None
     if bm is not None:
@@ -773,26 +815,30 @@ def score_earnings(m):
     ])
 
 def score_moat(m):
-    stab = None
+    """V9.2 PRO: Rekabet avantajı — stability + pricing power. Margin SEVİYELERİ Quality'den buraya taşındı."""
+    gm_stab = None
     if m.get("gross_margin") is not None and m.get("gross_margin_prev") is not None:
-        stab = score_lower(abs(m["gross_margin"] - m["gross_margin_prev"]), 0, 0.02, 0.06, 0.12)
-    op_stab = None
-    if m.get("operating_margin") is not None and m.get("roa") is not None and m.get("roa_prev") is not None:
-        op_stab = score_lower(abs(m["roa"] - m["roa_prev"]), 0, 0.02, 0.05, 0.10)
-    pricing = score_higher(m.get("gross_margin"), 0.12, 0.22, 0.35, 0.50) if m.get("gross_margin") else None
+        gm_stab = score_lower(abs(m["gross_margin"] - m["gross_margin_prev"]), 0, 0.02, 0.06, 0.12)
+    roa_stab = None
+    if m.get("roa") is not None and m.get("roa_prev") is not None:
+        roa_stab = score_lower(abs(m["roa"] - m["roa_prev"]), 0, 0.02, 0.05, 0.10)
+    # Fiyatlama gücü — brüt marj SEVİYESİ (Quality'den buraya taşındı)
+    pricing = score_higher(m.get("gross_margin"), 0.08, 0.15, 0.25, 0.40) if m.get("gross_margin") else None
+    # Faaliyet marjı seviyesi (Quality'den buraya taşındı)
+    op_power = score_higher(m.get("operating_margin"), 0.02, 0.06, 0.12, 0.20) if m.get("operating_margin") else None
     at_trend = None
     if m.get("asset_turnover") is not None and m.get("asset_turnover_prev") is not None:
-        # V9.2: Tolerans bandı — |ΔAT| < 0.02 → nötr (55)
         delta_at = m["asset_turnover"] - m["asset_turnover_prev"]
         if abs(delta_at) < 0.02:
-            at_trend = 55  # nötr — pratik olarak değişmemiş
+            at_trend = 55
         elif delta_at >= 0:
             at_trend = 75
         else:
             at_trend = 35
-    return avg([stab, op_stab, pricing, at_trend])
+    return avg([gm_stab, roa_stab, pricing, op_power, at_trend])
 
 def score_capital(m):
+    """V9.2 PRO: Sermaye tahsisi — güçlendirildi. ROIC kalitesi + nakit akış tutarlılığı eklendi."""
     dil = None
     sc = m.get("share_change")
     if sc is not None:
@@ -803,17 +849,29 @@ def score_capital(m):
         if m["revenue"] > 0:
             cr = capex / m["revenue"]
             capex_rev = score_lower(cr, 0.02, 0.05, 0.10, 0.20)
+    # ROIC kalitesi — yatırılan sermayenin getirisi yeterli mi?
+    roic_quality = None
+    roic = m.get("roic")
+    if roic is not None:
+        roic_quality = score_higher(roic, 0.02, 0.08, 0.14, 0.22)
+    # Nakit akış tutarlılığı — CFO pozitif VE net gelirden büyük mü?
+    cf_consistency = None
+    if m.get("operating_cf") is not None and m.get("net_income") is not None:
+        if m["operating_cf"] > 0 and m["net_income"] > 0:
+            ratio = m["operating_cf"] / m["net_income"]
+            cf_consistency = score_higher(ratio, 0.5, 0.8, 1.0, 1.3)
+        elif m["operating_cf"] > 0:
+            cf_consistency = 60
+        else:
+            cf_consistency = 15
     return avg([
         score_higher(m.get("dividend_yield"), 0, 0.01, 0.03, 0.06),
         score_higher(m.get("fcf_yield"), 0, 0.02, 0.05, 0.08),
         capex_rev,
         dil,
+        roic_quality,
+        cf_consistency,
     ])
-
-# ================================================================
-# V7: 3 YENi HIBRIT SKORLAR — Momentum, Technical Break, Institutional Flow
-# Teknik veriyi (compute_technical output) kullanir
-# ================================================================
 
 def score_momentum(m, tech):
     """Momentum skoru (0-100) — fiyat trendi, hacim, RSI bazli
@@ -1090,7 +1148,7 @@ def analyze_symbol(symbol):
     except Exception as e:
         log.debug(f"analyze_symbol tech for {symbol}: {e}")
 
-    # --- DEĞER: 6 temel boyut (sektör-bazlı eşiklerle) ---
+    # --- 7 BOYUT SKORLAMA (sektör-bazlı) ---
     scores = {}
     scores["value"] = round((score_value(m, sector_group) or 50), 1)
     scores["quality"] = round((score_quality(m, sector_group) or 50), 1)
@@ -1100,21 +1158,43 @@ def analyze_symbol(symbol):
     scores["moat"] = round((score_moat(m) or 50), 1)
     scores["capital"] = round((score_capital(m) or 50), 1)
 
-    # DEĞER ağırlıklı skoru
-    deger_raw = (
-        0.23 * scores["value"]
-      + 0.23 * scores["quality"]
-      + 0.18 * scores["growth"]
-      + 0.18 * scores["balance"]
-      + 0.10 * scores["earnings"]
-      + 0.08 * scores["moat"]
-    )
-    # Kademeli penaltiler — V9.2: sektör-aware
-    risk_penalty, risk_reasons = _compute_risk_penalties(m, sector_group)
-    deger_raw += risk_penalty
-    deger_score = round(max(1, min(99, deger_raw)), 1)
+    # ═══════════════════════════════════════════════════════════
+    # V9.2 FINAL: FA PURE SCORE — saf şirket kalitesi, penaltısız
+    # "Bu şirket iyi mi?" sorusunun cevabı
+    # ═══════════════════════════════════════════════════════════
+    fa_pure = round(max(1, min(99, (
+        0.30 * scores["quality"]    # kalite > her şey
+      + 0.18 * scores["value"]      # ucuzluk
+      + 0.15 * scores["growth"]     # büyüme
+      + 0.10 * scores["balance"]    # bilanço (risk penalty'de de var → ağırlık düşük)
+      + 0.10 * scores["earnings"]   # nakit akış kalitesi
+      + 0.08 * scores["moat"]       # hendek
+      + 0.09 * scores["capital"]    # sermaye tahsisi (güçlendirildi)
+    ))), 1)
 
-    # --- İVME: 3 teknik boyut ---
+    # ═══════════════════════════════════════════════════════════
+    # RISK SCORE — ayrı katman
+    # ═══════════════════════════════════════════════════════════
+    risk_penalty, risk_reasons = _compute_risk_penalties(m, sector_group)
+
+    # V9.2 TURKEY: Fake Profit filtresi — CFO/NI agresif kontrol
+    cfo_ni = m.get("cfo_to_ni")
+    if cfo_ni is not None:
+        if m.get("operating_cf") is not None and m["operating_cf"] < 0 and m.get("net_income") is not None and m["net_income"] > 0:
+            risk_penalty -= 12
+            risk_reasons.append("Kâr var nakit yok — sahte kâr riski (-12)")
+        elif cfo_ni < 0.5:
+            risk_penalty -= 6
+            risk_reasons.append(f"Düşük nakit kalitesi CFO/NI={cfo_ni:.2f} (-6)")
+
+    risk_score = risk_penalty  # negatif = kötü, 0 = nötr, pozitif = bonus
+
+    # FA + Risk birleşik (Radar'da gösterilecek)
+    deger_score = round(max(1, min(99, fa_pure + risk_penalty)), 1)
+
+    # ═══════════════════════════════════════════════════════════
+    # İVME: 3 teknik boyut
+    # ═══════════════════════════════════════════════════════════
     mom = score_momentum(m, tech)
     tb = score_technical_break(m, tech)
     inst = score_institutional_flow(m, tech)
@@ -1128,26 +1208,84 @@ def analyze_symbol(symbol):
       + 0.25 * scores["inst_flow"]
     )), 1)
 
-    # --- COMBINED ---
-    overall = round(max(1, min(99, deger_score * 0.55 + ivme_score * 0.45)), 1)
+    # ═══════════════════════════════════════════════════════════
+    # V9.2 FINAL: MOMENTUM × FA QUALITY GATE
+    # Kötü şirket + yüksek momentum = limited boost
+    # İyi şirket + momentum = güçlü boost
+    # ═══════════════════════════════════════════════════════════
+    momentum_effect = ivme_score * (fa_pure / 100.0)
 
-    # --- LABELS + DECISION ---
+    # ═══════════════════════════════════════════════════════════
+    # VALUATION STRETCH — genişletilmiş (-15 / +10)
+    # ═══════════════════════════════════════════════════════════
+    val_stretch = 0
+    v = scores["value"]
+    if v >= 80: val_stretch = 10      # çok ucuz → güçlü bonus
+    elif v >= 65: val_stretch = 5     # ucuz
+    elif v >= 55: val_stretch = 2     # makul-ucuz
+    elif v <= 15: val_stretch = -15   # aşırı pahalı → ağır ceza
+    elif v <= 25: val_stretch = -10   # çok pahalı
+    elif v <= 35: val_stretch = -5    # pahalı
+    elif v <= 45: val_stretch = -2    # makul-pahalı
+
+    # ═══════════════════════════════════════════════════════════
+    # DECISION SCORE (overall) — her şeyin birleşimi
+    # FA × 0.55 + Momentum(FA-gated) × 0.35 + Valuation Stretch + Risk
+    # ═══════════════════════════════════════════════════════════
+    overall = round(max(1, min(99,
+        fa_pure * 0.55
+      + momentum_effect * 0.35
+      + val_stretch
+      + max(risk_penalty, -30) * 0.3  # risk etkisi (cap'li)
+    )), 1)
+
+    # ═══════════════════════════════════════════════════════════
+    # HYPE DETECTION — Türkiye piyasası için kritik
+    # ═══════════════════════════════════════════════════════════
+    is_hype = False
+    hype_reason = None
+    if tech:
+        pct_20d = tech.get("pct_20d") or 0
+        vol_ratio = tech.get("vol_ratio") or 1
+        if pct_20d > 25 and vol_ratio > 2.5 and fa_pure < 40:
+            is_hype = True
+            hype_reason = f"20 günde +%{pct_20d:.0f}, hacim {vol_ratio:.1f}x, FA sadece {fa_pure:.0f}"
+        elif pct_20d > 15 and vol_ratio > 2.0 and fa_pure < 35:
+            is_hype = True
+            hype_reason = f"Hızlı yükseliş +%{pct_20d:.0f} ama temel zayıf (FA:{fa_pure:.0f})"
+
+    # ═══════════════════════════════════════════════════════════
+    # LABELS + KARAR
+    # ═══════════════════════════════════════════════════════════
     t_label = timing_label(ivme_score, scores.get("momentum"))
-    q_label = quality_label(deger_score)
-    decision = decision_engine(deger_score, ivme_score, risk_penalty)
+    q_label = quality_label(fa_pure)
+    e_label = entry_quality_label(fa_pure, ivme_score, risk_penalty)
+
+    # Hype override
+    if is_hype:
+        e_label = "SPEKÜLATİF"
+
+    decision = decision_engine(fa_pure, ivme_score, risk_penalty, e_label)
 
     confidence = confidence_score(m)
     style = style_label(scores)
     legends = legendary_labels(m, scores)
     pos, neg = drivers(scores, confidence, m, sector_group)
 
+    # Hype'ı negatives'e ekle
+    if is_hype and hype_reason:
+        neg.insert(0, f"⚠️ HYPE: {hype_reason}")
+
     r = {
         "symbol": symbol, "ticker": base_ticker(symbol), "name": m["name"], "currency": m["currency"],
         "sector": m.get("sector", ""), "sector_group": sector_group, "industry": m.get("industry", ""),
         "metrics": m, "scores": scores, "overall": overall, "confidence": confidence,
-        "deger": deger_score, "ivme": ivme_score,
-        "timing": t_label, "quality_tag": q_label, "decision": decision,  # V8
-        "risk_penalty": risk_penalty, "risk_reasons": risk_reasons,        # V8
+        "fa_score": fa_pure, "deger": deger_score, "ivme": ivme_score,
+        "risk_score": risk_score,                                       # V9.2: ayrı risk
+        "entry_label": e_label,                                         # V9.2: giriş kalitesi
+        "is_hype": is_hype,                                             # V9.2: hype flag
+        "timing": t_label, "quality_tag": q_label, "decision": decision,
+        "risk_penalty": risk_penalty, "risk_reasons": risk_reasons,
         "style": style, "legendary": legends, "positives": pos, "negatives": neg,
     }
     ANALYSIS_CACHE[symbol] = r
@@ -1313,6 +1451,11 @@ def compute_technical(symbol, hist_df=None):
                 if not np.isnan(val):
                     ma200_series.append({"date": idx.strftime("%Y-%m-%d"), "value": round(float(val), 2)})
 
+        # V9.2: 20-günlük fiyat değişimi (hype detection için)
+        pct_20d = None
+        if len(c) >= 20:
+            pct_20d = round(((price - float(c.iloc[-20])) / float(c.iloc[-20])) * 100, 1)
+
         result = {
             "price": price, "ma50": ma50_val, "ma200": ma200_val,
             "rsi": rsi_val, "macd": macd_val, "macd_signal": signal_val,
@@ -1323,6 +1466,7 @@ def compute_technical(symbol, hist_df=None):
             "bb_lower": round(float(bb_lower.iloc[-1]), 2) if not np.isnan(bb_lower.iloc[-1]) else None,
             "high_52w": high_52w, "low_52w": low_52w,
             "pct_from_high": pct_from_high, "pct_from_low": pct_from_low,
+            "pct_20d": pct_20d,  # V9.2: hype detection
             "vol_ratio": vol_ratio, "tech_score": round(tech_score, 1),
             "components": components,
             "price_history": price_history,
@@ -1428,37 +1572,45 @@ def generate_chart_png(symbol, tech_data=None):
 # AI RICH CONTEXT BUILDER — V7.1: tum AI prompt'lari icin zengin veri
 # ================================================================
 def _build_rich_context(r, tech=None):
-    """Hisse icin zengin AI context olustur — skorlar + metrikler + teknik + DEĞER/İVME"""
+    """V9.2 FINAL: Zengin AI context — FA pure + Risk ayrı + Entry Label + Türkiye bağlamı"""
     s = r["scores"]
     m = r["metrics"]
     L = r.get("legendary", {})
     lines = [
-        f"Hisse: {r['ticker']} ({r['name']}) | Sektor: {m.get('sector','')} | {r['style']}",
-        f"DEGER Skoru: {r.get('deger', r['overall'])}/100 | IVME Skoru: {r.get('ivme', 50)}/100 | Combined: {r['overall']}/100",
-        f"Value:{s['value']:.0f} Quality:{s['quality']:.0f} Growth:{s['growth']:.0f} Balance:{s['balance']:.0f} Earnings:{s['earnings']:.0f} Moat:{s['moat']:.0f}",
+        f"Hisse: {r['ticker']} ({r['name']}) | Sektör: {m.get('sector','')} ({r.get('sector_group','')}) | {r['style']}",
+        f"FA SCORE (saf kalite): {r.get('fa_score', 50)}/100 | RİSK: {r.get('risk_score', 0)} | KARAR SKORU: {r['overall']}/100",
+        f"GİRİŞ: {r.get('entry_label', '?')} | KARAR: {r.get('decision', '?')} | KALİTE: {r.get('quality_tag', '?')}",
+        f"İVME: {r.get('ivme', 50)}/100 | ZAMANLAMA: {r.get('timing', '?')}",
+        f"Value:{s['value']:.0f} Quality:{s['quality']:.0f} Growth:{s['growth']:.0f} Balance:{s['balance']:.0f} Earnings:{s['earnings']:.0f} Moat:{s['moat']:.0f} Capital:{s['capital']:.0f}",
         f"Momentum:{s.get('momentum',50):.0f} TechBreak:{s.get('tech_break',50):.0f} InstFlow:{s.get('inst_flow',50):.0f}",
-        f"Fiyat:{fmt_num(m.get('price'))} PiyasaDeg:{fmt_num(m.get('market_cap'))} P/E:{fmt_num(m.get('pe'))} P/B:{fmt_num(m.get('pb'))} EV/EBITDA:{fmt_num(m.get('ev_ebitda'))}",
-        f"ROE:{fmt_pct(m.get('roe'))} ROIC:{fmt_pct(m.get('roic'))} Brut Marj:{fmt_pct(m.get('gross_margin'))} Net Marj:{fmt_pct(m.get('net_margin'))}",
-        f"Gelir Buyume:{fmt_pct(m.get('revenue_growth'))} EPS Buyume:{fmt_pct(m.get('eps_growth'))}",
-        f"Net Borc/EBITDA:{fmt_num(m.get('net_debt_ebitda'))} Cari Oran:{fmt_num(m.get('current_ratio'))} Faiz Karsilama:{fmt_num(m.get('interest_coverage'))}",
-        f"FCF Yield:{fmt_pct(m.get('fcf_yield'))} CFO/NI:{fmt_num(m.get('cfo_to_ni'))}",
+        f"Fiyat:{fmt_num(m.get('price'))} PiyasaDeg:{fmt_num(m.get('market_cap'))} F/K:{fmt_num(m.get('pe'))} PD/DD:{fmt_num(m.get('pb'))} FD/FAVÖK:{fmt_num(m.get('ev_ebitda'))}",
+        f"ROE:{fmt_pct(m.get('roe'))} ROIC:{fmt_pct(m.get('roic'))} Brüt Marj:{fmt_pct(m.get('gross_margin'))} Net Marj:{fmt_pct(m.get('net_margin'))}",
+        f"Gelir Büyüme:{fmt_pct(m.get('revenue_growth'))} HBK Büyüme:{fmt_pct(m.get('eps_growth'))}",
+        f"NB/FAVÖK:{fmt_num(m.get('net_debt_ebitda'))} Cari Oran:{fmt_num(m.get('current_ratio'))} Faiz Karşılama:{fmt_num(m.get('interest_coverage'))}",
+        f"FCF Getiri:{fmt_pct(m.get('fcf_yield'))} CFO/NI:{fmt_num(m.get('cfo_to_ni'))}",
         f"Piotroski:{L.get('piotroski','N/A')} Altman:{L.get('altman','N/A')} Beneish:{L.get('beneish','N/A')}",
-        f"Graham MoS:{L.get('graham_mos','N/A')} Buffett:{L.get('buffett_filter','N/A')} Graham:{L.get('graham_filter','N/A')}",
+        f"Graham:{L.get('graham_filter','N/A')} Buffett:{L.get('buffett_filter','N/A')}",
     ]
     if tech:
         rsi_val = tech.get('rsi')
         rsi_str = f"{rsi_val:.0f}" if isinstance(rsi_val, (int, float)) else '?'
         vol_val = tech.get('vol_ratio')
         vol_str = f"{vol_val:.1f}x" if isinstance(vol_val, (int, float)) else '?'
+        pct_20d = tech.get('pct_20d')
+        pct_str = f"{pct_20d:+.1f}%" if isinstance(pct_20d, (int, float)) else '?'
         lines.append(
             f"Teknik: RSI={rsi_str}, "
             f"MACD={'bullish' if tech.get('macd_bullish') else 'bearish'}, "
-            f"{'MA50 uzerinde' if (tech.get('price',0) or 0) > (tech.get('ma50') or 0) else 'MA50 altinda'}, "
+            f"{'MA50 üzerinde' if (tech.get('price',0) or 0) > (tech.get('ma50') or 0) else 'MA50 altında'}, "
             f"BB:{tech.get('bb_pos','?')}, Hacim:{vol_str}, "
-            f"52W High'a {abs(tech.get('pct_from_high',0)):.0f}% mesafe"
+            f"20g değişim:{pct_str}, "
+            f"52W zirveden {abs(tech.get('pct_from_high',0)):.0f}% uzakta"
         )
-    lines.append(f"Guclu: {', '.join(r.get('positives',[]))}")
-    lines.append(f"Zayif: {', '.join(r.get('negatives',[]))}")
+    if r.get("is_hype"):
+        lines.append("⚠️ HYPE TESPİTİ: Fiyat hızla yükseliyor ama temel zayıf — spekülasyon riski yüksek!")
+    lines.append(f"Risk faktörleri: {', '.join(r.get('risk_reasons',['Yok']))}")
+    lines.append(f"Güçlü: {', '.join(r.get('positives',[]))}")
+    lines.append(f"Zayıf: {', '.join(r.get('negatives',[]))}")
     return "\n".join(lines)
 
 
@@ -1468,23 +1620,27 @@ def _build_rich_context(r, tech=None):
 def ai_trader_summary(r, tech=None):
     if not AI_AVAILABLE:
         return None
-    cache_key = f"{r['symbol']}_{r['overall']}_{r.get('ivme',0)}"
+    cache_key = f"{r['symbol']}_{r['overall']}_{r.get('ivme',0)}_{r.get('entry_label','')}"
     if cache_key in AI_CACHE:
         return AI_CACHE[cache_key]
     try:
         ctx = _build_rich_context(r, tech)
+        entry = r.get("entry_label", "?")
+        is_hype = r.get("is_hype", False)
         prompt = (
-            "Sen kurumsal BIST analisti ve portföy yöneticisisin. 20 yıllık tecrüben var.\n"
-            "Aşağıdaki veriye dayanarak bu hisse için YAPILANDIRILMIŞ yatırım tezi yaz. Türkçe.\n"
-            "ASLA sallama, SADECE verideki rakamlara dayan. Gerçekçi ve spesifik ol.\n\n"
+            "Sen kurumsal BIST analisti ve portföy yöneticisisin. 20 yıllık tecrüben var. Türkiye piyasasını çok iyi bilirsin.\n"
+            "Aşağıdaki veriye dayanarak bu hisse için yatırım tezi yaz. Türkçe.\n"
+            "ASLA sallama, SADECE verideki rakamlara dayan. Gerçekçi, spesifik, kısa ol.\n"
+            f"{'⚠️ DİKKAT: Bu hisse HYPE/SPEKÜLATİF olarak işaretlenmiş — temel zayıf ama fiyat uçuyor.' if is_hype else ''}\n\n"
             f"{ctx}\n\n"
-            "Su formatta yaz (her satir ayri, baska HICBIR SEY yazma):\n"
-            "KARAR: [Güçlü Al / Al / Tut / Dikkat / Uzak Dur] (birini seç)\n"
-            "TEZ: 1 spesifik cümle — NEDEN bu karar? (rakam kullan, 'iyi' gibi boş kelime yok)\n"
-            "RISK: 1 spesifik cümle — en büyük risk nedir? (rakam kullan)\n"
-            "ZAMANLAMA: 1 cümle — İvme skoruna göre giriş zamanı uygun mu?\n"
+            "Şu formatta yaz (her satır ayrı, başka HİÇBİR ŞEY yazma):\n"
+            f"GİRİŞ: {entry} — bu ne anlama geliyor? 1 cümle açıkla.\n"
+            "TEZ: 1 spesifik cümle — NEDEN bu karar? (rakam kullan)\n"
+            "RİSK: 1 spesifik cümle — en büyük risk? (rakam kullan)\n"
+            "ZAMANLAMA: 1 cümle — giriş zamanı uygun mu, ne beklemeli?\n"
+            "TÜRKİYE: 1 cümle — Türkiye piyasası bağlamında özel not (döviz, enflasyon, sektör)\n"
         )
-        text = ai_call(prompt, max_tokens=250)
+        text = ai_call(prompt, max_tokens=300)
         if text:
             AI_CACHE[cache_key] = text
         return text
@@ -2068,15 +2224,19 @@ async def api_ai_summary(ticker: str):
         raise HTTPException(status_code=500, detail="AI özet alınamadı")
 
 def _build_scan_item(r):
-    """Build a lightweight scan result item — V8: labels + decision"""
+    """Build a lightweight scan result item — V9.2: entry label + FA/risk split"""
     return {
         "ticker": r["ticker"], "name": r["name"],
         "overall": r["overall"], "confidence": r["confidence"],
+        "fa_score": r.get("fa_score", r.get("deger", r["overall"])),  # V9.2: saf FA
         "deger": r.get("deger", r["overall"]),
         "ivme": r.get("ivme", 50),
-        "timing": r.get("timing", ""),          # V8: ERKEN/TEYİTLİ/GEÇ
-        "quality_tag": r.get("quality_tag", ""), # V8: ELİT/GÜÇLÜ/ORTA
-        "decision": r.get("decision", ""),       # V8: AL/İZLE/BEKLE/KAÇIN
+        "risk_score": r.get("risk_score", 0),              # V9.2: ayrı risk
+        "entry_label": r.get("entry_label", ""),            # V9.2: TEYİTLİ/ERKEN/GEÇ/SPEKÜLATİF
+        "is_hype": r.get("is_hype", False),                 # V9.2: hype flag
+        "timing": r.get("timing", ""),
+        "quality_tag": r.get("quality_tag", ""),
+        "decision": r.get("decision", ""),
         "sector_group": r.get("sector_group", ""),
         "style": r["style"], "scores": r["scores"],
         "sector": r.get("sector", ""), "industry": r.get("industry", ""),
