@@ -336,30 +336,46 @@ async def api_analytics():
 # ================================================================
 # MACRO
 # ================================================================
+def _fetch_one_macro(key: str, info: dict, ytd_start: str) -> dict | None:
+    """Tek bir makro sembolün verisini çek — yf.Ticker ile."""
+    try:
+        tk = yf.Ticker(info["symbol"])
+        h = tk.history(start=ytd_start, interval="1d")
+        if h is None or h.empty or len(h) < 2:
+            return None
+        price = float(h["Close"].iloc[-1])
+        prev = float(h["Close"].iloc[-2])
+        change_pct = ((price - prev) / prev * 100) if prev != 0 else 0
+        first_close = float(h["Close"].iloc[0])
+        ytd_pct = ((price - first_close) / first_close * 100) if first_close != 0 else 0
+        m1_pct = ((price - float(h["Close"].iloc[-22])) / float(h["Close"].iloc[-22]) * 100) if len(h) >= 22 else None
+        w1_pct = ((price - float(h["Close"].iloc[-5])) / float(h["Close"].iloc[-5]) * 100) if len(h) >= 5 else None
+        return {
+            "key": key, "name": info["name"], "category": info["category"],
+            "flag": info.get("flag", ""), "price": round(price, 4),
+            "change": round(price - prev, 4), "change_pct": round(change_pct, 2),
+            "ytd_pct": round(ytd_pct, 2),
+            "m1_pct": round(m1_pct, 2) if m1_pct is not None else None,
+            "w1_pct": round(w1_pct, 2) if w1_pct is not None else None,
+        }
+    except Exception as e:
+        log.debug(f"Macro {key}: {e}")
+        return None
+
+
 def _fetch_all_macro():
     if not YF_AVAILABLE: return []
     now = dt.datetime.now()
     ytd_start = dt.datetime(now.year, 1, 1).strftime("%Y-%m-%d")
-    symbols = [info["symbol"] for info in MACRO_SYMBOLS.values()]
     results = []
-    try:
-        df = yf.download(symbols, start=ytd_start, interval="1d", group_by="ticker", progress=False, threads=True)
-        if df is None or df.empty: return results
-        for key, info in MACRO_SYMBOLS.items():
-            try:
-                sym = info["symbol"]
-                ticker_df = df if len(symbols) == 1 else (df[sym].dropna(how="all") if sym in df.columns.get_level_values(0) else None)
-                if ticker_df is None or ticker_df.empty or len(ticker_df) < 2: continue
-                h = ticker_df
-                price = float(h["Close"].iloc[-1]); prev = float(h["Close"].iloc[-2])
-                change_pct = ((price - prev) / prev * 100) if prev != 0 else 0
-                first_close = float(h["Close"].iloc[0])
-                ytd_pct = ((price - first_close) / first_close * 100) if first_close != 0 else 0
-                m1_pct = ((price - float(h["Close"].iloc[-22])) / float(h["Close"].iloc[-22]) * 100) if len(h) >= 22 else None
-                w1_pct = ((price - float(h["Close"].iloc[-5])) / float(h["Close"].iloc[-5]) * 100) if len(h) >= 5 else None
-                results.append({"key": key, "name": info["name"], "category": info["category"], "flag": info.get("flag", ""), "price": round(price, 4), "change": round(price - prev, 4), "change_pct": round(change_pct, 2), "ytd_pct": round(ytd_pct, 2), "m1_pct": round(m1_pct, 2) if m1_pct is not None else None, "w1_pct": round(w1_pct, 2) if w1_pct is not None else None})
-            except Exception as e: log.debug(f"Macro {key}: {e}")
-    except Exception as e: log.warning(f"Macro batch: {e}")
+    # Tek tek çek, 5 paralel — batch download Yahoo'da bloklanıyor
+    with ThreadPoolExecutor(max_workers=5) as pool:
+        futures = {pool.submit(_fetch_one_macro, k, v, ytd_start): k for k, v in MACRO_SYMBOLS.items()}
+        for future in as_completed(futures):
+            r = future.result()
+            if r:
+                results.append(r)
+    log.info(f"Macro: {len(results)}/{len(MACRO_SYMBOLS)} başarılı")
     return results
 
 @app.get("/api/macro")
