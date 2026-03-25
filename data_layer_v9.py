@@ -4,7 +4,7 @@
 # Akıllı kolon seçimi (2025 boş → 2024'e atla)
 # ================================================================
 
-import math, logging
+import math, logging, re
 import datetime as dt
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import numpy as np, pandas as pd
@@ -66,6 +66,11 @@ def _safe_num(x):
         return v
     except: return None
 
+def _norm(s):
+    """Robust whitespace normalization — handles \\xa0, leading/trailing, double spaces"""
+    if not isinstance(s, str): return ""
+    return re.sub(r'\s+', ' ', s.replace('\xa0',' ')).strip()
+
 def _find_data_col(df):
     """İlk gerçek veri kolonu (2025 boşsa skip)"""
     if df is None or df.empty: return 0
@@ -81,15 +86,15 @@ def _pick(df, names, offset=0, base=None):
     if ci >= len(df.columns): return None
     col = df.columns[ci]
     for name in names:
-        ns = name.strip().lower()
+        ns = _norm(name).lower()
         for idx in df.index:
-            if isinstance(idx, str) and idx.strip().lower() == ns:
+            if _norm(idx).lower() == ns:
                 v = _safe_num(df.loc[idx, col])
                 if v is not None: return v
     for name in names:
-        ns = name.strip().lower()
+        ns = _norm(name).lower()
         for idx in df.index:
-            if isinstance(idx, str) and ns in idx.strip().lower():
+            if ns in _norm(idx).lower():
                 v = _safe_num(df.loc[idx, col])
                 if v is not None: return v
     return None
@@ -108,7 +113,7 @@ def _pick_debt(bal):
     sd = ld = sdp = ldp = None
     in_short = in_long = False
     for idx in bal.index:
-        n = idx.strip() if isinstance(idx, str) else ""
+        n = _norm(idx)
         if "Kısa Vadeli Yükümlülükler" in n and "Ara Toplam" not in n:
             in_short, in_long = True, False
         elif "Uzun Vadeli Yükümlülükler" in n:
@@ -122,6 +127,24 @@ def _pick_debt(bal):
             elif in_long and ld is None:
                 if col0: ld = _safe_num(bal.loc[idx, col0])
                 if col1: ldp = _safe_num(bal.loc[idx, col1])
+    # Fallback: section headers bulunamadıysa, TÜM "Finansal Borçlar" satırlarını topla
+    if sd is None and ld is None:
+        all_cur = []
+        all_prev = []
+        for idx in bal.index:
+            n = _norm(idx)
+            if "Finansal Borçlar" in n and "Diğer" not in n:
+                if col0:
+                    v = _safe_num(bal.loc[idx, col0])
+                    if v is not None: all_cur.append(v)
+                if col1:
+                    v = _safe_num(bal.loc[idx, col1])
+                    if v is not None: all_prev.append(v)
+        if all_cur:
+            log.warning(f"_pick_debt fallback: section headers not found, summing {len(all_cur)} Finansal Borçlar rows")
+            t = sum(all_cur)
+            tp = sum(all_prev) if all_prev else None
+            return t, tp
     t = ((sd or 0)+(ld or 0)) if sd is not None or ld is not None else None
     tp = ((sdp or 0)+(ldp or 0)) if sdp is not None or ldp is not None else None
     return t, tp
@@ -212,6 +235,9 @@ def compute_metrics_v9(symbol, raw_cache=None):
     div_yield = _safe_num(info.get("dividendYield"))
     beta = _safe_num(info.get("beta"))
     shares = _safe_num(fast.get("shares"))
+    # Fallback: TradingView 429 rate limit → shares from market_cap / price
+    if not shares and market_cap and price and price > 0:
+        shares = market_cap / price
     trailing_eps = _safe_num(info.get("trailingEps"))
     if (not trailing_eps) and net_income and shares and shares > 0: trailing_eps = net_income / shares
     book_val_ps = _safe_num(info.get("bookValue"))

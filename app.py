@@ -364,7 +364,7 @@ def compute_beneish(m):
         dep_prev_rate = (dep_prev or 0) / max((dep_prev or 0) + (ppe_prev or 0), 1e-9)
         dep_cur_rate = (dep or 0) / max((dep or 0) + (ppe or 0), 1e-9)
         depi = dep_prev_rate / max(dep_cur_rate, 1e-9)
-        sgai = ((sga or 0)/(sales or 1)) / max((sga_prev or 0)/(sales_prev or 1), 1e-9)
+        sgai = (abs(sga or 0)/(sales or 1)) / max(abs(sga_prev or 0)/(sales_prev or 1), 1e-9)
         lvgi = ((debt or 0)/max(ta, 1e-9)) / max((debt_prev or 0)/max(ta_prev, 1e-9), 1e-9)
         tata = ((ni or 0) - (cfo or 0)) / max(ta, 1e-9)
         return -4.84 + 0.92*dsri + 0.528*gmi + 0.404*aqi + 0.892*sgi + 0.115*depi - 0.172*sgai + 4.679*tata - 0.327*lvgi
