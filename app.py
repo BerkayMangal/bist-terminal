@@ -3085,22 +3085,24 @@ async def api_debug_rows(ticker: str):
     
     # Try multiple financial groups and period combinations
     tests = [
-        ("XI_29", 2024, 12, "2024 annual XI_29"),
-        ("XI_29", 2023, 12, "2023 annual XI_29"),
-        ("XI_29", 2024, 9, "2024 Q3 XI_29"),
-        ("UFRS", 2024, 12, "2024 annual UFRS"),
-        ("UFRS", 2023, 12, "2023 annual UFRS"),
+        ("XI_29_2024", "XI_29", [(2024, 12), (2023, 12)]),
+        ("XI_29_2023", "XI_29", [(2023, 12), (2022, 12)]),
+        ("XI_29_Q3", "XI_29", [(2024, 9), (2024, 6)]),
+        ("UFRS_2024", "UFRS", [(2024, 12), (2023, 12)]),
+        ("UFRS_2023", "UFRS", [(2023, 12), (2022, 12)]),
     ]
     
-    for fg, year, period, label in tests:
+    for label, fg, periods in tests:
         try:
             params = {
                 "companyCode": ticker_clean,
                 "exchange": "TRY",
                 "financialGroup": fg,
-                "year1": year,
-                "period1": period,
             }
+            for i, (year, period) in enumerate(periods, 1):
+                params[f"year{i}"] = year
+                params[f"period{i}"] = period
+            
             async with httpx.AsyncClient(verify=False, timeout=15) as client:
                 resp = await client.get(base_url, params=params)
                 data = resp.json()
