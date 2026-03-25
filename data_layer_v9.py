@@ -347,7 +347,7 @@ def fetch_raw_v9(symbol, raw_cache=None):
         financials = tk.get_income_stmt(
             quarterly=False,
             financial_group=fin_group,
-            last_n=3,
+            last_n=4,
         )
     except Exception as e:
         log.warning(f"income_stmt failed for {ticker_clean}: {e}")
@@ -356,7 +356,7 @@ def fetch_raw_v9(symbol, raw_cache=None):
         balance = tk.get_balance_sheet(
             quarterly=False,
             financial_group=fin_group,
-            last_n=3,
+            last_n=4,
         )
     except Exception as e:
         log.warning(f"balance_sheet failed for {ticker_clean}: {e}")
@@ -365,7 +365,7 @@ def fetch_raw_v9(symbol, raw_cache=None):
         cashflow = tk.get_cashflow(
             quarterly=False,
             financial_group=fin_group,
-            last_n=3,
+            last_n=4,
         )
     except Exception as e:
         # Bankalar için nakit akış yok (UFRS)

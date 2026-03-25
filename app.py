@@ -3083,13 +3083,11 @@ async def api_debug_rows(ticker: str):
     
     base_url = "https://www.isyatirim.com.tr/_Layouts/15/IsYatirim.Website/Common/Data.aspx/MaliTablo"
     
-    # Try multiple financial groups and period combinations
+    # İsyatırım API tam 4 year/period çifti istiyor
     tests = [
-        ("XI_29_2024", "XI_29", [(2024, 12), (2023, 12)]),
-        ("XI_29_2023", "XI_29", [(2023, 12), (2022, 12)]),
-        ("XI_29_Q3", "XI_29", [(2024, 9), (2024, 6)]),
-        ("UFRS_2024", "UFRS", [(2024, 12), (2023, 12)]),
-        ("UFRS_2023", "UFRS", [(2023, 12), (2022, 12)]),
+        ("XI_29_annual", "XI_29", [(2024, 12), (2023, 12), (2022, 12), (2021, 12)]),
+        ("XI_29_quarterly", "XI_29", [(2024, 9), (2024, 6), (2024, 3), (2023, 12)]),
+        ("UFRS_annual", "UFRS", [(2024, 12), (2023, 12), (2022, 12), (2021, 12)]),
     ]
     
     for label, fg, periods in tests:
@@ -3098,10 +3096,11 @@ async def api_debug_rows(ticker: str):
                 "companyCode": ticker_clean,
                 "exchange": "TRY",
                 "financialGroup": fg,
+                "year1": periods[0][0], "period1": periods[0][1],
+                "year2": periods[1][0], "period2": periods[1][1],
+                "year3": periods[2][0], "period3": periods[2][1],
+                "year4": periods[3][0], "period4": periods[3][1],
             }
-            for i, (year, period) in enumerate(periods, 1):
-                params[f"year{i}"] = year
-                params[f"period{i}"] = period
             
             async with httpx.AsyncClient(verify=False, timeout=15) as client:
                 resp = await client.get(base_url, params=params)
