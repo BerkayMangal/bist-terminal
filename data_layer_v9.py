@@ -84,18 +84,18 @@ def _pick(df, names, offset=0, base=None):
     if base is None: base = _find_data_col(df)
     ci = base + offset
     if ci >= len(df.columns): return None
-    col = df.columns[ci]
+    # Use iloc to avoid duplicate index → Series bug
     for name in names:
         ns = _norm(name).lower()
-        for idx in df.index:
+        for ri, idx in enumerate(df.index):
             if _norm(idx).lower() == ns:
-                v = _safe_num(df.loc[idx, col])
+                v = _safe_num(df.iloc[ri, ci])
                 if v is not None: return v
     for name in names:
         ns = _norm(name).lower()
-        for idx in df.index:
+        for ri, idx in enumerate(df.index):
             if ns in _norm(idx).lower():
-                v = _safe_num(df.loc[idx, col])
+                v = _safe_num(df.iloc[ri, ci])
                 if v is not None: return v
     return None
 
@@ -108,11 +108,12 @@ def _pick_debt(bal):
     """Kısa + Uzun vadeli Finansal Borçlar (aynı isim, farklı section)"""
     if bal is None or bal.empty: return None, None
     b = _find_data_col(bal)
-    col0 = bal.columns[b] if b < len(bal.columns) else None
-    col1 = bal.columns[b+1] if b+1 < len(bal.columns) else None
+    ci0 = b
+    ci1 = b + 1 if b + 1 < len(bal.columns) else None
     sd = ld = sdp = ldp = None
     in_short = in_long = False
-    for idx in bal.index:
+    # Use enumerate + iloc to avoid duplicate index → Series bug
+    for ri, idx in enumerate(bal.index):
         n = _norm(idx)
         if "Kısa Vadeli Yükümlülükler" in n and "Ara Toplam" not in n:
             in_short, in_long = True, False
@@ -122,29 +123,11 @@ def _pick_debt(bal):
             in_short = in_long = False
         if "Finansal Borçlar" in n and "Diğer" not in n:
             if in_short and sd is None:
-                if col0: sd = _safe_num(bal.loc[idx, col0])
-                if col1: sdp = _safe_num(bal.loc[idx, col1])
+                sd = _safe_num(bal.iloc[ri, ci0])
+                if ci1 is not None: sdp = _safe_num(bal.iloc[ri, ci1])
             elif in_long and ld is None:
-                if col0: ld = _safe_num(bal.loc[idx, col0])
-                if col1: ldp = _safe_num(bal.loc[idx, col1])
-    # Fallback: section headers bulunamadıysa, TÜM "Finansal Borçlar" satırlarını topla
-    if sd is None and ld is None:
-        all_cur = []
-        all_prev = []
-        for idx in bal.index:
-            n = _norm(idx)
-            if "Finansal Borçlar" in n and "Diğer" not in n:
-                if col0:
-                    v = _safe_num(bal.loc[idx, col0])
-                    if v is not None: all_cur.append(v)
-                if col1:
-                    v = _safe_num(bal.loc[idx, col1])
-                    if v is not None: all_prev.append(v)
-        if all_cur:
-            log.warning(f"_pick_debt fallback: section headers not found, summing {len(all_cur)} Finansal Borçlar rows")
-            t = sum(all_cur)
-            tp = sum(all_prev) if all_prev else None
-            return t, tp
+                ld = _safe_num(bal.iloc[ri, ci0])
+                if ci1 is not None: ldp = _safe_num(bal.iloc[ri, ci1])
     t = ((sd or 0)+(ld or 0)) if sd is not None or ld is not None else None
     tp = ((sdp or 0)+(ldp or 0)) if sdp is not None or ldp is not None else None
     return t, tp
