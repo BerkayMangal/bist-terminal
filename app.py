@@ -3077,39 +3077,73 @@ async def api_batch(tickers: str):
 async def api_debug_rows(ticker: str):
     """Debug: İsyatırım'dan gelen gerçek satır isimlerini döndür"""
     ticker_clean = ticker.strip().upper().replace(".IS", "")
+    result = {"ticker": ticker_clean}
+    
     try:
         import borsapy as bp
         tk = bp.Ticker(ticker_clean)
-        result = {"ticker": ticker_clean}
         
-        for stmt_name, stmt_func in [
-            ("balance_sheet", lambda: tk.get_balance_sheet(quarterly=False, last_n=2)),
-            ("income_stmt", lambda: tk.get_income_stmt(quarterly=False, last_n=2)),
-            ("cashflow", lambda: tk.get_cashflow(quarterly=False, last_n=2)),
-        ]:
-            try:
-                df = stmt_func()
-                if df is not None and not df.empty:
-                    rows = list(df.index)
-                    cols = list(df.columns)
-                    # İlk 3 satırın değerlerini de göster
-                    sample = {}
-                    for row in rows[:5]:
-                        sample[row] = {str(c): df.loc[row, c] if not pd.isna(df.loc[row, c]) else None for c in cols}
-                    result[stmt_name] = {
-                        "row_count": len(rows),
-                        "columns": cols,
-                        "all_rows": rows,
-                        "sample_values": sample,
-                    }
-                else:
-                    result[stmt_name] = {"error": "empty DataFrame"}
-            except Exception as e:
-                result[stmt_name] = {"error": str(e)}
+        # Try all financial_group options
+        for fg_name, fg_code in [("default_XI_29", None), ("UFRS", "UFRS"), ("XI_29_explicit", "XI_29")]:
+            fg_result = {}
+            for stmt_name, stmt_type in [("balance", "balance_sheet"), ("income", "income_stmt"), ("cashflow", "cashflow")]:
+                try:
+                    if fg_code:
+                        if stmt_type == "balance_sheet":
+                            df = tk.get_balance_sheet(quarterly=False, financial_group=fg_code, last_n=2)
+                        elif stmt_type == "income_stmt":
+                            df = tk.get_income_stmt(quarterly=False, financial_group=fg_code, last_n=2)
+                        else:
+                            df = tk.get_cashflow(quarterly=False, financial_group=fg_code, last_n=2)
+                    else:
+                        if stmt_type == "balance_sheet":
+                            df = tk.get_balance_sheet(quarterly=False, last_n=2)
+                        elif stmt_type == "income_stmt":
+                            df = tk.get_income_stmt(quarterly=False, last_n=2)
+                        else:
+                            df = tk.get_cashflow(quarterly=False, last_n=2)
+                    
+                    if df is not None and not df.empty:
+                        rows = list(df.index)
+                        cols = [str(c) for c in df.columns]
+                        sample = {}
+                        for row in rows[:3]:
+                            sample[str(row)] = {str(c): float(df.loc[row, c]) if pd.notna(df.loc[row, c]) else None for c in df.columns}
+                        fg_result[stmt_name] = {"rows": len(rows), "cols": cols, "all_rows": rows, "sample": sample}
+                    else:
+                        fg_result[stmt_name] = "empty"
+                except Exception as e:
+                    fg_result[stmt_name] = f"error: {e}"
+            result[fg_name] = fg_result
         
-        return clean_for_json(result)
+        # Also try raw isyatirim provider directly
+        try:
+            from borsapy._providers.isyatirim import IsYatirimProvider
+            provider = IsYatirimProvider()
+            raw_bs = provider.get_financial_statements(ticker_clean, statement_type="balance_sheet", quarterly=False, last_n=2)
+            if raw_bs is not None and not raw_bs.empty:
+                result["raw_isyatirim_balance"] = {"rows": len(raw_bs.index), "first_10": list(raw_bs.index[:10]), "cols": [str(c) for c in raw_bs.columns]}
+            else:
+                result["raw_isyatirim_balance"] = "empty"
+        except Exception as e:
+            result["raw_isyatirim_balance"] = f"error: {e}"
+        
+        # fast_info check
+        try:
+            fi = tk.fast_info
+            result["fast_info"] = {
+                "price": getattr(fi, 'last_price', None),
+                "market_cap": getattr(fi, 'market_cap', None),
+                "pe": getattr(fi, 'pe_ratio', None),
+                "foreign": getattr(fi, 'foreign_ratio', None),
+            }
+        except Exception as e:
+            result["fast_info"] = f"error: {e}"
+            
     except Exception as e:
-        return {"error": str(e)}
+        result["error"] = str(e)
+    
+    return clean_for_json(result)
 
 _BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 _INDEX_HTML_PATH = os.path.join(_BASE_DIR, "index.html")
