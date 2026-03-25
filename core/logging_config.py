@@ -4,6 +4,9 @@
 # Her log satırında: timestamp, level, module, request_id, scan_id,
 # ticker, provider, duration_ms, cache_status, stale bilgileri.
 # Railway log drain ile uyumlu.
+#
+# V10.0-FIX1: yfinance iç WebSocket logları bastırıldı.
+# "Websocket connected" spam'i production loglarını kirletiyordu.
 # ================================================================
 
 from __future__ import annotations
@@ -43,6 +46,37 @@ def get_scan_id() -> str:
 def generate_id(prefix: str = "") -> str:
     short = uuid.uuid4().hex[:12]
     return f"{prefix}{short}" if prefix else short
+
+
+# ================================================================
+# YFINANCE WEBSOCKET FILTER — "Websocket connected" spam'ini engeller
+# ================================================================
+class YFinanceWebSocketFilter(logging.Filter):
+    """
+    yfinance'ın dahili WebSocket mesajlarını filtreler.
+    Bu mesajlar TradingView bağlantı lifecycle'ından geliyor
+    ve production loglarında hiçbir değer taşımıyor.
+
+    Filtrelenen mesaj pattern'leri:
+    - "Websocket connected"
+    - "Handshake status 429"
+    - "- goodbye"
+    """
+
+    _BLOCKED_PATTERNS: list[str] = [
+        "Websocket connected",
+        "Handshake status",
+        "- goodbye",
+        "WebSocket",
+        "websocket",
+    ]
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        msg = record.getMessage()
+        for pattern in self._BLOCKED_PATTERNS:
+            if pattern in msg:
+                return False
+        return True
 
 
 # ================================================================
@@ -110,16 +144,29 @@ def setup_logging(level: int = logging.INFO) -> None:
     # JSON handler — stdout'a yazar (Railway bunu yakalar)
     handler = logging.StreamHandler()
     handler.setFormatter(JSONFormatter(datefmt="%Y-%m-%dT%H:%M:%S"))
+
+    # yfinance WebSocket spam filtresi — root handler'a eklenir
+    handler.addFilter(YFinanceWebSocketFilter())
+
     root.addHandler(handler)
 
     # Gürültücü kütüphaneleri sustur
     logging.getLogger("urllib3").setLevel(logging.WARNING)
     logging.getLogger("httpcore").setLevel(logging.WARNING)
     logging.getLogger("httpx").setLevel(logging.WARNING)
-    logging.getLogger("yfinance").setLevel(logging.WARNING)
     logging.getLogger("matplotlib").setLevel(logging.WARNING)
     logging.getLogger("PIL").setLevel(logging.WARNING)
     logging.getLogger("borsapy").setLevel(logging.WARNING)
+
+    # yfinance — dahili WebSocket ve HTTP loglarını bastır
+    # "Websocket connected" ve "Handshake status 429" mesajları buradan gelir
+    logging.getLogger("yfinance").setLevel(logging.WARNING)
+    logging.getLogger("yfinance.base").setLevel(logging.WARNING)
+    logging.getLogger("yfinance.multi").setLevel(logging.WARNING)
+    logging.getLogger("yfinance.utils").setLevel(logging.WARNING)
+    logging.getLogger("yfinance.data").setLevel(logging.WARNING)
+    logging.getLogger("yfinance.screener").setLevel(logging.WARNING)
+    logging.getLogger("peewee").setLevel(logging.WARNING)
 
 
 def get_logger(name: str) -> logging.Logger:

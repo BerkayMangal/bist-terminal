@@ -799,20 +799,29 @@ async def api_batch(tickers: str):
     return success({"items": results})
 
 # ================================================================
-# WEBSOCKET — Scan progress
+# WEBSOCKET — Scan progress (connection-limited)
 # ================================================================
+_ws_connections: set = set()
+_WS_MAX = 50
+
 @app.websocket("/ws/scan")
 async def ws_scan(websocket: WebSocket):
+    if len(_ws_connections) >= _WS_MAX:
+        await websocket.close(code=1013, reason="Max connections reached")
+        return
     await websocket.accept()
+    _ws_connections.add(websocket)
     try:
         while True:
             progress = scan_coordinator.get_progress()
             await websocket.send_json(progress)
-            await asyncio.sleep(1.0)
+            await asyncio.sleep(2.0)
     except WebSocketDisconnect:
         pass
     except Exception:
         pass
+    finally:
+        _ws_connections.discard(websocket)
 
 # ================================================================
 # SERVE FRONTEND
