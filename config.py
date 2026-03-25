@@ -52,15 +52,15 @@ HISTORY_CACHE_SIZE = 500
 # ================================================================
 # SCANNER / THREADING CONFIG
 # ================================================================
-SCAN_MAX_WORKERS = 25
-RAW_PREFETCH_WORKERS = 25
-BATCH_HISTORY_WORKERS = 25
+SCAN_MAX_WORKERS = 15
+RAW_PREFETCH_WORKERS = 10
+BATCH_HISTORY_WORKERS = 10
 BACKGROUND_SCAN_INTERVAL_OPEN = 3600
 BACKGROUND_SCAN_INTERVAL_CLOSED = 10800
 BACKGROUND_SCAN_STARTUP_DELAY = 1
 
 # ================================================================
-# UNIVERSE — BIST 200
+# UNIVERSE — BIST 108
 # ================================================================
 UNIVERSE_BIST30: list[str] = [
     "ASELS", "THYAO", "BIMAS", "KCHOL", "SISE", "EREGL", "TUPRS", "AKBNK", "ISCTR", "YKBNK",
@@ -69,7 +69,6 @@ UNIVERSE_BIST30: list[str] = [
 ]
 
 UNIVERSE_EXTRA: list[str] = [
-    # Orijinal V9.1 listesi (KOZAA/KOZAL hariç — delist)
     "VESTL", "DOHOL", "AYGAZ", "LOGO", "INDES", "ODAS", "GUBRF", "CIMSA", "MPARK",
     "OYAKC", "ISMEN", "TTRAK", "AEFES", "DOAS", "AGHOL", "OTKAR", "VESBE", "EGEEN", "TMSN",
     "GESAN", "ZOREN", "ENJSA", "AYDEM", "ISDMR",
@@ -81,25 +80,9 @@ UNIVERSE_EXTRA: list[str] = [
     "CWENE", "SMRTG", "KCAER",
     "BRYAT", "EUPWR", "BRSAN", "SARKY", "GEDZA", "BUCIM", "KORDS", "KARTN", "DEVA",
     "CANTE", "CEMTS", "NUHCM", "PRKME", "AKSA", "GOLTS", "ERBOS", "MIATK", "QUAGR", "FORTE", "RGYAS",
-    # BIST 200 genişleme — sanayi / üretim
-    "TTRAK", "TRGYO", "KENT", "PINSU", "YYLGD", "PENGD", "IPEKE", "MNDRS",
-    "KUTPO", "BOSSA", "LUKSK", "DAGI", "ROYAL", "SNKRN", "ATEKS", "HATEK",
-    # BIST 200 genişleme — enerji / madencilik
-    "AYEN", "AKFYE", "ZRGYO", "YGYO", "MTRYO", "TBORG", "TUKAS", "TATGD",
-    # BIST 200 genişleme — finans / holding
-    "GSDHO", "ICBCT", "MRGYO", "OZKGY", "VKGYO", "YAPRK", "ATAGY", "ATSYH",
-    # BIST 200 genişleme — sağlık / teknoloji / hizmet
-    "LKMNH", "MNDTR", "SELEC", "ESCOM", "FONET", "ARENA", "ARDYZ", "INTEM",
-    "FLAP", "LINK", "PKART", "DESPC", "SMART", "VERTU",
-    # BIST 200 genişleme — inşaat / çimento / demir-çelik
-    "AKCNS", "BOLUC", "GOLTS", "KONYA", "OYAKC", "UNYEC", "BSOKE", "AFYON",
-    "IEYHO", "OTOKT", "OLMIP", "PARSN", "KATMR", "HKTM",
-    # BIST 200 genişleme — gıda / perakende / tüketim
-    "AVOD", "BANVT", "CRFSA", "KERVT", "MERKO", "OSMEN", "TKNSA", "VAKKO",
-    "KRVGD", "ALYAG", "ERSU", "ETILR", "PENGD", "TBORG",
 ]
 
-UNIVERSE: list[str] = list(dict.fromkeys(UNIVERSE_BIST30 + UNIVERSE_EXTRA))  # dedupe
+UNIVERSE: list[str] = UNIVERSE_BIST30 + UNIVERSE_EXTRA
 
 # ================================================================
 # FA SCORE AĞIRLIKLARI
