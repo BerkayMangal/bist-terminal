@@ -3071,81 +3071,79 @@ async def api_batch(tickers: str):
 
 # Serve frontend — landing page at /, terminal at /terminal
 # ================================================================
-# V9 DEBUG — RAW İsyatırım API yanıtını göster (borsapy bypass)
+# V9 DEBUG — tüm satır isimlerini göster (bilanço + gelir + nakit)
 # ================================================================
 @app.get("/api/debug/rows/{ticker}")
 async def api_debug_rows(ticker: str):
-    """Debug: İsyatırım MaliTablo API'yi direkt çağır, ham yanıtı döndür"""
+    """Debug: İsyatırım'dan gelen TÜM satır isimlerini göster"""
     ticker_clean = ticker.strip().upper().replace(".IS", "")
     result = {"ticker": ticker_clean}
     
     import httpx
     
+    # 1) RAW API — tüm satırları itemCode prefix'e göre grupla
     base_url = "https://www.isyatirim.com.tr/_Layouts/15/IsYatirim.Website/Common/Data.aspx/MaliTablo"
+    params = {
+        "companyCode": ticker_clean, "exchange": "TRY", "financialGroup": "XI_29",
+        "year1": 2024, "period1": 12, "year2": 2023, "period2": 12,
+        "year3": 2022, "period3": 12, "year4": 2021, "period4": 12,
+    }
+    try:
+        async with httpx.AsyncClient(verify=False, timeout=15) as client:
+            resp = await client.get(base_url, params=params)
+            data = resp.json()
+        items = data.get("value", []) if isinstance(data, dict) else []
+        
+        # Group by first digit of itemCode
+        groups = {"1_assets": [], "2_liabilities": [], "3_income": [], "4_cashflow": [], "other": []}
+        for item in items:
+            code = str(item.get("itemCode", ""))
+            tr = item.get("itemDescTr", "?")
+            eng = item.get("itemDescEng", "?")
+            v1 = item.get("value1")
+            v2 = item.get("value2")
+            entry = {"code": code, "tr": tr, "eng": eng, "v1": v1, "v2": v2}
+            if code.startswith("1"): groups["1_assets"].append(entry)
+            elif code.startswith("2"): groups["2_liabilities"].append(entry)
+            elif code.startswith("3"): groups["3_income"].append(entry)
+            elif code.startswith("4"): groups["4_cashflow"].append(entry)
+            else: groups["other"].append(entry)
+        
+        result["raw_api"] = {
+            "total": len(items),
+            "1_assets_count": len(groups["1_assets"]),
+            "2_liabilities_count": len(groups["2_liabilities"]),
+            "3_income_count": len(groups["3_income"]),
+            "4_cashflow_count": len(groups["4_cashflow"]),
+        }
+        # Show ALL gelir tablosu rows
+        result["income_rows"] = groups["3_income"]
+        # Show ALL nakit akış rows
+        result["cashflow_rows"] = groups["4_cashflow"]
+        # Show key bilanço rows (liabilities)
+        result["liability_rows"] = groups["2_liabilities"]
+    except Exception as e:
+        result["raw_api_error"] = str(e)
     
-    # İsyatırım API tam 4 year/period çifti istiyor
-    tests = [
-        ("XI_29_annual", "XI_29", [(2024, 12), (2023, 12), (2022, 12), (2021, 12)]),
-        ("XI_29_quarterly", "XI_29", [(2024, 9), (2024, 6), (2024, 3), (2023, 12)]),
-        ("UFRS_annual", "UFRS", [(2024, 12), (2023, 12), (2022, 12), (2021, 12)]),
-    ]
-    
-    for label, fg, periods in tests:
-        try:
-            params = {
-                "companyCode": ticker_clean,
-                "exchange": "TRY",
-                "financialGroup": fg,
-                "year1": periods[0][0], "period1": periods[0][1],
-                "year2": periods[1][0], "period2": periods[1][1],
-                "year3": periods[2][0], "period3": periods[2][1],
-                "year4": periods[3][0], "period4": periods[3][1],
-            }
-            
-            async with httpx.AsyncClient(verify=False, timeout=15) as client:
-                resp = await client.get(base_url, params=params)
-                data = resp.json()
-            
-            items = data.get("value", []) if isinstance(data, dict) else []
-            
-            if items:
-                # Show first 5 items with their itemCode
-                sample = []
-                for item in items[:8]:
-                    sample.append({
-                        "code": item.get("itemCode", "?"),
-                        "tr": item.get("itemDescTr", "?"),
-                        "eng": item.get("itemDescEng", "?"),
-                        "val1": item.get("value1"),
-                    })
-                result[label] = {
-                    "status": "HAS DATA",
-                    "total_rows": len(items),
-                    "item_codes": list(set(str(i.get("itemCode","?"))[:1] for i in items)),
-                    "sample": sample,
-                }
-            else:
-                result[label] = {
-                    "status": "EMPTY",
-                    "raw_keys": list(data.keys()) if isinstance(data, dict) else str(type(data)),
-                    "raw_preview": str(data)[:300],
-                }
-        except Exception as e:
-            result[label] = f"error: {e}"
-    
-    # fast_info still works
+    # 2) Borsapy DataFrame index'leri (last_n=4 ile)
     try:
         import borsapy as bp
         tk = bp.Ticker(ticker_clean)
-        fi = tk.fast_info
-        result["fast_info"] = {
-            "price": getattr(fi, 'last_price', None),
-            "market_cap": getattr(fi, 'market_cap', None),
-            "pe": getattr(fi, 'pe_ratio', None),
-            "foreign": getattr(fi, 'foreign_ratio', None),
-        }
+        for name, func in [
+            ("bp_balance", lambda: tk.get_balance_sheet(quarterly=False, last_n=4)),
+            ("bp_income", lambda: tk.get_income_stmt(quarterly=False, last_n=4)),
+            ("bp_cashflow", lambda: tk.get_cashflow(quarterly=False, last_n=4)),
+        ]:
+            try:
+                df = func()
+                if df is not None and not df.empty:
+                    result[name] = {"rows": list(df.index), "cols": [str(c) for c in df.columns]}
+                else:
+                    result[name] = "empty_or_none"
+            except Exception as e:
+                result[name] = f"error: {e}"
     except Exception as e:
-        result["fast_info"] = f"error: {e}"
+        result["borsapy_error"] = str(e)
     
     return clean_for_json(result)
 
