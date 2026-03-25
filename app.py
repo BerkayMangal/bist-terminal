@@ -23,7 +23,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, Response
 # ================================================================
 from config import (
     BOT_VERSION, APP_NAME, CONFIDENCE_MIN, UNIVERSE,
-    MACRO_SYMBOLS, FINANCE_QUOTES, FINANCE_BOOKS,
+    MACRO_SYMBOLS, FINANCE_QUOTES, FINANCE_BOOKS, STATIC_RATES,
     SCAN_MAX_WORKERS,
     BACKGROUND_SCAN_STARTUP_DELAY,
     BACKGROUND_SCAN_INTERVAL_OPEN, BACKGROUND_SCAN_INTERVAL_CLOSED,
@@ -384,7 +384,7 @@ async def api_macro():
     if cached is not None: return cached
     try:
         results = await asyncio.to_thread(_fetch_all_macro)
-        result = {"timestamp": dt.datetime.now(dt.timezone.utc).isoformat(), "items": clean_for_json(results)}
+        result = {"timestamp": dt.datetime.now(dt.timezone.utc).isoformat(), "items": clean_for_json(results), "rates": clean_for_json(STATIC_RATES)}
         macro_cache.set("macro_all", result)
         return result
     except Exception as e:
@@ -406,6 +406,10 @@ async def api_macro_commentary():
         macro_ai_cache.set("macro_ai", result)
         return result
     except Exception as e: return {"commentary": None, "error": str(e)}
+
+@app.get("/api/rates")
+async def api_rates():
+    return {"rates": clean_for_json(STATIC_RATES)}
 
 # ================================================================
 # DASHBOARD

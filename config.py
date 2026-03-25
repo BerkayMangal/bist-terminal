@@ -284,7 +284,21 @@ MACRO_SYMBOLS: dict[str, dict] = {
     "SILVER": {"symbol": "SI=F", "name": "Gümüş (oz)", "category": "emtia", "flag": "🥈"},
     "DXY": {"symbol": "DX-Y.NYB", "name": "Dolar Endeksi", "category": "emtia", "flag": "💵"},
     "VIX": {"symbol": "^VIX", "name": "VIX (Korku)", "category": "emtia", "flag": "😱"},
+    "US10Y": {"symbol": "^TNX", "name": "ABD 10Y Tahvil", "category": "global", "flag": "🇺🇸"},
 }
+
+# ================================================================
+# STATIK ORANLAR — Manuel güncelleme gerekir
+# Son güncelleme: 25 Mart 2026
+# ================================================================
+STATIC_RATES: list[dict] = [
+    {"key": "TCMB", "name": "TCMB Politika", "rate": 37.00, "prev": 38.00, "unit": "%", "flag": "🇹🇷", "updated": "2026-03-12", "note": "Sabit tutuldu"},
+    {"key": "FED", "name": "Fed Funds", "rate": 3.625, "prev": 3.625, "unit": "%", "flag": "🇺🇸", "updated": "2026-03-18", "note": "3.50-3.75 bant"},
+    {"key": "ECB", "name": "ECB Refi", "rate": 2.15, "prev": 2.15, "unit": "%", "flag": "🇪🇺", "updated": "2026-03-19", "note": "Deposit: 2.00%"},
+    {"key": "CDS_TR", "name": "Türkiye 5Y CDS", "rate": 320, "prev": 280, "unit": "bps", "flag": "🇹🇷", "updated": "2026-03-25", "note": "Tahmini — savaş etkisi"},
+    {"key": "TR10Y", "name": "TR 10Y Tahvil", "rate": 30.5, "prev": 29.8, "unit": "%", "flag": "🇹🇷", "updated": "2026-03-25", "note": "Tahmini"},
+    {"key": "TR2Y", "name": "TR 2Y Tahvil", "rate": 34.0, "prev": 33.5, "unit": "%", "flag": "🇹🇷", "updated": "2026-03-25", "note": "Tahmini"},
+]
 
 # ================================================================
 # FİNANS SÖZLERI
