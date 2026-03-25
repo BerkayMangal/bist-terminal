@@ -1,6 +1,7 @@
 # ================================================================
-# BISTBULL TERMINAL V9.1 — CONFIG
-# Tüm sabitler, universe, sektör eşikleri, cache TTL, ağırlıklar
+# BISTBULL TERMINAL V10.0 — MASTER CONFIG
+# Tüm sabitler, universe, sektör eşikleri, cache TTL, ağırlıklar,
+# Redis, Circuit Breaker, Rate Limiter, Applicability kuralları.
 # Diğer dosyalarda magic number SIFIR.
 # ================================================================
 
@@ -9,7 +10,7 @@ import os
 # ================================================================
 # APP META
 # ================================================================
-BOT_VERSION = "V9.1"
+BOT_VERSION = "V10.0"
 APP_NAME = "BISTBULL TERMINAL"
 CONFIDENCE_MIN = 50
 
@@ -22,6 +23,54 @@ OPENAI_KEY: str = os.environ.get("OPENAI_KEY", "") or os.environ.get("OPENAI_API
 OPENAI_MODEL: str = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
 ANTHROPIC_KEY: str = os.environ.get("ANTHROPIC_API_KEY", "") or os.environ.get("ANTHROPIC_KEY", "")
 ANTHROPIC_MODEL: str = os.environ.get("AI_MODEL", "claude-sonnet-4-20250514")
+
+# ================================================================
+# REDIS CONFIG — L2 persistent cache
+# Railway sets REDIS_URL automatically when Redis add-on is attached.
+# If empty, system falls back to RAM-only (L1) cache — V9.1 behavior.
+# ================================================================
+REDIS_URL: str = os.environ.get("REDIS_URL", "")
+REDIS_SOCKET_TIMEOUT: int = 5
+REDIS_SOCKET_CONNECT_TIMEOUT: int = 5
+REDIS_RETRY_ON_TIMEOUT: bool = True
+REDIS_MAX_CONNECTIONS: int = 20
+REDIS_HEALTH_CHECK_INTERVAL: int = 30
+REDIS_KEY_PREFIX: str = "bb:"
+REDIS_SNAPSHOT_KEY: str = "bb:snapshot:top10"
+REDIS_SCAN_LOCK_KEY: str = "bb:lock:scan"
+REDIS_SCAN_LOCK_TTL: int = 600
+
+# ================================================================
+# CIRCUIT BREAKER CONFIG
+# State machine: CLOSED → OPEN → HALF_OPEN → CLOSED
+# Her dış kaynak (borsapy, yfinance, Grok, OpenAI, Anthropic) ayrı CB.
+# ================================================================
+CB_FAILURE_THRESHOLD: int = 5
+CB_RECOVERY_TIMEOUT: int = 60
+CB_HALF_OPEN_MAX_CALLS: int = 2
+CB_SUCCESS_THRESHOLD: int = 2
+
+# Provider-specific overrides
+CB_BORSAPY_FAILURE_THRESHOLD: int = 8
+CB_BORSAPY_RECOVERY_TIMEOUT: int = 120
+CB_YFINANCE_FAILURE_THRESHOLD: int = 5
+CB_YFINANCE_RECOVERY_TIMEOUT: int = 90
+CB_AI_FAILURE_THRESHOLD: int = 3
+CB_AI_RECOVERY_TIMEOUT: int = 45
+
+# ================================================================
+# RATE LIMITER CONFIG
+# Sliding window IP-based rate limiting for expensive endpoints.
+# ================================================================
+RATE_LIMIT_ENABLED: bool = True
+RATE_LIMIT_AI_SUMMARY: int = 10
+RATE_LIMIT_AI_SUMMARY_WINDOW: int = 60
+RATE_LIMIT_AGENT: int = 15
+RATE_LIMIT_AGENT_WINDOW: int = 60
+RATE_LIMIT_BRIEFING: int = 5
+RATE_LIMIT_BRIEFING_WINDOW: int = 60
+RATE_LIMIT_SCAN: int = 3
+RATE_LIMIT_SCAN_WINDOW: int = 300
 
 # ================================================================
 # CACHE TTL (seconds)
@@ -40,8 +89,12 @@ AGENT_CACHE_TTL = 600
 HEATMAP_CACHE_TTL = 900
 MACRO_AI_CACHE_TTL = 3600
 
+# Stale grace period — stale-while-revalidate: serve stale data while refreshing
+# If data is older than TTL but younger than TTL + STALE_GRACE, serve it with stale=True
+STALE_GRACE_SECONDS = 3600
+
 # ================================================================
-# CACHE MAX SIZES
+# CACHE MAX SIZES (L1 RAM layer)
 # ================================================================
 RAW_CACHE_SIZE = 5000
 ANALYSIS_CACHE_SIZE = 5000
@@ -58,6 +111,29 @@ BATCH_HISTORY_WORKERS = 10
 BACKGROUND_SCAN_INTERVAL_OPEN = 3600
 BACKGROUND_SCAN_INTERVAL_CLOSED = 10800
 BACKGROUND_SCAN_STARTUP_DELAY = 1
+
+# Scan phases (for progress tracking)
+SCAN_PHASES: list[str] = [
+    "prep",
+    "raw_fetch",
+    "history_fetch",
+    "technical_compute",
+    "scoring",
+    "snapshot_publish",
+    "ai_enrich",
+    "done",
+]
+
+# ================================================================
+# WEBSOCKET CONFIG
+# ================================================================
+WS_SCAN_PROGRESS_INTERVAL: float = 1.0
+WS_MAX_CONNECTIONS: int = 50
+
+# ================================================================
+# RESPONSE ENVELOPE META DEFAULTS
+# ================================================================
+RESPONSE_BUILD_VERSION: str = BOT_VERSION
 
 # ================================================================
 # UNIVERSE — BIST 108
@@ -111,11 +187,7 @@ OVERALL_RISK_FACTOR = 0.3
 # ================================================================
 # VALUATION STRETCH TABLE
 # ================================================================
-VALUATION_STRETCH: list[tuple[float, float, int]] = [
-    # (min_value, max_value, stretch_points)
-    # Sıralama: ilk eşleşen uygulanır (yukarıdan aşağı)
-]
-# Fonksiyon olarak: config'den okuyan scoring.py kullanacak
+VALUATION_STRETCH: list[tuple[float, float, int]] = []
 VAL_STRETCH_MAP: list[tuple[int, int]] = [
     (80, 10), (65, 5), (55, 2), (45, 0), (35, -2), (25, -5), (15, -10), (0, -15),
 ]
@@ -207,6 +279,63 @@ SECTOR_KEYWORDS: dict[str, list[str]] = {
 SECTOR_DEFAULT = "sanayi"
 
 # ================================================================
+# SEKTÖR APPLICABILITY MATRİSİ — V10 YENİ
+# Hangi metrik hangi sektör için "uygulanabilir" / "düşük güven" / "uygulanamaz".
+# Skor motoru bu matrisi okur ve N/A olan boyutları zorla puanlamaz.
+#
+# Değerler:
+#   "full"    = tam uygulanabilir (normal puanlama)
+#   "low"     = düşük güvenilirlik (puan üretilir ama UI'da uyarı gösterilir)
+#   "na"      = uygulanamaz (puan üretilmez, ağırlık diğerlerine dağıtılır)
+#
+# Matris key: sektör grubu (map_sector çıktısı)
+# Matris value: metrik → applicability
+# Listede olmayan sektörler = tüm metrikler "full"
+# Listede olmayan metrikler = "full"
+# ================================================================
+SECTOR_APPLICABILITY: dict[str, dict[str, str]] = {
+    "banka": {
+        "altman_z": "na",
+        "beneish_m": "low",
+        "graham_fair_value": "na",
+        "ev_ebitda": "na",
+        "debt_equity": "na",
+        "current_ratio": "na",
+        "net_debt_ebitda": "na",
+        "fcf_yield": "low",
+        "operating_margin": "low",
+        "asset_turnover": "na",
+        "roic": "low",
+    },
+    "holding": {
+        "altman_z": "low",
+        "beneish_m": "low",
+        "graham_fair_value": "low",
+        "ev_ebitda": "low",
+        "operating_margin": "low",
+        "fcf_yield": "low",
+        "asset_turnover": "na",
+    },
+    "sigorta": {
+        "altman_z": "na",
+        "graham_fair_value": "na",
+        "ev_ebitda": "na",
+        "debt_equity": "na",
+        "current_ratio": "na",
+        "net_debt_ebitda": "na",
+        "operating_margin": "low",
+        "asset_turnover": "na",
+        "roic": "low",
+    },
+    "gayrimenkul": {
+        "altman_z": "low",
+        "graham_fair_value": "low",
+        "operating_margin": "low",
+        "revenue_growth": "low",
+    },
+}
+
+# ================================================================
 # KADEMELİ RİSK PENALTI TABLOLARI
 # ================================================================
 PENALTY_ND_EBITDA_DEFAULT: list[tuple[float, int]] = [
@@ -245,6 +374,15 @@ HYPE_STRICT_FA = 40
 HYPE_SOFT_PCT = 15
 HYPE_SOFT_VOL = 2.0
 HYPE_SOFT_FA = 35
+
+# ================================================================
+# LIQUIDITY GUARD — V10 YENİ
+# Düşük hacimli hisselerde teknik sinyal güvenini düşür.
+# ================================================================
+LIQUIDITY_MIN_AVG_VOLUME: int = 500_000
+LIQUIDITY_LOW_VOLUME_THRESHOLD: int = 1_000_000
+LIQUIDITY_CONFIDENCE_HAIRCUT: float = 0.3
+LIQUIDITY_MIN_TRADING_DAYS: int = 60
 
 # ================================================================
 # CONFIDENCE KEYS — hangi metriklerin varlığına bakılacak
@@ -299,6 +437,9 @@ STATIC_RATES: list[dict] = [
     {"key": "TR10Y", "name": "TR 10Y Tahvil", "rate": 30.5, "prev": 29.8, "unit": "%", "flag": "🇹🇷", "updated": "2026-03-25", "note": "Tahmini"},
     {"key": "TR2Y", "name": "TR 2Y Tahvil", "rate": 34.0, "prev": 33.5, "unit": "%", "flag": "🇹🇷", "updated": "2026-03-25", "note": "Tahmini"},
 ]
+
+# Statik oranların yaşını kontrol etmek için (gün cinsinden)
+STATIC_RATES_STALE_DAYS: int = 14
 
 # ================================================================
 # FİNANS SÖZLERI
