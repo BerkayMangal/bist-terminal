@@ -1,9 +1,7 @@
 # ================================================================
-# BISTBULL TERMINAL — FastAPI Backend
-# Adapted from Berkay Fundamentals V5 (fa_bot.py)
-# All analysis logic preserved: Piotroski, Altman, Beneish,
-# 7-dim scoring, technical analysis, Cross Hunter, AI summary
-# Telegram removed → REST API endpoints
+# BISTBULL TERMINAL V9 — FastAPI Backend
+# V9: yfinance → borsapy (gerçek KAP/İsyatırım verisi)
+# Scoring engine, Cross Hunter, AI summary aynen korunuyor
 # ================================================================
 
 import sys, os, re, math, asyncio, logging, datetime as dt, io, time, json, base64, zoneinfo, requests
@@ -12,15 +10,27 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import numpy as np
 import pandas as pd
-import yfinance as yf
 from cachetools import TTLCache
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 from contextlib import asynccontextmanager
 
-# Fix yfinance TzCache warning on Railway
-os.makedirs("/tmp/yf-cache", exist_ok=True)
-yf.set_tz_cache_location("/tmp/yf-cache")
+# V9: borsapy veri katmanı
+from data_layer_v9 import (
+    fetch_raw_v9,
+    compute_metrics_v9,
+    batch_download_history_v9,
+    BORSAPY_AVAILABLE,
+)
+
+# yfinance fallback (teknik analiz history için, borsapy TradingView erişimi yoksa)
+try:
+    import yfinance as yf
+    os.makedirs("/tmp/yf-cache", exist_ok=True)
+    yf.set_tz_cache_location("/tmp/yf-cache")
+    YF_AVAILABLE = True
+except ImportError:
+    YF_AVAILABLE = False
 
 try:
     import matplotlib
@@ -50,7 +60,7 @@ except ImportError:
 
 AI_AVAILABLE = len(AI_PROVIDERS) > 0
 
-BOT_VERSION = "V8.1"
+BOT_VERSION = "V9.0"
 APP_NAME = "BISTBULL TERMINAL"
 CONFIDENCE_MIN = 50  # V8: 55→50 (daha geniş universe, daha toleranslı)
 
@@ -146,9 +156,22 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(
 log = logging.getLogger("bistbull")
 
 # ================================================================
-# BATCH HISTORY DOWNLOAD — single yf.download for all symbols
+# BATCH HISTORY DOWNLOAD — V9: borsapy primary, yfinance fallback
 # ================================================================
 def batch_download_history(symbols, period="1y", interval="1d"):
+    """V9: borsapy öncelikli, yfinance fallback"""
+    if BORSAPY_AVAILABLE:
+        result = batch_download_history_v9(symbols, period=period, interval=interval)
+        if result:
+            log.info(f"batch_download V9 (borsapy): {len(result)}/{len(symbols)} başarılı")
+            return result
+        log.warning("borsapy batch_download boş döndü, yfinance fallback deneniyor...")
+    
+    if not YF_AVAILABLE:
+        log.warning("yfinance de yok — history verisi alınamadı")
+        return {}
+    
+    # yfinance fallback
     result = {}
     try:
         if not symbols: return result
@@ -167,7 +190,7 @@ def batch_download_history(symbols, period="1y", interval="1d"):
                     result[sym] = ticker_df
             except Exception: continue
     except Exception as e:
-        log.warning(f"batch_download_history: {e}")
+        log.warning(f"batch_download_history yfinance fallback: {e}")
     return result
 
 # ================================================================
@@ -248,10 +271,24 @@ def score_lower(x, great, good, ok, bad):
     return 40 - (x - ok) * (35 / max(bad - ok, 1e-9))
 
 # ================================================================
-# RAW FETCH (yfinance) — verbatim from fa_bot.py
+# RAW FETCH — V9: borsapy primary, yfinance fallback
 # ================================================================
 def fetch_raw(symbol):
+    """V9: borsapy → gerçek KAP verisi. yfinance fallback."""
     if symbol in RAW_CACHE: return RAW_CACHE[symbol]
+    
+    if BORSAPY_AVAILABLE:
+        try:
+            raw = fetch_raw_v9(symbol, raw_cache=RAW_CACHE)
+            log.debug(f"fetch_raw V9 OK: {symbol} (source: borsapy)")
+            return raw
+        except Exception as e:
+            log.warning(f"fetch_raw V9 failed for {symbol}: {e}, trying yfinance...")
+    
+    if not YF_AVAILABLE:
+        raise RuntimeError(f"Ne borsapy ne yfinance çalışıyor — {symbol} verisi alınamadı")
+    
+    # yfinance fallback
     tk = yf.Ticker(symbol)
     info = tk.get_info() or {}
     try: fast = getattr(tk, "fast_info", {}) or {}
@@ -262,7 +299,7 @@ def fetch_raw(symbol):
     except Exception: balance = None
     try: cashflow = tk.cashflow
     except Exception: cashflow = None
-    raw = {"info": info, "fast": fast, "financials": financials, "balance": balance, "cashflow": cashflow}
+    raw = {"info": info, "fast": fast, "financials": financials, "balance": balance, "cashflow": cashflow, "source": "yfinance"}
     RAW_CACHE[symbol] = raw
     return raw
 
@@ -331,10 +368,23 @@ def compute_beneish(m):
     except Exception: return None
 
 # ================================================================
-# METRIC BUILD — verbatim from fa_bot.py
+# METRIC BUILD — V9: borsapy primary, yfinance fallback
 # ================================================================
 def compute_metrics(symbol):
+    """V9: borsapy ile Türkçe KAP verisi → metric dict.
+    Eğer borsapy başarısızsa, yfinance raw data + İngilizce satır isimleri."""
+    
     raw = fetch_raw(symbol)
+    
+    # Eğer veri borsapy'den geldiyse → V9 path
+    if raw.get("source") == "borsapy" and BORSAPY_AVAILABLE:
+        m = compute_metrics_v9(symbol, raw_cache=RAW_CACHE)
+        m["piotroski_f"] = compute_piotroski(m)
+        m["altman_z"] = compute_altman(m)
+        m["beneish_m"] = compute_beneish(m)
+        return m
+    
+    # yfinance fallback — eski İngilizce satır isimleriyle
     info, fast = raw["info"], raw["fast"]
     fin, bal, cf = raw["financials"], raw["balance"], raw["cashflow"]
 
@@ -413,7 +463,6 @@ def compute_metrics(symbol):
     asset_to = (revenue/total_assets) if revenue is not None and total_assets not in (None, 0) else None
     asset_to_p = (revenue_prev/total_assets_prev) if revenue_prev is not None and total_assets_prev not in (None, 0) else None
 
-    # V7: Institutional holders — yabanci/kurum proxy
     inst_holders_pct = safe_num(info.get("heldPercentInstitutions"))
 
     m = {
@@ -450,7 +499,8 @@ def compute_metrics(symbol):
         "revenue_growth": rev_growth, "eps_growth": eps_growth, "ebitda_growth": ebit_growth,
         "peg": peg, "graham_fv": graham_fv, "margin_safety": mos,
         "share_change": share_ch, "asset_turnover": asset_to, "asset_turnover_prev": asset_to_p,
-        "inst_holders_pct": inst_holders_pct,  # V7: yabanci/kurum orani proxy
+        "inst_holders_pct": inst_holders_pct,
+        "data_source": "yfinance",  # V9: fallback olduğunu işaretle
     }
     m["piotroski_f"] = compute_piotroski(m)
     m["altman_z"] = compute_altman(m)
@@ -1089,8 +1139,22 @@ def compute_technical(symbol, hist_df=None):
         elif symbol in HISTORY_CACHE:
             df = HISTORY_CACHE[symbol]
         else:
-            tk = yf.Ticker(symbol)
-            df = tk.history(period="1y", interval="1d")
+            # V9: borsapy primary, yfinance fallback
+            df = None
+            if BORSAPY_AVAILABLE:
+                try:
+                    import borsapy as bp
+                    ticker_clean = symbol.upper().replace(".IS", "").replace(".E", "")
+                    _tk = bp.Ticker(ticker_clean)
+                    df = _tk.history(period="1y", interval="1d")
+                except Exception as _e:
+                    log.debug(f"compute_technical borsapy history failed: {_e}")
+            if (df is None or (hasattr(df, 'empty') and df.empty)) and YF_AVAILABLE:
+                try:
+                    tk = yf.Ticker(symbol)
+                    df = tk.history(period="1y", interval="1d")
+                except Exception:
+                    pass
             if df is not None and not df.empty:
                 HISTORY_CACHE[symbol] = df
         if df is None or len(df) < 50:
@@ -1258,8 +1322,22 @@ def generate_chart_png(symbol, tech_data=None):
             volumes = [p["volume"] for p in tech_data["price_history"]]
             dates = pd.to_datetime(dates_str)
         else:
-            tk = yf.Ticker(symbol)
-            df = tk.history(period="6mo", interval="1d")
+            # V9: borsapy primary, yfinance fallback
+            df = None
+            if BORSAPY_AVAILABLE:
+                try:
+                    import borsapy as bp
+                    ticker_clean = symbol.upper().replace(".IS", "").replace(".E", "")
+                    _tk = bp.Ticker(ticker_clean)
+                    df = _tk.history(period="6ay", interval="1d")
+                except Exception:
+                    pass
+            if (df is None or (hasattr(df, 'empty') and df.empty)) and YF_AVAILABLE:
+                try:
+                    tk = yf.Ticker(symbol)
+                    df = tk.history(period="6mo", interval="1d")
+                except Exception:
+                    pass
             if df is None or len(df) < 20:
                 return None
             dates = df.index
@@ -2096,7 +2174,10 @@ MACRO_SYMBOLS = {
 }
 
 def _fetch_all_macro():
-    """Batch download all macro symbols in a single yf.download call"""
+    """Batch download all macro symbols — yfinance (global data, borsapy covers BIST only)"""
+    if not YF_AVAILABLE:
+        log.warning("yfinance not available — macro data skipped")
+        return []
     now = dt.datetime.now()
     ytd_start = dt.datetime(now.year, 1, 1).strftime("%Y-%m-%d")
     symbols = [info["symbol"] for info in MACRO_SYMBOLS.values()]
@@ -2399,21 +2480,52 @@ def _fetch_takas_isyatirim():
     return None
 
 def _fetch_takas_yfinance():
-    """Fallback: yfinance ile major_holders'dan yabancı payı tahmini"""
+    """V9: borsapy fast_info.foreign_ratio (gerçek MKK verisi) → yfinance fallback"""
     results = []
     for ticker in UNIVERSE[:20]:  # ilk 20 hisse (hız için)
         try:
-            tk = yf.Ticker(normalize_symbol(ticker))
-            info = tk.get_info() or {}
-            # yfinance'de institutionalHolders proxy olarak kullanılabilir
-            inst_pct = info.get("heldPercentInstitutions")
-            price = info.get("currentPrice") or info.get("regularMarketPrice")
+            foreign_pct = None
+            price = None
+            source = "N/A"
+            
+            # V9: borsapy — gerçek yabancı oranı
+            if BORSAPY_AVAILABLE:
+                try:
+                    import borsapy as bp
+                    _tk = bp.Ticker(ticker)
+                    fi = _tk.fast_info
+                    fr = getattr(fi, 'foreign_ratio', None)
+                    if fr is not None:
+                        foreign_pct = round(fr * 100, 2)
+                        source = "borsapy_mkk"
+                    lp = getattr(fi, 'last_price', None)
+                    if lp is not None:
+                        price = round(float(lp), 2)
+                except Exception:
+                    pass
+            
+            # yfinance fallback
+            if foreign_pct is None and YF_AVAILABLE:
+                try:
+                    tk = yf.Ticker(normalize_symbol(ticker))
+                    info = tk.get_info() or {}
+                    inst_pct = info.get("heldPercentInstitutions")
+                    if inst_pct is not None:
+                        foreign_pct = round(inst_pct * 100, 2)
+                        source = "yfinance_institutional"
+                    if price is None:
+                        p = info.get("currentPrice") or info.get("regularMarketPrice")
+                        if p is not None:
+                            price = round(float(p), 2)
+                except Exception:
+                    pass
+            
             results.append({
                 "ticker": ticker,
-                "foreign_pct": round(inst_pct * 100, 2) if inst_pct is not None else None,
-                "price": round(float(price), 2) if price is not None else None,
+                "foreign_pct": foreign_pct,
+                "price": price,
                 "change_pct": None,
-                "source": "yfinance_institutional"
+                "source": source,
             })
         except Exception:
             continue
@@ -2598,7 +2710,39 @@ async def api_book():
 HEATMAP_CACHE = TTLCache(maxsize=5, ttl=900)  # 15 min
 
 def _fetch_heatmap_data():
-    """Batch download 1-day data for all universe stocks"""
+    """V9: Batch download 1-day data — borsapy primary, yfinance fallback"""
+    results = []
+    
+    # Try borsapy first
+    if BORSAPY_AVAILABLE:
+        try:
+            import borsapy as bp
+            for t in UNIVERSE:
+                try:
+                    _tk = bp.Ticker(t)
+                    fi = _tk.fast_info
+                    last = getattr(fi, 'last_price', None)
+                    prev = getattr(fi, 'previous_close', None)
+                    mcap = getattr(fi, 'market_cap', None)
+                    if last is not None and prev is not None and prev > 0:
+                        chg = (last - prev) / prev * 100
+                        results.append({
+                            "ticker": t, "price": round(float(last), 2),
+                            "change_pct": round(chg, 2),
+                            "market_cap": float(mcap) if mcap else None,
+                            "sector": "",  # will be filled from analysis cache
+                        })
+                except Exception:
+                    continue
+            if results:
+                return results
+        except Exception as e:
+            log.warning(f"heatmap borsapy failed: {e}")
+    
+    # yfinance fallback
+    if not YF_AVAILABLE:
+        return results
+    
     symbols = [normalize_symbol(t) for t in UNIVERSE]
     try:
         df = yf.download(symbols, period="2d", group_by="ticker", progress=False, threads=True)
