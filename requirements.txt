@@ -1,11 +1,27 @@
+# ================================================================
+# BISTBULL TERMINAL V9.1 — Dependencies
+# B8 FIX: httpx removed (debug endpoint kaldırıldı)
+# ================================================================
+
+# Core web
 fastapi>=0.104.0
 uvicorn>=0.24.0
+
+# Data
 pandas>=2.0.0
 numpy>=1.24.0
-cachetools>=5.3.0
 requests>=2.31.0
+
+# Cache (thread-safe wrapper in cache.py)
+cachetools>=5.3.0
+
+# Charts
 matplotlib>=3.7.0
+
+# Data sources
 borsapy>=0.8.0
 yfinance>=0.2.31
+
+# AI providers (optional — graceful degrade if missing)
 openai>=1.0.0
 anthropic>=0.18.0

@@ -4,446 +4,401 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>BistBull.ai — AI Destekli BIST Analiz Terminali</title>
-<meta name="description" content="Piotroski, Altman Z, Graham, Beneish — 9 model, 100 hisse, 3 AI motoru. Bloomberg seviyesinde BIST analizi, herkes için erişilebilir.">
+<meta name="description" content="10 boyutlu finansal skorlama. Piotroski, Altman Z, Graham, Beneish. 100 hisse, 3 AI motoru, 14 teknik sinyal. Bloomberg seviyesinde BIST analizi.">
 <meta name="theme-color" content="#060A14">
 <meta property="og:title" content="BistBull.ai — BIST Analiz Terminali">
-<meta property="og:description" content="AI destekli BIST hisse analiz terminali. 9 model, 100 hisse, 3 AI motoru.">
+<meta property="og:description" content="AI destekli BIST hisse analiz terminali. 10 boyut, 9 model, 3 AI motoru.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://bistbull.ai">
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0%25' y1='0%25' x2='100%25' y2='100%25'%3E%3Cstop offset='0%25' stop-color='%23FFB300'/%3E%3Cstop offset='100%25' stop-color='%23E69500'/%3E%3C/linearGradient%3E%3C/defs%3E%3Cpath d='M25,55 Q6,20 5,6 Q12,22 24,36 Z' fill='url(%23g)' opacity='.85'/%3E%3Cpath d='M75,55 Q94,20 95,6 Q88,22 76,36 Z' fill='url(%23g)' opacity='.85'/%3E%3Cellipse cx='50' cy='60' rx='28' ry='22' fill='url(%23g)'/%3E%3Cellipse cx='50' cy='76' rx='17' ry='12' fill='%23E69500'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600;700&family=DM+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600;700;800&family=DM+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
-:root {
-  --bg-deep:#060A14;--bg-dark:#0A0F1C;--bg-card:#0F1628;--bg-row:#111D30;--bg-row-alt:#0C1525;--bg-row-hover:#142038;
-  --gold:#D4A844;--gold-light:#E8C56D;--gold-glow:rgba(212,168,68,0.06);--gold-dim:rgba(212,168,68,0.12);--gold-border:rgba(212,168,68,0.2);
-  --green:#34D399;--green-bg:rgba(52,211,153,0.08);--red:#F87171;--red-bg:rgba(248,113,113,0.08);--blue:#60A5FA;
-  --tw:#F1F5F9;--tl:#D1D9E6;--tb:#B0BDD0;--tm:#7A8BA0;--td:#4A5568;
-  --border:#1A2540;--border-light:#223050;
-}
-*{margin:0;padding:0;box-sizing:border-box}
-html{scroll-behavior:smooth;overflow-x:hidden}
-body{background:var(--bg-deep);color:var(--tb);font-family:'DM Sans',sans-serif;line-height:1.6;overflow-x:hidden}
-::selection{background:var(--gold-dim);color:var(--tw)}
-img{max-width:100%}
-
-/* SCROLL REVEAL */
-.sr{opacity:0;transform:translateY(28px);transition:opacity 0.7s cubic-bezier(.4,0,.2,1),transform 0.7s cubic-bezier(.4,0,.2,1)}
-.sr.vis{opacity:1;transform:translateY(0)}
-.sr-d1{transition-delay:.1s}.sr-d2{transition-delay:.2s}.sr-d3{transition-delay:.3s}.sr-d4{transition-delay:.4s}.sr-d5{transition-delay:.5s}
+:root{--bg:#060A14;--bg2:#0A0F1C;--bg3:#0F1628;--bg4:#142038;--gold:#D4A844;--gold-l:#E8C56D;--gold-glow:rgba(212,168,68,.05);--gold-dim:rgba(212,168,68,.12);--gold-b:rgba(212,168,68,.2);--grn:#34D399;--grn-bg:rgba(52,211,153,.08);--red:#F87171;--blu:#60A5FA;--blu-bg:rgba(96,165,250,.08);--tw:#F1F5F9;--tl:#D1D9E6;--tb:#B0BDD0;--tm:#7A8BA0;--td:#4A5568;--bdr:#1A2540;--bdr2:#223050}
+*{margin:0;padding:0;box-sizing:border-box}html{scroll-behavior:smooth;overflow-x:hidden}body{background:var(--bg);color:var(--tb);font-family:'DM Sans',sans-serif;line-height:1.7;overflow-x:hidden}::selection{background:var(--gold-dim);color:var(--tw)}
+.sr{opacity:0;transform:translateY(28px);transition:opacity .7s cubic-bezier(.4,0,.2,1),transform .7s cubic-bezier(.4,0,.2,1)}.sr.vis{opacity:1;transform:translateY(0)}.sr-d1{transition-delay:.1s}.sr-d2{transition-delay:.2s}.sr-d3{transition-delay:.3s}.sr-d4{transition-delay:.4s}
+.wrap{max-width:1180px;margin:0 auto;padding:0 2rem}
 
 /* NAV */
-nav{position:fixed;top:0;left:0;right:0;z-index:100;padding:0 2rem;height:56px;display:flex;align-items:center;justify-content:space-between;background:rgba(6,10,20,0.92);backdrop-filter:blur(24px);border-bottom:1px solid var(--border);transition:background .3s}
-.nav-logo{display:flex;align-items:center;gap:10px;text-decoration:none}
-.nav-bull{width:28px;height:28px}
-.nav-wordmark{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:1rem;color:var(--tw);letter-spacing:-.5px}
-.nav-wordmark b{color:var(--gold)}
-.nav-r{display:flex;gap:1.5rem;align-items:center}
-.nav-r a{color:var(--tm);text-decoration:none;font-size:.78rem;font-weight:500;letter-spacing:.06em;text-transform:uppercase;transition:color .3s}
-.nav-r a:hover{color:var(--gold-light)}
-.nav-cta{background:var(--gold)!important;color:var(--bg-deep)!important;padding:.4rem 1rem!important;border-radius:4px;font-weight:700!important;font-size:.72rem!important;white-space:nowrap}
-.nav-cta:hover{background:var(--gold-light)!important}
+nav{position:fixed;top:0;left:0;right:0;z-index:100;padding:0 2rem;height:56px;display:flex;align-items:center;justify-content:space-between;background:rgba(6,10,20,.92);backdrop-filter:blur(24px);border-bottom:1px solid var(--bdr)}
+.n-logo{display:flex;align-items:center;gap:10px;text-decoration:none;font-family:'JetBrains Mono',monospace;font-weight:700;font-size:1rem;color:var(--tw);letter-spacing:-.5px}.n-logo b{color:var(--gold)}
+.n-r{display:flex;gap:1.5rem;align-items:center}.n-r a{color:var(--tm);text-decoration:none;font-size:.78rem;font-weight:500;letter-spacing:.06em;text-transform:uppercase;transition:color .3s}.n-r a:hover{color:var(--gold-l)}
+.n-cta{background:var(--gold)!important;color:var(--bg)!important;padding:.4rem 1.2rem!important;border-radius:4px;font-weight:700!important;font-size:.72rem!important;letter-spacing:.08em!important}.n-cta:hover{background:var(--gold-l)!important}
 
 /* HERO */
-.hero{padding:7rem 2rem 3rem;text-align:center;position:relative;overflow:hidden;min-height:80vh;display:flex;flex-direction:column;align-items:center;justify-content:center}
-.hero::before{content:'';position:absolute;top:-10%;left:50%;transform:translateX(-50%);width:900px;height:500px;background:radial-gradient(ellipse,rgba(212,168,68,0.04) 0%,transparent 65%);pointer-events:none}
-.hero-bull{width:100px;height:100px;margin-bottom:1.5rem;filter:drop-shadow(0 8px 32px rgba(212,168,68,0.15));animation:float 6s ease-in-out infinite}
-@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
-.hero-badge{display:inline-flex;align-items:center;gap:.5rem;padding:.35rem .9rem;border:1px solid var(--gold-border);background:var(--gold-glow);border-radius:50px;font-size:.7rem;color:var(--gold-light);font-weight:600;letter-spacing:.08em;text-transform:uppercase;margin-bottom:1.5rem}
-.hero-badge::before{content:'';width:6px;height:6px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green);animation:pulse 2s infinite;flex-shrink:0}
-@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
-.hero-title{font-family:'Playfair Display',serif;font-size:clamp(2.2rem,5.5vw,3.8rem);color:var(--tw);line-height:1.08;margin-bottom:1rem;letter-spacing:-.03em;max-width:700px}
-.hero-title .gold{color:var(--gold)}
-.hero-sub{font-size:clamp(.92rem,2vw,1.08rem);color:var(--tm);max-width:540px;margin:0 auto 2rem;line-height:1.7;font-weight:400}
-.hero-actions{display:flex;gap:.8rem;justify-content:center;flex-wrap:wrap;margin-bottom:2.5rem}
-.btn-p{background:var(--gold);color:var(--bg-deep);padding:.7rem 1.8rem;border:none;border-radius:5px;font-size:.85rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;cursor:pointer;transition:all .3s;text-decoration:none;box-shadow:0 4px 20px rgba(212,168,68,0.2);white-space:nowrap}
-.btn-p:hover{background:var(--gold-light);transform:translateY(-2px);box-shadow:0 8px 30px rgba(212,168,68,0.3)}
-.btn-g{background:transparent;color:var(--tl);padding:.7rem 1.8rem;border:1px solid var(--border-light);border-radius:5px;font-size:.85rem;font-weight:500;letter-spacing:.04em;text-transform:uppercase;cursor:pointer;transition:all .3s;text-decoration:none;white-space:nowrap}
-.btn-g:hover{border-color:var(--gold);color:var(--gold-light)}
+.hero{padding:10rem 2rem 5rem;text-align:center;position:relative;min-height:90vh;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.hero::before{content:'';position:absolute;top:-15%;left:50%;transform:translateX(-50%);width:1000px;height:600px;background:radial-gradient(ellipse,rgba(212,168,68,.04) 0%,transparent 65%);pointer-events:none}
+.hero-tag{font-family:'JetBrains Mono',monospace;font-size:.72rem;letter-spacing:.25em;text-transform:uppercase;color:var(--gold);padding:.35rem 1rem;border:1px solid var(--gold-b);border-radius:50px;display:inline-block;margin-bottom:2rem;background:var(--gold-glow)}
+.hero h1{font-family:'Playfair Display',serif;font-size:clamp(2.4rem,6vw,4.2rem);font-weight:800;color:var(--tw);line-height:1.15;margin-bottom:1.5rem;letter-spacing:-.02em}
+.hero h1 em{font-style:normal;color:var(--gold);background:linear-gradient(135deg,var(--gold),var(--gold-l));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.hero p{font-size:1.15rem;color:var(--tb);max-width:660px;margin:0 auto 2.5rem;line-height:1.8}
+.hero-cta{display:inline-flex;align-items:center;gap:10px;background:var(--gold);color:var(--bg);font-family:'JetBrains Mono',monospace;font-weight:700;font-size:.9rem;padding:.9rem 2.5rem;border-radius:6px;text-decoration:none;letter-spacing:.04em;transition:all .3s;border:none;cursor:pointer}
+.hero-cta:hover{background:var(--gold-l);transform:translateY(-2px);box-shadow:0 12px 40px rgba(212,168,68,.2)}
+.hero-sub{font-size:.78rem;color:var(--td);margin-top:1.2rem;font-family:'JetBrains Mono',monospace}
 
-/* HERO PROOF BAR */
-.proof-bar{display:flex;gap:2rem;justify-content:center;flex-wrap:wrap;padding-top:1rem}
-.proof-i{display:flex;align-items:center;gap:.5rem;font-family:'JetBrains Mono',monospace;font-size:.75rem;color:var(--tm)}
-.proof-i strong{color:var(--tl);font-size:.85rem}
+/* STATS BAR */
+.stats{border-top:1px solid var(--bdr);border-bottom:1px solid var(--bdr);background:var(--bg2);padding:2rem 0}
+.stats-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:1.5rem;text-align:center}
+.stat-n{font-family:'Playfair Display',serif;font-size:2.2rem;font-weight:700;color:var(--gold);line-height:1}
+.stat-l{font-family:'JetBrains Mono',monospace;font-size:.68rem;color:var(--tm);letter-spacing:.12em;text-transform:uppercase;margin-top:.4rem}
 
-/* MARKET TABLE */
-.market-section{padding:0 1.5rem 3rem;position:relative;z-index:1}
-.market-wrap{max-width:1200px;margin:0 auto;background:var(--bg-card);border:1px solid var(--border);border-radius:10px;overflow:hidden;box-shadow:0 20px 80px rgba(0,0,0,.4)}
-.market-toolbar{display:flex;align-items:center;justify-content:space-between;padding:.7rem 1rem;border-bottom:1px solid var(--border);background:rgba(10,15,28,.6);flex-wrap:wrap;gap:.5rem}
-.mt-left{display:flex;align-items:center;gap:.8rem;flex-wrap:wrap}
-.mt-tab{padding:.3rem .7rem;border-radius:4px;font-size:.72rem;font-weight:600;letter-spacing:.04em;text-transform:uppercase;cursor:pointer;transition:all .25s;border:1px solid transparent;color:var(--tm);background:transparent}
-.mt-tab.active{background:var(--gold-dim);color:var(--gold-light);border-color:var(--gold-border)}
-.mt-tab:hover:not(.active){color:var(--tl)}
-.mt-count{font-size:.7rem;color:var(--tm);font-family:'JetBrains Mono',monospace}
-.mt-live{display:flex;align-items:center;gap:.4rem;font-size:.68rem;color:var(--green);font-weight:600;letter-spacing:.04em;text-transform:uppercase}
-.mt-live::before{content:'';width:5px;height:5px;border-radius:50%;background:var(--green);box-shadow:0 0 6px var(--green);animation:pulse 2s infinite}
-.market-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
-.market-scroll::-webkit-scrollbar{height:3px}
-.market-scroll::-webkit-scrollbar-track{background:var(--bg-card)}
-.market-scroll::-webkit-scrollbar-thumb{background:var(--border-light);border-radius:2px}
-.mtable{width:100%;min-width:760px;border-collapse:collapse;font-family:'JetBrains Mono',monospace}
-.mtable thead th{padding:.6rem .8rem;font-size:.65rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--tm);text-align:right;border-bottom:1px solid var(--border);background:var(--bg-card);position:sticky;top:0;white-space:nowrap;user-select:none}
-.mtable thead th:first-child{text-align:left;padding-left:1rem}
-.mtable thead th:nth-child(2){text-align:left}
-.mtable tbody tr{transition:background .15s;cursor:pointer}
-.mtable tbody tr:nth-child(odd){background:var(--bg-row-alt)}
-.mtable tbody tr:nth-child(even){background:var(--bg-row)}
-.mtable tbody tr:hover{background:var(--bg-row-hover)}
-.mtable td{padding:.55rem .8rem;font-size:.78rem;text-align:right;border-bottom:1px solid rgba(26,37,64,.5);white-space:nowrap;color:var(--tl)}
-.mtable td:first-child{padding-left:1rem}
-.mtable tbody tr:last-child td{border-bottom:none}
-.stock-sym{text-align:left;font-weight:600;color:var(--tw);font-size:.8rem}
-.stock-name{text-align:left;color:var(--tm);font-family:'DM Sans',sans-serif;font-size:.75rem;font-weight:400}
-.td-price{color:var(--tw);font-weight:500}
-.td-up{color:var(--green);font-weight:600}
-.td-down{color:var(--red);font-weight:600}
-.td-up-bg{color:var(--green);background:var(--green-bg);border-radius:3px;padding:.2rem .4rem;font-weight:600}
-.td-down-bg{color:var(--red);background:var(--red-bg);border-radius:3px;padding:.2rem .4rem;font-weight:600}
-.piotroski-bar{display:inline-flex;gap:2px;vertical-align:middle}
-.piotroski-bar span{width:6px;height:14px;border-radius:1px;display:inline-block}
-.pb-fill{background:var(--gold)}
-.pb-empty{background:var(--border)}
-.score-badge{display:inline-block;padding:.15rem .45rem;border-radius:3px;font-size:.72rem;font-weight:700}
-.score-high{background:var(--green-bg);color:var(--green)}
-.score-mid{background:rgba(251,191,36,.1);color:#FBBF24}
-.score-low{background:var(--red-bg);color:var(--red)}
-.mini-chart{display:inline-block;vertical-align:middle}
+/* SECTION */
+.sec{padding:6rem 0}.sec-t{text-align:center;margin-bottom:4rem}
+.sec-tag{font-family:'JetBrains Mono',monospace;font-size:.68rem;letter-spacing:.2em;text-transform:uppercase;color:var(--gold);margin-bottom:.8rem}
+.sec h2{font-family:'Playfair Display',serif;font-size:clamp(1.8rem,4vw,2.8rem);font-weight:700;color:var(--tw);line-height:1.2;margin-bottom:1rem}
+.sec h2 em{font-style:normal;color:var(--gold)}
+.sec-desc{font-size:1.05rem;color:var(--tb);max-width:620px;margin:0 auto;line-height:1.8}
 
-/* SECTIONS */
-section{position:relative;z-index:1;padding:5rem 2rem}
-.section-inner{max-width:1100px;margin:0 auto}
-.section-label{font-family:'JetBrains Mono',monospace;font-size:.7rem;font-weight:700;letter-spacing:.18em;text-transform:uppercase;color:var(--gold-light);margin-bottom:.7rem}
-.section-title{font-family:'Playfair Display',serif;font-size:clamp(1.7rem,4vw,2.6rem);color:var(--tw);line-height:1.15;margin-bottom:.8rem;letter-spacing:-.02em}
-.section-desc{font-size:clamp(.88rem,2vw,1rem);color:var(--tb);max-width:560px;line-height:1.7;margin-bottom:2.5rem}
+/* CARDS */
+.cg3{display:grid;grid-template-columns:repeat(3,1fr);gap:1.5rem}
+.cg2{display:grid;grid-template-columns:repeat(2,1fr);gap:1.5rem}
+.cd{background:var(--bg3);border:1px solid var(--bdr);border-radius:12px;padding:2rem;transition:all .4s;position:relative;overflow:hidden}
+.cd:hover{border-color:var(--bdr2);transform:translateY(-4px);box-shadow:0 20px 60px rgba(0,0,0,.3)}
+.cd-icon{font-size:2rem;margin-bottom:1rem}
+.cd h3{font-family:'Playfair Display',serif;font-size:1.15rem;font-weight:600;color:var(--tw);margin-bottom:.6rem}
+.cd p{font-size:.88rem;color:var(--tb);line-height:1.7}
+.cd-tag{font-family:'JetBrains Mono',monospace;font-size:.65rem;color:var(--gold);letter-spacing:.1em;text-transform:uppercase;margin-top:1rem;display:inline-block;padding:.2rem .6rem;background:var(--gold-glow);border:1px solid var(--gold-b);border-radius:4px}
+.cd.feat{border-left:3px solid var(--gold)}
 
-/* Q ASSISTANT — FEATURE SECTION */
-.q-section{background:linear-gradient(180deg,var(--bg-deep) 0%,#080D1A 100%);border-top:1px solid var(--border);border-bottom:1px solid var(--border)}
-.q-grid{display:grid;grid-template-columns:1fr 1fr;gap:3rem;align-items:center}
-.q-visual{background:var(--bg-card);border:1px solid var(--border);border-radius:12px;overflow:hidden;box-shadow:0 12px 48px rgba(0,0,0,.3)}
-.q-header{padding:.7rem 1rem;background:linear-gradient(135deg,#12182a,var(--bg-card));border-bottom:1px solid var(--border);display:flex;align-items:center;gap:.6rem}
-.q-letter{font-family:'JetBrains Mono',monospace;font-size:1.2rem;font-weight:700;color:var(--gold)}
-.q-name{font-family:'JetBrains Mono',monospace;font-size:.7rem;font-weight:700;color:var(--gold);text-transform:uppercase;letter-spacing:.05em}
-.q-sub{font-size:.6rem;color:var(--tm)}
-.q-msgs{padding:1rem}
-.q-msg{font-size:.8rem;line-height:1.6;margin-bottom:.6rem;padding:.5rem .7rem;border-radius:8px;max-width:88%}
-.q-msg-u{background:rgba(96,165,250,.08);border:1px solid rgba(96,165,250,.15);margin-left:auto;text-align:right;color:var(--tl)}
-.q-msg-a{background:var(--bg-row);border:1px solid var(--border);color:var(--tl)}
-.q-msg-a strong{color:var(--tw)}
-.q-msg-a .qv{color:var(--green);font-family:'JetBrains Mono',monospace;font-size:.75rem;font-weight:600}
-.q-msg-a .qr{color:var(--red);font-family:'JetBrains Mono',monospace;font-size:.75rem;font-weight:600}
+/* DIMENSION GRID */
+.dim-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:1rem}
+.dim{text-align:center;padding:1.5rem 1rem;background:var(--bg3);border:1px solid var(--bdr);border-radius:10px;transition:all .3s}
+.dim:hover{border-color:var(--gold-b);background:var(--bg4)}
+.dim-num{font-family:'Playfair Display',serif;font-size:1.8rem;font-weight:700;color:var(--gold)}
+.dim-name{font-family:'JetBrains Mono',monospace;font-size:.68rem;color:var(--tl);letter-spacing:.08em;text-transform:uppercase;margin-top:.3rem}
+.dim-desc{font-size:.75rem;color:var(--tm);margin-top:.4rem;line-height:1.5}
 
-/* MODULES */
-.modules-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:.8rem}
-.mc{background:var(--bg-card);border:1px solid var(--border);border-radius:8px;padding:1.5rem;transition:all .3s;position:relative;overflow:hidden}
-.mc::after{content:'';position:absolute;top:0;left:0;width:100%;height:2px;background:linear-gradient(90deg,var(--gold),transparent);opacity:0;transition:opacity .3s}
-.mc:hover{border-color:var(--gold-border);background:var(--bg-row-hover);transform:translateY(-2px)}
-.mc:hover::after{opacity:1}
-.mc-emoji{font-size:1.3rem;margin-bottom:.7rem;display:block}
-.mc-name{font-family:'Playfair Display',serif;font-size:1.05rem;color:var(--tw);margin-bottom:.4rem}
-.mc-desc{font-size:.82rem;color:var(--tb);line-height:1.55;margin-bottom:.7rem}
-.mc-tag{display:inline-block;padding:.18rem .55rem;border-radius:3px;font-size:.62rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;font-family:'JetBrains Mono',monospace}
-.tl{background:rgba(52,211,153,.12);color:var(--green)}
-.tp{background:var(--gold-dim);color:var(--gold-light)}
-.ts-tag{background:rgba(136,150,171,.08);color:var(--tm)}
+/* LEGENDARY */
+.leg-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:1.5rem}
+.leg{text-align:center;padding:2rem 1.2rem;background:linear-gradient(145deg,var(--bg3),var(--bg2));border:1px solid var(--bdr);border-radius:12px;position:relative}
+.leg::before{content:'';position:absolute;top:0;left:50%;transform:translateX(-50%);width:40px;height:3px;background:var(--gold);border-radius:0 0 3px 3px}
+.leg h4{font-family:'Playfair Display',serif;font-size:1.1rem;color:var(--tw);margin-bottom:.5rem}
+.leg p{font-size:.82rem;color:var(--tb);line-height:1.6}
+.leg-score{font-family:'JetBrains Mono',monospace;font-size:.7rem;color:var(--gold);margin-top:.8rem}
 
-/* STATS */
-.stats-bar{background:var(--bg-dark);border-top:1px solid var(--border);border-bottom:1px solid var(--border);padding:3.5rem 2rem}
-.stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:1rem;text-align:center;max-width:1000px;margin:0 auto}
-.stat-n{font-family:'Playfair Display',serif;font-size:clamp(2rem,4.5vw,3rem);color:var(--gold);line-height:1;margin-bottom:.4rem}
-.stat-l{font-size:clamp(.78rem,1.8vw,.88rem);color:var(--tl);font-weight:500}
+/* TUYO BOX */
+.tuyo-box{max-width:560px;margin:0 auto;padding:2.5rem;background:linear-gradient(135deg,var(--bg3),rgba(212,168,68,.03));border:1px solid var(--gold-b);border-radius:16px;text-align:center;position:relative}
+.tuyo-box::before{content:'';position:absolute;top:-1px;left:50%;transform:translateX(-50%);width:80px;height:3px;background:var(--gold);border-radius:0 0 4px 4px}
+.tuyo-box h3{font-family:'Playfair Display',serif;font-size:1.6rem;color:var(--tw);margin-bottom:.6rem}
 
-/* COMPARE */
-.compare-scroll{width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;border-radius:8px;border:1px solid var(--border);background:var(--bg-card)}
-.compare-scroll::-webkit-scrollbar{height:3px}
-.compare-scroll::-webkit-scrollbar-thumb{background:var(--border-light);border-radius:2px}
-.ctable{width:100%;min-width:520px;border-collapse:collapse}
-.ctable th{padding:.8rem 1rem;font-size:.72rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--tm);text-align:center;background:rgba(10,15,28,.5);border-bottom:1px solid var(--border);font-family:'JetBrains Mono',monospace}
-.ctable th:first-child{text-align:left}
-.ctable th:nth-child(2){color:var(--gold-light)}
-.ctable td{padding:.75rem 1rem;text-align:center;font-size:.85rem;border-bottom:1px solid rgba(26,37,64,.4)}
-.ctable td:first-child{text-align:left;color:var(--tl);font-weight:500;position:sticky;left:0;background:var(--bg-card);z-index:1}
-.ctable tr:nth-child(even) td:first-child{background:#0D1424}
-.ctable td:nth-child(2){color:var(--green);font-weight:700}
-.ctable tr:last-child td{border-bottom:none}
-.ctable tr:nth-child(even) td{background:rgba(13,20,36,.5)}
-.cm{color:var(--tm)!important;font-weight:400!important}
-.cd{color:var(--td)!important}
-.cr{color:var(--red)!important;font-weight:700!important}
-.ch{display:none;text-align:center;padding:.4rem;font-size:.7rem;color:var(--tm)}
+/* DECISION FLOW */
+.flow{display:flex;align-items:center;justify-content:center;gap:.8rem;flex-wrap:wrap;margin-top:2rem}
+.flow-step{padding:.7rem 1.2rem;background:var(--bg3);border:1px solid var(--bdr);border-radius:8px;font-family:'JetBrains Mono',monospace;font-size:.78rem;color:var(--tl)}
+.flow-arrow{color:var(--gold);font-size:1.2rem}
+.flow-step.active{border-color:var(--gold-b);color:var(--gold);background:var(--gold-glow)}
 
-/* CTA */
-.cta{text-align:center;padding:6rem 2rem 5rem;position:relative}
-.cta-glow{position:absolute;bottom:-15%;left:50%;transform:translateX(-50%);width:700px;height:400px;background:radial-gradient(ellipse,rgba(212,168,68,0.04) 0%,transparent 60%);pointer-events:none}
-.cta-inner{position:relative;z-index:1}
-.cta-t{font-family:'Playfair Display',serif;font-size:clamp(1.8rem,4.5vw,3rem);color:var(--tw);margin-bottom:.8rem;letter-spacing:-.02em}
-.cta-s{color:var(--tb);font-size:clamp(.9rem,2.2vw,1.08rem);margin-bottom:2rem}
+/* COMPARE TABLE */
+.cmp-wrap{overflow-x:auto;border-radius:12px;border:1px solid var(--bdr);background:var(--bg3)}
+.cmp{width:100%;border-collapse:collapse;font-size:.88rem}
+.cmp th{font-family:'JetBrains Mono',monospace;font-size:.7rem;letter-spacing:.1em;text-transform:uppercase;color:var(--tm);padding:1rem;text-align:center;border-bottom:1px solid var(--bdr);background:var(--bg2)}
+.cmp th:first-child{text-align:left;min-width:200px}
+.cmp th:last-child{color:var(--gold)}
+.cmp td{padding:.9rem 1rem;text-align:center;border-bottom:1px solid var(--bdr);color:var(--tb)}
+.cmp td:first-child{text-align:left;color:var(--tl);font-weight:500}
+.cmp tr:hover td{background:var(--bg4)}
+.cmp .hl{color:var(--gold);font-weight:700}
+.cmp .uni{color:var(--blu);font-weight:600}
+
+/* TECH SECTION */
+.tech-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:1rem}
+.tech-item{padding:1.2rem;background:var(--bg3);border:1px solid var(--bdr);border-radius:8px;text-align:center}
+.tech-item .ti-icon{font-size:1.4rem;margin-bottom:.5rem}
+.tech-item .ti-label{font-family:'JetBrains Mono',monospace;font-size:.72rem;color:var(--tl);letter-spacing:.08em;text-transform:uppercase}
+.tech-item .ti-desc{font-size:.78rem;color:var(--tm);margin-top:.3rem}
+
+/* CTA SECTION */
+.cta-sec{padding:6rem 0;text-align:center;position:relative}
+.cta-sec::before{content:'';position:absolute;bottom:0;left:50%;transform:translateX(-50%);width:800px;height:400px;background:radial-gradient(ellipse,rgba(212,168,68,.04) 0%,transparent 65%);pointer-events:none}
+.cta-sec h2{font-family:'Playfair Display',serif;font-size:clamp(2rem,5vw,3rem);font-weight:700;color:var(--tw);margin-bottom:1rem}
+.cta-sec p{color:var(--tb);font-size:1.05rem;margin-bottom:2.5rem;max-width:520px;margin-left:auto;margin-right:auto}
 
 /* FOOTER */
-footer{border-top:1px solid var(--border);padding:2rem;max-width:1100px;margin:0 auto}
-.footer-top{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:1rem;margin-bottom:1.5rem;padding-bottom:1.5rem;border-bottom:1px solid var(--border)}
-.footer-brand{display:flex;align-items:center;gap:10px}
-.footer-brand svg{width:24px;height:24px}
-.footer-brand span{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:.9rem;color:var(--tw)}
-.footer-brand b{color:var(--gold)}
-.footer-links{display:flex;gap:1.5rem}
-.footer-links a{color:var(--tm);text-decoration:none;font-size:.78rem;transition:color .3s}
-.footer-links a:hover{color:var(--gold)}
-.footer-bottom{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.5rem}
-.footer-copy{font-size:.72rem;color:var(--td)}
-.footer-disc{font-size:.65rem;color:var(--td);max-width:500px;text-align:right;line-height:1.5}
+footer{border-top:1px solid var(--bdr);padding:2.5rem 0;text-align:center}
+footer p{font-size:.78rem;color:var(--td);font-family:'JetBrains Mono',monospace}
+footer a{color:var(--gold);text-decoration:none}footer a:hover{color:var(--gold-l)}
 
 /* RESPONSIVE */
-@media(max-width:900px){
-  .modules-grid{grid-template-columns:1fr 1fr}
-  .q-grid{grid-template-columns:1fr;gap:2rem}
-  .stats-grid{grid-template-columns:repeat(2,1fr)}
-}
-@media(max-width:640px){
-  nav{padding:0 1rem;height:50px}
-  .nav-r a:not(.nav-cta){display:none}
-  .hero{padding:5rem 1rem 2rem;min-height:auto}
-  .hero-bull{width:72px;height:72px}
-  .hero-actions{flex-direction:column;align-items:center}
-  .btn-p,.btn-g{width:100%;max-width:300px;text-align:center}
-  .proof-bar{gap:1rem}
-  .market-section{padding:0 .5rem 2rem}
-  .modules-grid{grid-template-columns:1fr}
-  .mc:hover{transform:none}
-  section{padding:3.5rem 1rem}
-  .stats-grid{grid-template-columns:repeat(2,1fr);gap:.5rem}
-  .ch{display:block}
-  .cta{padding:3.5rem 1rem}
-  footer{padding:1.5rem 1rem}
-  .footer-top{flex-direction:column;align-items:flex-start}
-  .footer-bottom{flex-direction:column;align-items:flex-start}
-  .footer-disc{text-align:left}
-}
+@media(max-width:1024px){.cg3,.dim-grid,.tech-grid{grid-template-columns:repeat(2,1fr)}.leg-grid{grid-template-columns:repeat(2,1fr)}.stats-grid{grid-template-columns:repeat(3,1fr)}}
+@media(max-width:640px){.cg3,.cg2,.dim-grid,.leg-grid,.tech-grid{grid-template-columns:1fr}.stats-grid{grid-template-columns:repeat(2,1fr);gap:1rem}.hero{padding:7rem 1.5rem 3rem}.hero h1{font-size:2rem}.n-r a:not(.n-cta){display:none}.wrap{padding:0 1.2rem}.flow{flex-direction:column}.flow-arrow{transform:rotate(90deg)}}
 </style>
 </head>
 <body>
 
 <!-- NAV -->
 <nav>
-  <a href="#" class="nav-logo">
-    <svg class="nav-bull" viewBox="0 0 100 100" fill="none">
-      <defs><linearGradient id="ng" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#FFB300"/><stop offset="100%" stop-color="#E69500"/></linearGradient></defs>
-      <path d="M20,48 Q6,20 5,6 Q12,22 24,36 Z" fill="url(#ng)" opacity=".85"/>
-      <path d="M70,48 Q84,20 85,6 Q78,22 66,36 Z" fill="url(#ng)" opacity=".85"/>
-      <ellipse cx="45" cy="54" rx="28" ry="22" fill="url(#ng)"/>
-      <ellipse cx="45" cy="70" rx="17" ry="12" fill="#E69500"/>
-      <ellipse cx="34" cy="50" rx="5" ry="4.5" fill="#0a0e14"/>
-      <ellipse cx="56" cy="50" rx="5" ry="4.5" fill="#0a0e14"/>
-      <ellipse cx="35.5" cy="49" rx="2.2" ry="1.8" fill="#eaf0fa"/>
-      <ellipse cx="57.5" cy="49" rx="2.2" ry="1.8" fill="#eaf0fa"/>
-      <path d="M26,44 Q31,41.5 37,43.5" stroke="#0a0e14" stroke-width="2" fill="none" stroke-linecap="round"/>
-      <path d="M64,44 Q59,41.5 53,43.5" stroke="#0a0e14" stroke-width="2" fill="none" stroke-linecap="round"/>
-      <path d="M39,77 Q45,80.5 51,77" stroke="#0a0e14" stroke-width="1.4" fill="none" stroke-linecap="round"/>
-      <ellipse cx="20" cy="44" rx="6.5" ry="5" fill="url(#ng)" transform="rotate(-12,20,44)"/>
-      <ellipse cx="70" cy="44" rx="6.5" ry="5" fill="url(#ng)" transform="rotate(12,70,44)"/>
-    </svg>
-    <span class="nav-wordmark">BIST<b>BULL</b></span>
-  </a>
-  <div class="nav-r">
-    <a href="#moduller">Modüller</a>
-    <a href="#karsilastir">Karşılaştır</a>
-    <a href="/terminal" class="nav-cta">Terminali Aç →</a>
+  <a href="/" class="n-logo">🐂 Bist<b>Bull</b></a>
+  <div class="n-r">
+    <a href="#nasil">Nasıl Çalışır</a>
+    <a href="#modeller">Modeller</a>
+    <a href="#q">Q Asistanı</a>
+    <a href="#karsilastirma">Karşılaştırma</a>
+    <a href="/terminal" class="n-cta">TERMİNALE GİR →</a>
   </div>
 </nav>
 
 <!-- HERO -->
-<div class="hero">
-  <svg class="hero-bull sr" viewBox="0 0 100 100" fill="none">
-    <defs><linearGradient id="hg" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#FFB300"/><stop offset="100%" stop-color="#E69500"/></linearGradient></defs>
-    <path d="M20,48 Q6,20 5,6 Q12,22 24,36 Z" fill="url(#hg)" opacity=".85"/>
-    <path d="M70,48 Q84,20 85,6 Q78,22 66,36 Z" fill="url(#hg)" opacity=".85"/>
-    <ellipse cx="45" cy="54" rx="28" ry="22" fill="url(#hg)"/>
-    <ellipse cx="45" cy="70" rx="17" ry="12" fill="#E69500"/>
-    <ellipse cx="37" cy="72" rx="2.8" ry="2.2" fill="#0a0e14"/>
-    <ellipse cx="53" cy="72" rx="2.8" ry="2.2" fill="#0a0e14"/>
-    <ellipse cx="34" cy="50" rx="5" ry="4.5" fill="#0a0e14"/>
-    <ellipse cx="56" cy="50" rx="5" ry="4.5" fill="#0a0e14"/>
-    <ellipse cx="35.5" cy="49" rx="2.2" ry="1.8" fill="#eaf0fa"/>
-    <ellipse cx="57.5" cy="49" rx="2.2" ry="1.8" fill="#eaf0fa"/>
-    <path d="M26,44 Q31,41.5 37,43.5" stroke="#0a0e14" stroke-width="2" fill="none" stroke-linecap="round"/>
-    <path d="M64,44 Q59,41.5 53,43.5" stroke="#0a0e14" stroke-width="2" fill="none" stroke-linecap="round"/>
-    <path d="M39,77 Q45,80.5 51,77" stroke="#0a0e14" stroke-width="1.4" fill="none" stroke-linecap="round"/>
-    <ellipse cx="20" cy="44" rx="6.5" ry="5" fill="url(#hg)" transform="rotate(-12,20,44)"/>
-    <ellipse cx="70" cy="44" rx="6.5" ry="5" fill="url(#hg)" transform="rotate(12,70,44)"/>
-  </svg>
-  <div class="hero-badge sr sr-d1">Yayında — V9.2 · 100 Hisse</div>
-  <h1 class="hero-title sr sr-d2">Tüyoya değil,<br><span class="gold">veriye güven.</span></h1>
-  <p class="hero-sub sr sr-d3">7 boyut temel analiz, 17 teknik sinyal, 3 AI motoru — 100 hisse, Bloomberg seviyesinde BIST analizi.</p>
-  <div class="hero-actions sr sr-d4">
-    <a href="/terminal" class="btn-p">Terminali Aç →</a>
-    <a href="#moduller" class="btn-g">Nasıl Çalışır?</a>
-  </div>
-  <div class="proof-bar sr sr-d5">
-    <div class="proof-i"><strong>Piotroski</strong> F-Score</div>
-    <div class="proof-i"><strong>Altman</strong> Z-Score</div>
-    <div class="proof-i"><strong>Graham</strong> İçsel Değer</div>
-    <div class="proof-i"><strong>Beneish</strong> M-Score</div>
-    <div class="proof-i"><strong>Buffett</strong> Filtresi</div>
-  </div>
-</div>
-
-<!-- MARKET DATA TABLE -->
-<div class="market-section sr">
-  <div class="market-wrap">
-    <div class="market-toolbar">
-      <div class="mt-left">
-        <button class="mt-tab active">BIST 30</button>
-        <button class="mt-tab">En Yüksek Skor</button>
-        <button class="mt-tab">En Çok Yükselen</button>
-        <span class="mt-count">100 hisse</span>
-      </div>
-      <div class="mt-live">Canlı Veri</div>
-    </div>
-    <div class="market-scroll">
-      <table class="mtable">
-        <thead><tr>
-          <th>Hisse</th><th>Şirket</th><th>Fiyat</th><th>Değişim</th><th>Hacim</th><th>Piotroski</th><th>Altman Z</th><th>Graham</th><th>Skor</th><th>7G Trend</th>
-        </tr></thead>
-        <tbody>
-          <tr><td class="stock-sym">THYAO</td><td class="stock-name">Türk Hava Yolları</td><td class="td-price">₺327.40</td><td class="td-up-bg">+%2.41</td><td>2.8M</td><td><div class="piotroski-bar"><span class="pb-fill"></span><span class="pb-fill"></span><span class="pb-fill"></span><span class="pb-fill"></span><span class="pb-fill"></span><span class="pb-fill"></span><span class="pb-fill"></span><span class="pb-empty"></span><span class="pb-empty"></span></div> 7</td><td class="td-up">3.85</td><td class="td-up">+%18</td><td><span class="score-badge score-high">82</span></td><td><svg class="mini-chart" width="48" height="20" viewBox="0 0 48 20"><polyline points="0,15 8,12 16,14 24,8 32,6 40,4 48,2" fill="none" stroke="#34D399" stroke-width="1.5"/></svg></td></tr>
-          <tr><td class="stock-sym">GARAN</td><td class="stock-name">Garanti BBVA</td><td class="td-price">₺143.80</td><td class="td-up-bg">+%1.12</td><td>5.1M</td><td><div class="piotroski-bar"><span class="pb-fill"></span><span class="pb-fill"></span><span class="pb-fill"></span><span class="pb-fill"></span><span class="pb-fill"></span><span class="pb-fill"></span><span class="pb-empty"></span><span class="pb-empty"></span><span class="pb-empty"></span></div> 6</td><td class="td-up">2.94</td><td class="td-up">+%12</td><td><span class="score-badge score-high">74</span></td><td><svg class="mini-chart" width="48" height="20" viewBox="0 0 48 20"><polyline points="0,12 8,10 16,11 24,9 32,7 40,5 48,4" fill="none" stroke="#34D399" stroke-width="1.5"/></svg></td></tr>
-          <tr><td class="stock-sym">TCELL</td><td class="stock-name">Turkcell</td><td class="td-price">₺72.50</td><td class="td-up-bg">+%3.21</td><td>3.2M</td><td><div class="piotroski-bar"><span class="pb-fill"></span><span class="pb-fill"></span><span class="pb-fill"></span><span class="pb-fill"></span><span class="pb-fill"></span><span class="pb-fill"></span><span class="pb-fill"></span><span class="pb-fill"></span><span class="pb-empty"></span></div> 8</td><td class="td-up">3.42</td><td class="td-up">+%22</td><td><span class="score-badge score-high">75</span></td><td><svg class="mini-chart" width="48" height="20" viewBox="0 0 48 20"><polyline points="0,16 8,14 16,12 24,10 32,6 40,5 48,3" fill="none" stroke="#34D399" stroke-width="1.5"/></svg></td></tr>
-          <tr><td class="stock-sym">KOZAL</td><td class="stock-name">Koza Altın</td><td class="td-price">₺182.30</td><td class="td-up-bg">+%4.12</td><td>1.9M</td><td><div class="piotroski-bar"><span class="pb-fill"></span><span class="pb-fill"></span><span class="pb-fill"></span><span class="pb-fill"></span><span class="pb-fill"></span><span class="pb-fill"></span><span class="pb-fill"></span><span class="pb-fill"></span><span class="pb-fill"></span></div> 9</td><td class="td-up">4.21</td><td class="td-up">+%31</td><td><span class="score-badge score-high">91</span></td><td><svg class="mini-chart" width="48" height="20" viewBox="0 0 48 20"><polyline points="0,18 8,15 16,12 24,8 32,5 40,3 48,1" fill="none" stroke="#34D399" stroke-width="1.5"/></svg></td></tr>
-          <tr><td class="stock-sym">ASELS</td><td class="stock-name">Aselsan</td><td class="td-price">₺82.15</td><td class="td-down-bg">-%0.58</td><td>4.7M</td><td><div class="piotroski-bar"><span class="pb-fill"></span><span class="pb-fill"></span><span class="pb-fill"></span><span class="pb-fill"></span><span class="pb-fill"></span><span class="pb-empty"></span><span class="pb-empty"></span><span class="pb-empty"></span><span class="pb-empty"></span></div> 5</td><td style="color:var(--blue)">1.82</td><td class="td-down">-%5</td><td><span class="score-badge score-mid">58</span></td><td><svg class="mini-chart" width="48" height="20" viewBox="0 0 48 20"><polyline points="0,8 8,9 16,7 24,10 32,12 40,11 48,13" fill="none" stroke="#F87171" stroke-width="1.5"/></svg></td></tr>
-          <tr><td class="stock-sym">TUPRS</td><td class="stock-name">Tüpraş</td><td class="td-price">₺215.60</td><td class="td-up-bg">+%0.52</td><td>1.2M</td><td><div class="piotroski-bar"><span class="pb-fill"></span><span class="pb-fill"></span><span class="pb-fill"></span><span class="pb-fill"></span><span class="pb-fill"></span><span class="pb-fill"></span><span class="pb-fill"></span><span class="pb-fill"></span><span class="pb-empty"></span></div> 8</td><td class="td-up">3.67</td><td class="td-up">+%15</td><td><span class="score-badge score-high">78</span></td><td><svg class="mini-chart" width="48" height="20" viewBox="0 0 48 20"><polyline points="0,14 8,12 16,10 24,9 32,7 40,6 48,5" fill="none" stroke="#34D399" stroke-width="1.5"/></svg></td></tr>
-          <tr><td class="stock-sym">BIMAS</td><td class="stock-name">BİM Mağazalar</td><td class="td-price">₺495.00</td><td class="td-up-bg">+%0.81</td><td>890K</td><td><div class="piotroski-bar"><span class="pb-fill"></span><span class="pb-fill"></span><span class="pb-fill"></span><span class="pb-fill"></span><span class="pb-fill"></span><span class="pb-fill"></span><span class="pb-fill"></span><span class="pb-empty"></span><span class="pb-empty"></span></div> 7</td><td class="td-up">3.15</td><td class="td-up">+%8</td><td><span class="score-badge score-high">70</span></td><td><svg class="mini-chart" width="48" height="20" viewBox="0 0 48 20"><polyline points="0,10 8,9 16,10 24,8 32,7 40,8 48,6" fill="none" stroke="#34D399" stroke-width="1.5"/></svg></td></tr>
-          <tr><td class="stock-sym">AKBNK</td><td class="stock-name">Akbank</td><td class="td-price">₺68.25</td><td class="td-down-bg">-%0.29</td><td>6.3M</td><td><div class="piotroski-bar"><span class="pb-fill"></span><span class="pb-fill"></span><span class="pb-fill"></span><span class="pb-fill"></span><span class="pb-fill"></span><span class="pb-fill"></span><span class="pb-empty"></span><span class="pb-empty"></span><span class="pb-empty"></span></div> 6</td><td class="td-up">2.78</td><td class="td-up">+%10</td><td><span class="score-badge score-mid">65</span></td><td><svg class="mini-chart" width="48" height="20" viewBox="0 0 48 20"><polyline points="0,8 8,10 16,9 24,11 32,10 40,12 48,11" fill="none" stroke="#F87171" stroke-width="1.5"/></svg></td></tr>
-        </tbody>
-      </table>
-    </div>
-  </div>
-</div>
-
-<!-- Q ASSISTANT — DEDICATED SECTION -->
-<section class="q-section" id="q-asistan">
-  <div class="section-inner">
-    <div class="q-grid">
-      <div class="sr">
-        <div class="section-label">Terminal Asistanı</div>
-        <h2 class="section-title">Q'ya sor.<br>Somut veri al.</h2>
-        <p class="section-desc">Bloomberg analistleri gibi konuşan AI asistanı. Skor, oran, sinyal — her cevap somut veri içerir. Sallama yok.</p>
-        <div style="display:flex;flex-direction:column;gap:.6rem;max-width:400px">
-          <div style="display:flex;align-items:flex-start;gap:.6rem"><span style="color:var(--gold);font-size:1rem;flex-shrink:0;margin-top:2px">→</span><span style="font-size:.88rem;color:var(--tl);line-height:1.6">"THYAO nasıl?" → <strong style="color:var(--tw)">Değer 78, İvme 45. Temel güçlü ama giriş zamanlaması erken.</strong></span></div>
-          <div style="display:flex;align-items:flex-start;gap:.6rem"><span style="color:var(--gold);font-size:1rem;flex-shrink:0;margin-top:2px">→</span><span style="font-size:.88rem;color:var(--tl);line-height:1.6">"Bankacılıkta en güçlü?" → <strong style="color:var(--tw)">AKBNK (D:82) > GARAN (D:71) > ISCTR (D:65)</strong></span></div>
-          <div style="display:flex;align-items:flex-start;gap:.6rem"><span style="color:var(--gold);font-size:1rem;flex-shrink:0;margin-top:2px">→</span><span style="font-size:.88rem;color:var(--tl);line-height:1.6">"Portföyüm riskli mi?" → Risk dağılımı ve sektörel analiz</span></div>
-        </div>
-      </div>
-      <div class="q-visual sr sr-d2">
-        <div class="q-header">
-          <span class="q-letter">Q</span>
-          <div><div class="q-name">BistBull Q</div><div class="q-sub">Terminal Asistanı · Veri Odaklı</div></div>
-        </div>
-        <div class="q-msgs">
-          <div class="q-msg q-msg-u">TCELL hakkında ne düşünüyorsun?</div>
-          <div class="q-msg q-msg-a"><strong>TCELL:</strong> Değer <span class="qv">75</span>, İvme <span class="qv">68</span>. Piotroski 8/9 — bilanço sağlam. P/E 6.8 ile sektör ortalamasının %40 altında. Graham güvenlik payı <span class="qv">+%22</span>. Momentum güçlü, EMA 55 üstünde işlem görüyor. Değerleme cazip, zamanlama da uygun — takip listesine alınabilir.</div>
-          <div class="q-msg q-msg-u">Risk var mı?</div>
-          <div class="q-msg q-msg-a">Borç/FAVÖK <span class="qr">2.1</span> — sektör ortalaması 1.4. Yabancı sahiplik %62'den %58'e gerilemiş. Beneish M-Score -2.4 (güvenli). Temel risk: kur dalgalanması ve regülasyon belirsizliği.</div>
-        </div>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- MODÜLLER -->
-<section id="moduller">
-  <div class="section-inner">
-    <div class="section-label sr">Terminal Modülleri</div>
-    <h2 class="section-title sr sr-d1">Altı modül. Tek terminal.</h2>
-    <p class="section-desc sr sr-d2">Temel analiz, teknik sinyaller, AI pattern tespiti, aracı kurum akış verileri ve Q asistanı — hepsi tek çatı altında.</p>
-    <div class="modules-grid">
-      <div class="mc sr sr-d1"><span class="mc-emoji">📡</span><div class="mc-name">Radar</div><div class="mc-desc">100 hisse 7 boyutlu temel analiz ile taranır. Piotroski, Altman, Graham, Beneish — Bloomberg seviyesi screener.</div><span class="mc-tag tl">Yayında</span></div>
-      <div class="mc sr sr-d2"><span class="mc-emoji">📊</span><div class="mc-name">Analiz</div><div class="mc-desc">Piotroski, Altman Z, Graham, Beneish, Buffett — 9 model, tek skor.</div><span class="mc-tag tl">Yayında</span></div>
-      <div class="mc sr sr-d3"><span class="mc-emoji">🎯</span><div class="mc-name">Cross Hunter</div><div class="mc-desc">EMA, MACD, Ichimoku, hacim kesişimi — 14 teknik sinyal otomatik taranır.</div><span class="mc-tag tl">Yayında</span></div>
-      <div class="mc sr sr-d1"><span class="mc-emoji">🌍</span><div class="mc-name">Makro Radar</div><div class="mc-desc">BIST, EM endeksler, emtia, döviz — YTD sıralama ve AI makro yorumu.</div><span class="mc-tag tl">Yayında</span></div>
-      <div class="mc sr sr-d2"><span class="mc-emoji">🏦</span><div class="mc-name">Takas Analizi</div><div class="mc-desc">Aracı kurum akışları. Akıllı para nereye gidiyor? Kurumsal sinyal tespiti.</div><span class="mc-tag tp">Pro</span></div>
-      <div class="mc sr sr-d3"><span class="mc-emoji">🤖</span><div class="mc-name">Q Asistanı</div><div class="mc-desc">Hisse, sektör, portföy — ne sorarsan somut veri ile yanıtlar. Sallama yok.</div><span class="mc-tag tl">Yayında</span></div>
-    </div>
+<section class="hero">
+  <div class="sr">
+    <div class="hero-tag">Kurumsal Seviye BIST Analiz Terminali</div>
+    <h1>Her hisseyi <em>10 boyutta</em> analiz et.<br>Kararını <em>veriye</em> dayan, tüyoya değil.</h1>
+    <p>Piotroski F-Score, Altman Z, Graham Fair Value, Beneish M-Score ve 14 teknik sinyal — tek terminalde birleşti. Hedge fund masasındaki analizi, herkesin ekranına getirdik.</p>
+    <a href="/terminal" class="hero-cta">Terminal'i Aç →</a>
+    <div class="hero-sub">Ücretsiz · Kayıt yok · 100 BIST hissesi · 3 AI motoru</div>
   </div>
 </section>
 
 <!-- STATS -->
-<div class="stats-bar">
-  <div class="stats-grid">
-    <div class="sr"><div class="stat-n">76</div><div class="stat-l">Hisse anlık taranıyor</div></div>
-    <div class="sr sr-d1"><div class="stat-n">9</div><div class="stat-l">Finansal model</div></div>
-    <div class="sr sr-d2"><div class="stat-n">3</div><div class="stat-l">AI motoru (Grok + GPT + Claude)</div></div>
-    <div class="sr sr-d3"><div class="stat-n">14</div><div class="stat-l">Teknik sinyal</div></div>
+<section class="stats">
+  <div class="wrap">
+    <div class="stats-grid">
+      <div class="sr"><div class="stat-n">100</div><div class="stat-l">BIST Hissesi</div></div>
+      <div class="sr sr-d1"><div class="stat-n">10</div><div class="stat-l">Analiz Boyutu</div></div>
+      <div class="sr sr-d2"><div class="stat-n">9</div><div class="stat-l">Finansal Model</div></div>
+      <div class="sr sr-d3"><div class="stat-n">3</div><div class="stat-l">AI Motoru</div></div>
+      <div class="sr sr-d4"><div class="stat-n">14</div><div class="stat-l">Teknik Sinyal</div></div>
+    </div>
   </div>
-</div>
+</section>
+
+<!-- TÜYO KONTROL -->
+<section class="sec">
+  <div class="wrap">
+    <div class="sec-t sr">
+      <div class="sec-tag">Yatırımcının İlk Durağı</div>
+      <h2>Bir tüyo mu duydun? Önce <em>BistBull'a</em> sor.</h2>
+      <div class="sec-desc">WhatsApp grubundaki tüyo, arkadaşın önerisi, forumda okuduğun hisse... Hepsini 10 boyutta tarayıp sana net bir cevap veriyoruz: Bu hisse gerçekten iyi mi, yoksa sadece gürültü mü?</div>
+    </div>
+    <div class="tuyo-box sr sr-d1">
+      <div style="font-size:2.5rem;margin-bottom:.8rem">🐂</div>
+      <h3>Hisse kodunu yaz, gerisini biz yapalım.</h3>
+      <p style="font-size:.92rem;color:var(--tb);margin-top:.8rem;line-height:1.7">BistBull, yazdığın hisseyi 7 temel boyut + 3 teknik boyutta analiz eder. Piotroski'den Altman Z'ye, Graham'dan Beneish'e 9 model çalıştırır. Risk penaltilerini hesaplar. AI ile yatırım tezi yazar. Ve sana tek bir karar verir:</p>
+      <div class="flow">
+        <div class="flow-step active">TEYİTLİ</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step">ERKEN</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step">BEKLE</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step">KAÇIN</div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-step" style="border-color:var(--red);color:var(--red)">SPEKÜLATİF</div>
+      </div>
+      <p style="font-size:.78rem;color:var(--tm);margin-top:1.5rem">Artık "al mı, alma mı?" sorusunu kendinize sormak zorunda değilsiniz.</p>
+    </div>
+  </div>
+</section>
+
+<!-- 10 BOYUT -->
+<section class="sec" id="nasil" style="background:var(--bg2)">
+  <div class="wrap">
+    <div class="sec-t sr">
+      <div class="sec-tag">Hibrit Skorlama Motoru</div>
+      <h2>Tek bir sayı değil, <em>10 boyutlu</em> röntgen.</h2>
+      <div class="sec-desc">Her hisse iki ana perspektiften değerlendirilir: 7 boyutlu <strong style="color:var(--grn)">DEĞER</strong> skoru (uzun vade — ne almalıyım?) ve 3 boyutlu <strong style="color:var(--blu)">İVME</strong> skoru (kısa vade — ne zaman girmeliyim?).</div>
+    </div>
+    <div class="dim-grid">
+      <div class="dim sr"><div class="dim-num">01</div><div class="dim-name">Değerleme</div><div class="dim-desc">F/K, PD/DD, FD/FAVÖK, EV/Satış, Graham MoS, FCF Getiri</div></div>
+      <div class="dim sr sr-d1"><div class="dim-num">02</div><div class="dim-name">Kalite</div><div class="dim-desc">ROE, ROIC, Net Marj — sektör-bazlı eşikler</div></div>
+      <div class="dim sr sr-d2"><div class="dim-num">03</div><div class="dim-name">Büyüme</div><div class="dim-desc">Gelir, HBK, FAVÖK büyümesi, PEG oranı</div></div>
+      <div class="dim sr sr-d3"><div class="dim-num">04</div><div class="dim-name">Bilanço</div><div class="dim-desc">NB/FAVÖK, Cari Oran, Faiz Karşılama, Altman Z</div></div>
+      <div class="dim sr sr-d4"><div class="dim-num">05</div><div class="dim-name">Kârlılık</div><div class="dim-desc">CFO/NI, FCF Marjı, Beneish manipülasyon testi</div></div>
+      <div class="dim sr"><div class="dim-num">06</div><div class="dim-name">Hendek</div><div class="dim-desc">Brüt marj stabilitesi, fiyatlama gücü, ROA trendi</div></div>
+      <div class="dim sr sr-d1"><div class="dim-num">07</div><div class="dim-name">Sermaye</div><div class="dim-desc">Temettü, FCF getiri, ROIC kalitesi, hisse seyreltme</div></div>
+      <div class="dim sr sr-d2"><div class="dim-num" style="color:var(--blu)">08</div><div class="dim-name">Momentum</div><div class="dim-desc">RSI, MA pozisyon, hacim trendi, 20g değişim</div></div>
+      <div class="dim sr sr-d3"><div class="dim-num" style="color:var(--blu)">09</div><div class="dim-name">Kırılım</div><div class="dim-desc">52W High, VCP, Ichimoku Kumo, Rectangle</div></div>
+      <div class="dim sr sr-d4"><div class="dim-num" style="color:var(--blu)">10</div><div class="dim-name">Kurum Akışı</div><div class="dim-desc">Yabancı oranı, hacim-fiyat korelasyonu</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- İKİLİ ANALİZ -->
+<section class="sec">
+  <div class="wrap">
+    <div class="sec-t sr">
+      <div class="sec-tag">Başka Hiçbir Yerde Yok</div>
+      <h2><em>Değer</em> ve <em>İvme</em> — iki ayrı skor, tek karar.</h2>
+      <div class="sec-desc">Geleneksel platformlar size tek bir skor verir. BistBull, her hisseye iki lens ile bakar ve bunları birleştirerek akıllı bir karar üretir.</div>
+    </div>
+    <div class="cg2">
+      <div class="cd sr" style="border-left:3px solid var(--grn)">
+        <div style="font-family:'JetBrains Mono',monospace;font-size:.7rem;color:var(--grn);letter-spacing:.15em;text-transform:uppercase;margin-bottom:1rem">🏛️ Değer Skoru — Uzun Vade</div>
+        <h3>"Bu şirket gerçekten iyi mi?"</h3>
+        <p>7 boyutlu temel analiz motoru — Değerleme, Kalite, Büyüme, Bilanço, Kârlılık, Hendek ve Sermaye Tahsisi. Üzerine Piotroski F-Score, Altman Z, Graham Fair Value ve Beneish M-Score. Sektör bazlı eşiklerle kalibrasyon: bir banka ile bir teknoloji şirketi aynı kuralla değerlendirilmez.</p>
+        <p style="font-size:.82rem;color:var(--grn);margin-top:1rem;font-weight:600">Sabırlı yatırımcının pusolası. Haftalık güncellenir.</p>
+      </div>
+      <div class="cd sr sr-d1" style="border-left:3px solid var(--blu)">
+        <div style="font-family:'JetBrains Mono',monospace;font-size:.7rem;color:var(--blu);letter-spacing:.15em;text-transform:uppercase;margin-bottom:1rem">⚡ İvme Skoru — Kısa Vade</div>
+        <h3>"Bu hisseye ne zaman girmeliyim?"</h3>
+        <p>3 boyutlu teknik momentum analizi — RSI, MACD, Moving Average pozisyonu, hacim trendi, Ichimoku Kumo breakout, 52W High kırılımı ve kurumsal akış proxy'si. Zayıf şirketin momentumu otomatik kısıtlanır (FA-gated momentum) — hype tuzağına düşmenizi engeller.</p>
+        <p style="font-size:.82rem;color:var(--blu);margin-top:1rem;font-weight:600">Aktif trader'ın radarı. Günlük güncellenir.</p>
+      </div>
+    </div>
+    <div class="sr sr-d2" style="text-align:center;margin-top:2rem">
+      <p style="font-size:.9rem;color:var(--tl);max-width:600px;margin:0 auto;line-height:1.8">İki skor birleştiğinde ortaya <strong style="color:var(--gold)">Karar Motoru</strong> çıkar: TEYİTLİ, ERKEN, FIRSAT, BEKLE, GEÇ, SPEKÜLATİF veya KAÇIN. Her hisse için net bir yol haritası.</p>
+    </div>
+  </div>
+</section>
+
+<!-- EFSANE MODELLER -->
+<section class="sec" id="modeller" style="background:var(--bg2)">
+  <div class="wrap">
+    <div class="sec-t sr">
+      <div class="sec-tag">Akademik Güç</div>
+      <h2>Dünya standartlarında <em>4 efsanevi</em> model.</h2>
+      <div class="sec-desc">Akademinin 50 yıllık birikimi, BIST'e özel sektörel eşiklerle kalibre edildi. Bankalar için ayrı, sanayi için ayrı, enerji için ayrı eşikler.</div>
+    </div>
+    <div class="leg-grid">
+      <div class="leg sr">
+        <h4>Piotroski F-Score</h4>
+        <p>9 kriterli finansal sağlık puanı. Kârlılık, likidite ve operasyonel verimlilik — tek skorda. 7+ güçlü, 3- zayıf.</p>
+        <div class="leg-score">9 / 9 KRITER · 2000'DEN BERİ KANITLI</div>
+      </div>
+      <div class="leg sr sr-d1">
+        <h4>Altman Z-Score</h4>
+        <p>İflas olasılığı tahmin modeli. 5 faktörlü analiz — güvenli, gri bölge ve riskli ayrımı. BIST sektör bazlı kalibrasyon uygulanır.</p>
+        <div class="leg-score">5 FAKTÖR · 1968'DEN BERİ STANDART</div>
+      </div>
+      <div class="leg sr sr-d2">
+        <h4>Graham Fair Value</h4>
+        <p>Benjamin Graham'ın içsel değer formülü. √(22.5 × EPS × Defter Değeri). Güvenlik marjı hesaplaması ile ucuz/pahalı ayrımı.</p>
+        <div class="leg-score">MARGIN OF SAFETY · BUFFETT'IN HOCASI</div>
+      </div>
+      <div class="leg sr sr-d3">
+        <h4>Beneish M-Score</h4>
+        <p>Finansal manipülasyon tespiti. 8 değişkenli model ile muhasebe hilelerini erken yakalar. Enron'u tespit eden formül.</p>
+        <div class="leg-score">8 DEĞİŞKEN · ENRON'U TESPİT ETTİ</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- CROSS HUNTER + Q -->
+<section class="sec" id="q">
+  <div class="wrap">
+    <div class="sec-t sr">
+      <div class="sec-tag">Gerçek Zamanlı Zekâ</div>
+      <h2><em>Cross Hunter</em> — 14 sinyal. <em>Q</em> — AI asistanınız.</h2>
+      <div class="sec-desc">Piyasa sinyallerini otomatik tara, AI ile yorumla, saniyeler içinde aksiyon al.</div>
+    </div>
+    <div class="cg3">
+      <div class="cd feat sr">
+        <div class="cd-icon">🎯</div>
+        <h3>Cross Hunter V2</h3>
+        <p>14 farklı teknik sinyal — Golden/Death Cross, Ichimoku Kumo Breakout, VCP Kırılım, 52W High, Rectangle Breakout, MACD Cross ve daha fazlası. Her sinyal 1-5 yıldız güvenilirlik derecesi ve hacim teyidi ile gelir.</p>
+        <div class="cd-tag">⭐⭐⭐⭐⭐ Güvenilirlik Sistemi</div>
+      </div>
+      <div class="cd feat sr sr-d1">
+        <div class="cd-icon">🤖</div>
+        <h3>Q — Terminal Asistanı</h3>
+        <p>Bloomberg terminal analistleri gibi konuşan AI asistan. "THYAO nasıl?" diye sor, Q sana değer skoru, ivme, sektör karşılaştırması ve risk analizi ile cevap verir. Somut rakam, sıfır sallama.</p>
+        <div class="cd-tag">Grok + GPT-4o + Claude</div>
+      </div>
+      <div class="cd feat sr sr-d2">
+        <div class="cd-icon">📊</div>
+        <h3>AI Yatırım Tezi</h3>
+        <p>Her hisse için yapılandırılmış kurumsal yatırım tezi: GİRİŞ kalitesi, TEZ (neden bu karar), RİSK (en büyük tehlike), ZAMANLAMA ve TÜRKİYE bağlamı. Veri bazlı, rakam bazlı — laf yok.</p>
+        <div class="cd-tag">5 Katman · Spesifik · Somut</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- HYPE TESPİTİ -->
+<section class="sec" style="background:var(--bg2)">
+  <div class="wrap">
+    <div class="sec-t sr">
+      <div class="sec-tag">Türkiye Piyasası İçin Tasarlandı</div>
+      <h2>Hype tuzağına <em>düşme</em>.</h2>
+      <div class="sec-desc">BIST'in en büyük riski: temeli zayıf hisselerin spekülatif yükselişleri. BistBull'un Hype Detection motoru, fiyatı hızla yükselen ama temel analizi zayıf hisseleri otomatik işaretler.</div>
+    </div>
+    <div class="cg3">
+      <div class="cd sr">
+        <div class="cd-icon">🛡️</div>
+        <h3>Sahte Kâr Filtresi</h3>
+        <p>Kâr var ama nakit yok? CFO/NI oranı düşükse, BistBull otomatik risk penaltisi uygular. Türkiye'de çok görülen muhasebe oyunlarını yakalar.</p>
+      </div>
+      <div class="cd sr sr-d1">
+        <div class="cd-icon">⚡</div>
+        <h3>FA-Gated Momentum</h3>
+        <p>Zayıf şirketin momentum etkisi kısıtlanır. Temeli güçlü + momentum başlayan hisseler öne çıkar. Spekülatif hisseler otomatik etiketlenir.</p>
+      </div>
+      <div class="cd sr sr-d2">
+        <div class="cd-icon">📐</div>
+        <h3>Sektör Kalibrasyonu</h3>
+        <p>Bir havayolu ile bir bankanın borç/özsermaye oranı aynı eşikle değerlendirilmez. 7 sektör grubu, her biri özel eşiklerle kalibre edilmiş.</p>
+      </div>
+    </div>
+  </div>
+</section>
 
 <!-- KARŞILAŞTIRMA -->
-<section id="karsilastir">
-  <div class="section-inner">
-    <div class="section-label sr">Neden BistBull</div>
-    <h2 class="section-title sr sr-d1">Profesyonel analiz yılda<br>$25.000 olmamalı.</h2>
-    <p class="section-desc sr sr-d2">Fintables'ın verisi, Matriks'in tekniği, Bloomberg'in derinliği — tek platformda, herkes için erişilebilir fiyata.</p>
-    <div class="ch">← sağa kaydırın →</div>
-    <div class="compare-scroll sr sr-d3">
-      <table class="ctable">
-        <thead><tr><th></th><th>BistBull.ai</th><th>Bloomberg</th><th>Ücretsiz Araçlar</th></tr></thead>
+<section class="sec" id="karsilastirma">
+  <div class="wrap">
+    <div class="sec-t sr">
+      <div class="sec-tag">Neden BistBull?</div>
+      <h2>Rakiplerle <em>kıyasla</em>, farkı gör.</h2>
+    </div>
+    <div class="cmp-wrap sr">
+      <table class="cmp">
+        <thead><tr><th>Özellik</th><th>Fintables</th><th>Matriks</th><th>TradingView</th><th>BistBull</th></tr></thead>
         <tbody>
-          <tr><td>BIST'e Özel AI</td><td>Tam Kapsamlı</td><td class="cm">Genel</td><td class="cd">Yok</td></tr>
-          <tr><td>Piotroski / Altman / Graham</td><td>9 Model</td><td class="cm">Manuel</td><td class="cd">Yok</td></tr>
-          <tr><td>Teknik Sinyal Tarayıcı</td><td>14 Sinyal · Anlık</td><td class="cm">Kendin yap</td><td class="cd">Yok</td></tr>
-          <tr><td>AI Asistan (Q)</td><td>Dahili · 3 Motor</td><td class="cm">Ek ücretli</td><td class="cd">Yok</td></tr>
-          <tr><td>Değer + İvme İkili Skorlama</td><td>9 Boyut Hibrit</td><td class="cd">Yok</td><td class="cd">Yok</td></tr>
-          <tr><td>Dil</td><td>Türkçe + İngilizce</td><td class="cm">Sadece EN</td><td class="cm">Sadece TR</td></tr>
-          <tr><td>Yıllık Fiyat</td><td>~$200</td><td class="cr">$25.000</td><td class="cm">$0 (veri yok)</td></tr>
+          <tr><td>Temel Analiz Derinliği</td><td>⭐⭐⭐⭐</td><td>⭐⭐⭐</td><td>⭐⭐</td><td class="hl">⭐⭐⭐⭐⭐</td></tr>
+          <tr><td>Teknik Analiz</td><td>⭐⭐</td><td>⭐⭐⭐⭐</td><td>⭐⭐⭐⭐⭐</td><td class="hl">⭐⭐⭐⭐</td></tr>
+          <tr><td class="uni">10 Boyut Hibrit Skorlama</td><td>—</td><td>—</td><td>—</td><td class="hl">⭐⭐⭐⭐⭐</td></tr>
+          <tr><td class="uni">AI Yatırım Tezi + Q Asistanı</td><td>—</td><td>—</td><td>—</td><td class="hl">⭐⭐⭐⭐⭐</td></tr>
+          <tr><td class="uni">DEĞER / İVME İkili Analiz</td><td>—</td><td>—</td><td>—</td><td class="hl">⭐⭐⭐⭐⭐</td></tr>
+          <tr><td class="uni">Hype Detection + Sahte Kâr</td><td>—</td><td>—</td><td>—</td><td class="hl">⭐⭐⭐⭐⭐</td></tr>
+          <tr><td>Cross Hunter (14 sinyal)</td><td>—</td><td>⭐⭐⭐</td><td>⭐⭐⭐⭐</td><td class="hl">⭐⭐⭐⭐⭐</td></tr>
+          <tr><td>Piotroski / Altman / Beneish</td><td>⭐⭐</td><td>—</td><td>—</td><td class="hl">⭐⭐⭐⭐⭐</td></tr>
+          <tr><td>Sektör Bazlı Kalibrasyon</td><td>⭐⭐</td><td>⭐⭐</td><td>—</td><td class="hl">⭐⭐⭐⭐⭐</td></tr>
+          <tr><td>Ücretsiz Erişim</td><td>Ücretli</td><td>Ücretli</td><td>Freemium</td><td class="hl">%100 Ücretsiz</td></tr>
         </tbody>
       </table>
+    </div>
+    <div class="sr" style="text-align:center;margin-top:1.5rem;font-size:.85rem;color:var(--tm)"><span style="color:var(--blu)">Mavi satırlar</span> sadece BistBull'da var — başka hiçbir BIST platformunda yok.</div>
+  </div>
+</section>
+
+<!-- MİMARİ GURURU -->
+<section class="sec" style="background:var(--bg2)">
+  <div class="wrap">
+    <div class="sec-t sr">
+      <div class="sec-tag">Mühendislik Kalitesi</div>
+      <h2>Yüzeyi güzel, <em>altyapısı</em> sağlam.</h2>
+      <div class="sec-desc">BistBull sadece bir arayüz değil — arkasında kurumsal seviye yazılım mimarisi var.</div>
+    </div>
+    <div class="tech-grid">
+      <div class="tech-item sr"><div class="ti-icon">🧱</div><div class="ti-label">Modüler Mimari</div><div class="ti-desc">10 ayrı modül, SOLID prensipleri</div></div>
+      <div class="tech-item sr sr-d1"><div class="ti-icon">🔒</div><div class="ti-label">Thread-Safe</div><div class="ti-desc">Eşzamanlı erişimde veri bütünlüğü</div></div>
+      <div class="tech-item sr sr-d2"><div class="ti-icon">⚡</div><div class="ti-label">O(1) Lookup</div><div class="ti-desc">Dict-tabanlı hızlı veri erişimi</div></div>
+      <div class="tech-item sr sr-d3"><div class="ti-icon">🤖</div><div class="ti-label">3 AI Fallback</div><div class="ti-desc">Grok → GPT → Claude zinciri</div></div>
+      <div class="tech-item sr sr-d4"><div class="ti-icon">📊</div><div class="ti-label">Real-Time Cache</div><div class="ti-desc">TTL bazlı akıllı önbellek</div></div>
+      <div class="tech-item sr"><div class="ti-icon">🇹🇷</div><div class="ti-label">BIST Kalibrasyonu</div><div class="ti-desc">7 sektör, Türk piyasasına özel</div></div>
     </div>
   </div>
 </section>
 
 <!-- CTA -->
-<section class="cta">
-  <div class="cta-glow"></div>
-  <div class="cta-inner">
-    <div class="section-label sr">Hazır mısın?</div>
-    <h2 class="cta-t sr sr-d1">BIST'i profesyonel gibi analiz et.</h2>
-    <p class="cta-s sr sr-d2">Ücretsiz başla. Kredi kartı gerekmez.</p>
-    <div class="hero-actions sr sr-d3">
-      <a href="/terminal" class="btn-p">BistBull Terminali Aç →</a>
-      <a href="https://twitter.com/bistbull_ai" class="btn-g" target="_blank">@bistbull_ai Takip Et</a>
-    </div>
+<section class="cta-sec">
+  <div class="wrap sr">
+    <h2>Terminalini aç, piyasayı <em style="color:var(--gold)">fethet</em>.</h2>
+    <p>100 BIST hissesi, 10 boyutlu analiz, 9 finansal model, 3 AI motoru, 14 teknik sinyal. Hepsi ücretsiz.</p>
+    <a href="/terminal" class="hero-cta">BistBull Terminal'e Gir →</a>
+    <div class="hero-sub" style="margin-top:1rem">bistbull.ai · V9.1 · Powered by AI</div>
   </div>
 </section>
 
 <!-- FOOTER -->
 <footer>
-  <div class="footer-top">
-    <div class="footer-brand">
-      <svg viewBox="0 0 100 100" fill="none" width="24" height="24">
-        <defs><linearGradient id="fg" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#FFB300"/><stop offset="100%" stop-color="#E69500"/></linearGradient></defs>
-        <path d="M20,48 Q6,20 5,6 Q12,22 24,36 Z" fill="url(#fg)" opacity=".85"/>
-        <path d="M70,48 Q84,20 85,6 Q78,22 66,36 Z" fill="url(#fg)" opacity=".85"/>
-        <ellipse cx="45" cy="54" rx="28" ry="22" fill="url(#fg)"/>
-        <ellipse cx="45" cy="70" rx="17" ry="12" fill="#E69500"/>
-      </svg>
-      <span>BIST<b>BULL</b></span>
-    </div>
-    <div class="footer-links">
-      <a href="/terminal">Terminal</a>
-      <a href="https://twitter.com/bistbull_ai">X / Twitter</a>
-      <a href="mailto:info@bistbull.ai">İletişim</a>
-    </div>
-  </div>
-  <div class="footer-bottom">
-    <div class="footer-copy">© 2026 BistBull.ai — Tasarım & Geliştirme: Berkay Kangal</div>
-    <div class="footer-disc">Bu platform yatırım tavsiyesi niteliği taşımaz. Veriler yfinance üzerinden sağlanmaktadır. Yatırım kararlarınızı kendi araştırmanıza dayandırın.</div>
+  <div class="wrap">
+    <p>© 2025 <a href="/">BistBull.ai</a> · AI destekli BIST analiz terminali · Yatırım tavsiyesi değildir.</p>
   </div>
 </footer>
 
-<!-- SCROLL REVEAL -->
 <script>
-const obs=new IntersectionObserver((entries)=>{entries.forEach(e=>{if(e.isIntersecting){e.target.classList.add('vis');obs.unobserve(e.target)}})},{threshold:0.08,rootMargin:'0px 0px -40px 0px'});
+const obs=new IntersectionObserver((entries)=>{entries.forEach(e=>{if(e.isIntersecting){e.target.classList.add('vis');obs.unobserve(e.target)}})},{threshold:0.1,rootMargin:'0px 0px -40px 0px'});
 document.querySelectorAll('.sr').forEach(el=>obs.observe(el));
-setTimeout(()=>{document.querySelectorAll('.sr:not(.vis)').forEach(el=>el.classList.add('vis'))},2500);
 </script>
 </body>
 </html>
