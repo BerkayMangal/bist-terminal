@@ -5,11 +5,7 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY app.py .
-COPY data_layer_v9.py .
-COPY index.html .
-COPY landing.html .
-COPY logo.svg .
+COPY . .
 
 EXPOSE 8080
 
