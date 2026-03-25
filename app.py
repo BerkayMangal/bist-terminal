@@ -3071,77 +3071,80 @@ async def api_batch(tickers: str):
 
 # Serve frontend — landing page at /, terminal at /terminal
 # ================================================================
-# V9 DEBUG — gerçek İsyatırım satır isimlerini göster
+# V9 DEBUG — RAW İsyatırım API yanıtını göster (borsapy bypass)
 # ================================================================
 @app.get("/api/debug/rows/{ticker}")
 async def api_debug_rows(ticker: str):
-    """Debug: İsyatırım'dan gelen gerçek satır isimlerini döndür"""
+    """Debug: İsyatırım MaliTablo API'yi direkt çağır, ham yanıtı döndür"""
     ticker_clean = ticker.strip().upper().replace(".IS", "")
     result = {"ticker": ticker_clean}
     
+    import httpx
+    
+    base_url = "https://www.isyatirim.com.tr/_Layouts/15/IsYatirim.Website/Common/Data.aspx/MaliTablo"
+    
+    # Try multiple financial groups and period combinations
+    tests = [
+        ("XI_29", 2024, 12, "2024 annual XI_29"),
+        ("XI_29", 2023, 12, "2023 annual XI_29"),
+        ("XI_29", 2024, 9, "2024 Q3 XI_29"),
+        ("UFRS", 2024, 12, "2024 annual UFRS"),
+        ("UFRS", 2023, 12, "2023 annual UFRS"),
+    ]
+    
+    for fg, year, period, label in tests:
+        try:
+            params = {
+                "companyCode": ticker_clean,
+                "exchange": "TRY",
+                "financialGroup": fg,
+                "year1": year,
+                "period1": period,
+            }
+            async with httpx.AsyncClient(verify=False, timeout=15) as client:
+                resp = await client.get(base_url, params=params)
+                data = resp.json()
+            
+            items = data.get("value", []) if isinstance(data, dict) else []
+            
+            if items:
+                # Show first 5 items with their itemCode
+                sample = []
+                for item in items[:8]:
+                    sample.append({
+                        "code": item.get("itemCode", "?"),
+                        "tr": item.get("itemDescTr", "?"),
+                        "eng": item.get("itemDescEng", "?"),
+                        "val1": item.get("value1"),
+                    })
+                result[label] = {
+                    "status": "HAS DATA",
+                    "total_rows": len(items),
+                    "item_codes": list(set(str(i.get("itemCode","?"))[:1] for i in items)),
+                    "sample": sample,
+                }
+            else:
+                result[label] = {
+                    "status": "EMPTY",
+                    "raw_keys": list(data.keys()) if isinstance(data, dict) else str(type(data)),
+                    "raw_preview": str(data)[:300],
+                }
+        except Exception as e:
+            result[label] = f"error: {e}"
+    
+    # fast_info still works
     try:
         import borsapy as bp
         tk = bp.Ticker(ticker_clean)
-        
-        # Try all financial_group options
-        for fg_name, fg_code in [("default_XI_29", None), ("UFRS", "UFRS"), ("XI_29_explicit", "XI_29")]:
-            fg_result = {}
-            for stmt_name, stmt_type in [("balance", "balance_sheet"), ("income", "income_stmt"), ("cashflow", "cashflow")]:
-                try:
-                    if fg_code:
-                        if stmt_type == "balance_sheet":
-                            df = tk.get_balance_sheet(quarterly=False, financial_group=fg_code, last_n=2)
-                        elif stmt_type == "income_stmt":
-                            df = tk.get_income_stmt(quarterly=False, financial_group=fg_code, last_n=2)
-                        else:
-                            df = tk.get_cashflow(quarterly=False, financial_group=fg_code, last_n=2)
-                    else:
-                        if stmt_type == "balance_sheet":
-                            df = tk.get_balance_sheet(quarterly=False, last_n=2)
-                        elif stmt_type == "income_stmt":
-                            df = tk.get_income_stmt(quarterly=False, last_n=2)
-                        else:
-                            df = tk.get_cashflow(quarterly=False, last_n=2)
-                    
-                    if df is not None and not df.empty:
-                        rows = list(df.index)
-                        cols = [str(c) for c in df.columns]
-                        sample = {}
-                        for row in rows[:3]:
-                            sample[str(row)] = {str(c): float(df.loc[row, c]) if pd.notna(df.loc[row, c]) else None for c in df.columns}
-                        fg_result[stmt_name] = {"rows": len(rows), "cols": cols, "all_rows": rows, "sample": sample}
-                    else:
-                        fg_result[stmt_name] = "empty"
-                except Exception as e:
-                    fg_result[stmt_name] = f"error: {e}"
-            result[fg_name] = fg_result
-        
-        # Also try raw isyatirim provider directly
-        try:
-            from borsapy._providers.isyatirim import IsYatirimProvider
-            provider = IsYatirimProvider()
-            raw_bs = provider.get_financial_statements(ticker_clean, statement_type="balance_sheet", quarterly=False, last_n=2)
-            if raw_bs is not None and not raw_bs.empty:
-                result["raw_isyatirim_balance"] = {"rows": len(raw_bs.index), "first_10": list(raw_bs.index[:10]), "cols": [str(c) for c in raw_bs.columns]}
-            else:
-                result["raw_isyatirim_balance"] = "empty"
-        except Exception as e:
-            result["raw_isyatirim_balance"] = f"error: {e}"
-        
-        # fast_info check
-        try:
-            fi = tk.fast_info
-            result["fast_info"] = {
-                "price": getattr(fi, 'last_price', None),
-                "market_cap": getattr(fi, 'market_cap', None),
-                "pe": getattr(fi, 'pe_ratio', None),
-                "foreign": getattr(fi, 'foreign_ratio', None),
-            }
-        except Exception as e:
-            result["fast_info"] = f"error: {e}"
-            
+        fi = tk.fast_info
+        result["fast_info"] = {
+            "price": getattr(fi, 'last_price', None),
+            "market_cap": getattr(fi, 'market_cap', None),
+            "pe": getattr(fi, 'pe_ratio', None),
+            "foreign": getattr(fi, 'foreign_ratio', None),
+        }
     except Exception as e:
-        result["error"] = str(e)
+        result["fast_info"] = f"error: {e}"
     
     return clean_for_json(result)
 
