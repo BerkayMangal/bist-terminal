@@ -60,20 +60,46 @@ BACKGROUND_SCAN_INTERVAL_CLOSED = 10800
 BACKGROUND_SCAN_STARTUP_DELAY = 1
 
 # ================================================================
-# UNIVERSE — BIST TOP 25
+# UNIVERSE — BIST 200
 # ================================================================
-UNIVERSE: list[str] = [
-    # Mega-cap / en likit
-    "THYAO", "ASELS", "GARAN", "AKBNK", "ISCTR", "YKBNK",
-    # Holdingler
-    "KCHOL", "SAHOL",
-    # Sanayi / otomotiv / enerji
-    "FROTO", "TOASO", "TUPRS", "EREGL", "SISE", "ARCLK", "PETKM",
-    # Perakende / telco / havacılık
-    "BIMAS", "MGROS", "TCELL", "TTKOM", "TAVHL", "PGSUS",
-    # Savunma / inşaat / GYO
-    "ENKAI", "EKGYO", "HEKTS", "SASA",
+UNIVERSE_BIST30: list[str] = [
+    "ASELS", "THYAO", "BIMAS", "KCHOL", "SISE", "EREGL", "TUPRS", "AKBNK", "ISCTR", "YKBNK",
+    "GARAN", "SAHOL", "MGROS", "FROTO", "TOASO", "TCELL", "KRDMD", "PETKM", "ENKAI", "TAVHL",
+    "PGSUS", "EKGYO", "ARCLK", "TTKOM", "SOKM", "TKFEN", "KONTR", "AKSEN", "HEKTS", "SASA",
 ]
+
+UNIVERSE_EXTRA: list[str] = [
+    # Orijinal V9.1 listesi (KOZAA/KOZAL hariç — delist)
+    "VESTL", "DOHOL", "AYGAZ", "LOGO", "INDES", "ODAS", "GUBRF", "CIMSA", "MPARK",
+    "OYAKC", "ISMEN", "TTRAK", "AEFES", "DOAS", "AGHOL", "OTKAR", "VESBE", "EGEEN", "TMSN",
+    "GESAN", "ZOREN", "ENJSA", "AYDEM", "ISDMR",
+    "HALKB", "VAKBN", "TSKB", "SKBNK", "ALBRK", "ANHYT", "AGESA", "TURSG", "ANSGR", "GLYHO", "BERA",
+    "ULKER", "CCOLA", "PNSUT", "MAVI", "BIZIM", "YATAS", "ADEL",
+    "NETAS", "KRONT", "ALARK", "ASTOR", "PAPIL",
+    "ISGYO", "HLGYO", "KLGYO", "AKFGY", "BTCIM", "BAGFS",
+    "CLEBI", "RYSAS",
+    "CWENE", "SMRTG", "KCAER",
+    "BRYAT", "EUPWR", "BRSAN", "SARKY", "GEDZA", "BUCIM", "KORDS", "KARTN", "DEVA",
+    "CANTE", "CEMTS", "NUHCM", "PRKME", "AKSA", "GOLTS", "ERBOS", "MIATK", "QUAGR", "FORTE", "RGYAS",
+    # BIST 200 genişleme — sanayi / üretim
+    "TTRAK", "TRGYO", "KENT", "PINSU", "YYLGD", "PENGD", "IPEKE", "MNDRS",
+    "KUTPO", "BOSSA", "LUKSK", "DAGI", "ROYAL", "SNKRN", "ATEKS", "HATEK",
+    # BIST 200 genişleme — enerji / madencilik
+    "AYEN", "AKFYE", "ZRGYO", "YGYO", "MTRYO", "TBORG", "TUKAS", "TATGD",
+    # BIST 200 genişleme — finans / holding
+    "GSDHO", "ICBCT", "MRGYO", "OZKGY", "VKGYO", "YAPRK", "ATAGY", "ATSYH",
+    # BIST 200 genişleme — sağlık / teknoloji / hizmet
+    "LKMNH", "MNDTR", "SELEC", "ESCOM", "FONET", "ARENA", "ARDYZ", "INTEM",
+    "FLAP", "LINK", "PKART", "DESPC", "SMART", "VERTU",
+    # BIST 200 genişleme — inşaat / çimento / demir-çelik
+    "AKCNS", "BOLUC", "GOLTS", "KONYA", "OYAKC", "UNYEC", "BSOKE", "AFYON",
+    "IEYHO", "OTOKT", "OLMIP", "PARSN", "KATMR", "HKTM",
+    # BIST 200 genişleme — gıda / perakende / tüketim
+    "AVOD", "BANVT", "CRFSA", "KERVT", "MERKO", "OSMEN", "TKNSA", "VAKKO",
+    "KRVGD", "ALYAG", "ERSU", "ETILR", "PENGD", "TBORG",
+]
+
+UNIVERSE: list[str] = list(dict.fromkeys(UNIVERSE_BIST30 + UNIVERSE_EXTRA))  # dedupe
 
 # ================================================================
 # FA SCORE AĞIRLIKLARI

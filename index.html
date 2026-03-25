@@ -297,7 +297,7 @@ h+=`<div class="card" style="margin-bottom:20px"><div class="card-h"><span class
 if(S.quote){h+=`<div style="margin-bottom:20px;padding:14px 20px;background:linear-gradient(135deg,var(--bg3),var(--bg2));border-left:3px solid var(--gold);border-radius:0 var(--rad) var(--rad) 0"><div style="font-style:italic;color:var(--t2);font-size:var(--fs-base);line-height:1.7">"${esc(S.quote.text)}"</div><div style="margin-top:6px;color:var(--gold);font-weight:600;font-size:var(--fs-sm)">— ${esc(S.quote.author)}</div></div>`;}
 
 // === TÜYO KONTROL — merkez feature ===
-h+=`<div class="card" style="margin-bottom:20px;border:1px solid rgba(255,179,0,.25);background:linear-gradient(135deg,var(--bg2),rgba(255,179,0,.03))"><div style="padding:20px 18px"><div style="text-align:center;margin-bottom:16px"><div style="font-size:28px;margin-bottom:8px">🐂</div><div style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-lg);font-weight:700;color:var(--t1);margin-bottom:6px">Bir tüyo mu duydun?</div><div style="font-size:var(--fs-base);color:var(--t2);line-height:1.6">Hisse kodunu yaz, BistBull 9 boyutta analiz etsin.<br>Tüyo gerçek mi, zamanlama doğru mu — hemen gör.</div></div><div style="display:flex;gap:8px;max-width:400px;margin:0 auto"><input type="text" id="tuyoInp" placeholder="Örn: THYAO, ASELS, BIMAS..." autocomplete="off" enterkeyhint="go" style="flex:1;font-family:'JetBrains Mono',monospace;font-size:var(--fs-md);padding:12px 14px;background:var(--bg0);border:1px solid var(--bdr);border-radius:var(--rad);color:var(--t1);outline:0;text-transform:uppercase;min-height:48px"><button onclick="tuyoKontrol()" class="btn btn-grn" style="font-size:var(--fs-md);padding:12px 20px;min-height:48px;white-space:nowrap">Kontrol Et</button></div><div style="text-align:center;margin-top:10px;font-size:var(--fs-xs);color:var(--t4)">76 BIST hissesi + arama ile tüm hisseler analiz edilebilir</div></div></div>`;
+h+=`<div class="card" style="margin-bottom:20px;border:1px solid rgba(255,179,0,.25);background:linear-gradient(135deg,var(--bg2),rgba(255,179,0,.03))"><div style="padding:20px 18px"><div style="text-align:center;margin-bottom:16px"><div style="font-size:28px;margin-bottom:8px">🐂</div><div style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-lg);font-weight:700;color:var(--t1);margin-bottom:6px">Bir tüyo mu duydun?</div><div style="font-size:var(--fs-base);color:var(--t2);line-height:1.6">Hisse kodunu yaz, BistBull 9 boyutta analiz etsin.<br>Tüyo gerçek mi, zamanlama doğru mu — hemen gör.</div></div><div style="display:flex;gap:8px;max-width:400px;margin:0 auto"><input type="text" id="tuyoInp" placeholder="Örn: THYAO, ASELS, BIMAS..." autocomplete="off" enterkeyhint="go" style="flex:1;font-family:'JetBrains Mono',monospace;font-size:var(--fs-md);padding:12px 14px;background:var(--bg0);border:1px solid var(--bdr);border-radius:var(--rad);color:var(--t1);outline:0;text-transform:uppercase;min-height:48px"><button onclick="tuyoKontrol()" class="btn btn-grn" style="font-size:var(--fs-md);padding:12px 20px;min-height:48px;white-space:nowrap">Kontrol Et</button></div><div style="text-align:center;margin-top:10px;font-size:var(--fs-xs);color:var(--t4)">~200 BIST hissesi taranıyor — tüm hisseler analiz edilebilir</div></div></div>`;
 
 // Hero
 h+=`<div class="hero-wrap"><div class="hero-tag">📡 BUGÜN NE OLUYOR?</div>`;
@@ -335,7 +335,7 @@ if(hr){
     h+=`</div></div>`;
   }
 } else {
-  h+=`<div style="font-size:var(--fs-lg);font-weight:700;color:var(--t1);margin-bottom:8px">${hasSc?sc.items.length+' Hisse Analiz Edildi':'Analiz başlatılıyor...'}</div>`;
+  h+=`<div style="font-size:var(--fs-lg);font-weight:700;color:var(--t1);margin-bottom:8px">${hasSc?sc.items.length+' Hisse Analiz Edildi':'~200 hisse taranıyor — biraz sürecek...'}</div>`;
   h+=`<div style="color:var(--t2);font-size:var(--fs-base)">${hasSc?'Sonuçlar hazır — aşağı kaydır.':_rndLoad()}</div>`;
 }
 h+=`<div id="hSt"></div>`;
@@ -586,59 +586,70 @@ async function askDedePortfoy(){const pf=getPF();if(!pf.length){alert('Önce por
 (async()=>{
 renderHome(); // skeleton anında göster
 
-// Debounced render — çok fazla re-render'ı engelle
+// Debounced render — çok fazla re-render engelle
 let _renderTimer=null;
 function scheduleRender(){if(_renderTimer)return;_renderTimer=setTimeout(()=>{_renderTimer=null;renderHome();},150);}
 
-// Phase 1: Hepsi paralel fire — biten render eder
+// Phase 1: Hepsi paralel fire — biten render eder, hiçbiri bloklamaz
 loadQuote().then(scheduleRender);
 loadBook().then(scheduleRender);
-loadMacro(); // kendi render'ını yapıyor
+loadMacro(); // kendi render'ını yapıyor (nabız, ticker bar)
 loadLiveStats().then(scheduleRender);
 loadMarketStatus().then(scheduleRender);
+api('/api/health').catch(()=>null);
 
-// Phase 2: Scan data — en yavaş parça, bağımsız çalışsın
+// Phase 2: Scan data — bağımsız çalışsın
 (async()=>{
   try{
     const d=await api('/api/top10');
     if(d.items&&d.items.length>0){
       S.scan=d;
       renderHome();
-      // dashboard + hero arka planda
       Promise.all([api('/api/dashboard').catch(()=>null),api('/api/hero-summary').catch(()=>null)]).then(([dashR,heroR])=>{
         if(dashR)S.dash=dashR;if(heroR)S.hero=heroR;updCnt(S.dash);renderHome();
       });
     }else{
-      // Poll: scan henüz bitmemiş
-      for(let i=0;i<60;i++){
+      // V9.2: Smart polling with scan-status progress
+      for(let i=0;i<120;i++){
         await new Promise(r=>setTimeout(r,3000));
         try{
           const st=await api('/api/scan-status').catch(()=>null);
           if(st){
             const pct=st.total>0?Math.round(st.progress/st.total*100):0;
             const ldEl=document.querySelector('.ld-t');
-            if(ldEl)ldEl.textContent=st.phase==='raw_fetch'?`Veri çekiliyor... ${pct}%`:st.phase==='analyzing'?`Analiz ediliyor... ${pct}%`:'Tarama başlatılıyor...';
+            if(ldEl)ldEl.textContent=st.phase==='raw_fetch'?`Veri çekiliyor... ${pct}%`:st.phase==='analyzing'?`~200 hisse analiz ediliyor... ${pct}%`:'Tarama başlatılıyor...';
           }
           const d2=await api('/api/top10');
           if(d2.items&&d2.items.length>0){
             S.scan=d2;
+            renderHome();
             Promise.all([api('/api/dashboard').catch(()=>null),api('/api/hero-summary').catch(()=>null)]).then(([dashR,heroR])=>{
               if(dashR)S.dash=dashR;if(heroR)S.hero=heroR;updCnt(S.dash);renderHome();
             });
-            renderHome();return;
+            break;
           }
         }catch(e){}
       }
     }
   }catch(e){
-    for(let i=0;i<60;i++){
+    for(let i=0;i<120;i++){
       await new Promise(r=>setTimeout(r,3000));
-      try{const d2=await api('/api/top10');if(d2.items&&d2.items.length>0){S.scan=d2;Promise.all([api('/api/dashboard').catch(()=>null),api('/api/hero-summary').catch(()=>null)]).then(([dashR,heroR])=>{if(dashR)S.dash=dashR;if(heroR)S.hero=heroR;updCnt(S.dash);renderHome();});renderHome();return;}}catch(e2){}
+      try{
+        const d2=await api('/api/top10');
+        if(d2.items&&d2.items.length>0){
+          S.scan=d2;
+          renderHome();
+          Promise.all([api('/api/dashboard').catch(()=>null),api('/api/hero-summary').catch(()=>null)]).then(([dashR,heroR])=>{
+            if(dashR)S.dash=dashR;if(heroR)S.hero=heroR;updCnt(S.dash);renderHome();
+          });
+          break;
+        }
+      }catch(e2){}
     }
   }
 })();
 
-// Phase 3: cross + heatmap — tamamen bağımsız, bloklamaz
+// Phase 3: cross + heatmap — tamamen bağımsız
 api('/api/cross').then(d=>{S.cross=d;scheduleRender();}).catch(()=>{});
 loadHeatmap().then(scheduleRender).catch(()=>{});
 })();

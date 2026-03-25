@@ -207,7 +207,6 @@ def fetch_raw_v9(symbol: str) -> dict:
     tk = bp.Ticker(tc)
     fg = "UFRS" if is_bank(tc) else None
 
-    # 5 bağımsız HTTP call — hepsi paralel
     def _fast():
         d = {}
         try:
@@ -240,7 +239,7 @@ def fetch_raw_v9(symbol: str) -> dict:
                 try: d[k] = full[k]
                 except Exception: d[k] = None
         except Exception:
-            d = None  # signal fallback needed
+            d = None
         return d
 
     def _income():
@@ -273,7 +272,6 @@ def fetch_raw_v9(symbol: str) -> dict:
         bal  = f_bal.result()
         cf   = f_cf.result()
 
-    # info fallback
     if info is None:
         info = {
             "currentPrice": fast.get("last_price"),
