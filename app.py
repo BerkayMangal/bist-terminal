@@ -156,42 +156,45 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(
 log = logging.getLogger("bistbull")
 
 # ================================================================
-# BATCH HISTORY DOWNLOAD — V9: borsapy primary, yfinance fallback
+# BATCH HISTORY DOWNLOAD — V9: yfinance for batch price (1 call),
+# borsapy fallback. TradingView WebSocket can't handle 76 concurrent.
 # ================================================================
 def batch_download_history(symbols, period="1y", interval="1d"):
-    """V9: borsapy öncelikli, yfinance fallback"""
+    """V9: yfinance batch (tek API call) → borsapy fallback (throttled)"""
+    # yfinance is BETTER for batch — single yf.download call for all 76 stocks
+    if YF_AVAILABLE:
+        result = {}
+        try:
+            if not symbols: return result
+            df = yf.download(symbols, period=period, interval=interval,
+                             group_by="ticker", progress=False, threads=True)
+            if df is not None and not df.empty:
+                for sym in symbols:
+                    try:
+                        if len(symbols) == 1:
+                            ticker_df = df
+                        else:
+                            if sym in df.columns.get_level_values(0):
+                                ticker_df = df[sym].dropna(how="all")
+                            else: continue
+                        if ticker_df is not None and not ticker_df.empty and len(ticker_df) >= 20:
+                            result[sym] = ticker_df
+                    except Exception: continue
+                if result:
+                    log.info(f"batch_download (yfinance): {len(result)}/{len(symbols)} başarılı")
+                    return result
+        except Exception as e:
+            log.warning(f"batch_download yfinance failed: {e}")
+    
+    # borsapy fallback — throttled, sequential
     if BORSAPY_AVAILABLE:
         result = batch_download_history_v9(symbols, period=period, interval=interval)
         if result:
-            log.info(f"batch_download V9 (borsapy): {len(result)}/{len(symbols)} başarılı")
+            log.info(f"batch_download V9 (borsapy fallback): {len(result)}/{len(symbols)} başarılı")
             return result
-        log.warning("borsapy batch_download boş döndü, yfinance fallback deneniyor...")
     
-    if not YF_AVAILABLE:
-        log.warning("yfinance de yok — history verisi alınamadı")
-        return {}
-    
-    # yfinance fallback
-    result = {}
-    try:
-        if not symbols: return result
-        df = yf.download(symbols, period=period, interval=interval,
-                         group_by="ticker", progress=False, threads=True)
-        if df is None or df.empty: return result
-        for sym in symbols:
-            try:
-                if len(symbols) == 1:
-                    ticker_df = df
-                else:
-                    if sym in df.columns.get_level_values(0):
-                        ticker_df = df[sym].dropna(how="all")
-                    else: continue
-                if ticker_df is not None and not ticker_df.empty and len(ticker_df) >= 20:
-                    result[sym] = ticker_df
-            except Exception: continue
-    except Exception as e:
-        log.warning(f"batch_download_history yfinance fallback: {e}")
-    return result
+    log.warning("batch_download: both yfinance and borsapy failed")
+    return {}
 
 # ================================================================
 # HELPERS — verbatim from fa_bot.py
@@ -1139,9 +1142,15 @@ def compute_technical(symbol, hist_df=None):
         elif symbol in HISTORY_CACHE:
             df = HISTORY_CACHE[symbol]
         else:
-            # V9: borsapy primary, yfinance fallback
+            # V9: yfinance first (no rate limit), borsapy fallback
             df = None
-            if BORSAPY_AVAILABLE:
+            if YF_AVAILABLE:
+                try:
+                    tk = yf.Ticker(symbol)
+                    df = tk.history(period="1y", interval="1d")
+                except Exception:
+                    pass
+            if (df is None or (hasattr(df, 'empty') and df.empty)) and BORSAPY_AVAILABLE:
                 try:
                     import borsapy as bp
                     ticker_clean = symbol.upper().replace(".IS", "").replace(".E", "")
@@ -1149,12 +1158,6 @@ def compute_technical(symbol, hist_df=None):
                     df = _tk.history(period="1y", interval="1d")
                 except Exception as _e:
                     log.debug(f"compute_technical borsapy history failed: {_e}")
-            if (df is None or (hasattr(df, 'empty') and df.empty)) and YF_AVAILABLE:
-                try:
-                    tk = yf.Ticker(symbol)
-                    df = tk.history(period="1y", interval="1d")
-                except Exception:
-                    pass
             if df is not None and not df.empty:
                 HISTORY_CACHE[symbol] = df
         if df is None or len(df) < 50:
@@ -1322,20 +1325,20 @@ def generate_chart_png(symbol, tech_data=None):
             volumes = [p["volume"] for p in tech_data["price_history"]]
             dates = pd.to_datetime(dates_str)
         else:
-            # V9: borsapy primary, yfinance fallback
+            # V9: yfinance first (no rate limit), borsapy fallback
             df = None
-            if BORSAPY_AVAILABLE:
+            if YF_AVAILABLE:
+                try:
+                    tk = yf.Ticker(symbol)
+                    df = tk.history(period="6mo", interval="1d")
+                except Exception:
+                    pass
+            if (df is None or (hasattr(df, 'empty') and df.empty)) and BORSAPY_AVAILABLE:
                 try:
                     import borsapy as bp
                     ticker_clean = symbol.upper().replace(".IS", "").replace(".E", "")
                     _tk = bp.Ticker(ticker_clean)
                     df = _tk.history(period="6ay", interval="1d")
-                except Exception:
-                    pass
-            if (df is None or (hasattr(df, 'empty') and df.empty)) and YF_AVAILABLE:
-                try:
-                    tk = yf.Ticker(symbol)
-                    df = tk.history(period="6mo", interval="1d")
                 except Exception:
                     pass
             if df is None or len(df) < 20:
@@ -2710,10 +2713,10 @@ async def api_book():
 HEATMAP_CACHE = TTLCache(maxsize=5, ttl=900)  # 15 min
 
 def _fetch_heatmap_data():
-    """V9: Batch download 1-day data — borsapy primary, yfinance fallback"""
+    """V9: Batch download 1-day data — borsapy fast_info primary, yfinance fallback"""
     results = []
     
-    # Try borsapy first
+    # Try borsapy first (fast_info — no WebSocket batch needed)
     if BORSAPY_AVAILABLE:
         try:
             import borsapy as bp
@@ -2726,11 +2729,20 @@ def _fetch_heatmap_data():
                     mcap = getattr(fi, 'market_cap', None)
                     if last is not None and prev is not None and prev > 0:
                         chg = (last - prev) / prev * 100
+                        # Get cached scan data for sector
+                        scan_item = None
+                        for item in TOP10_CACHE.get("items", []):
+                            if item["ticker"] == t:
+                                scan_item = item
+                                break
+                        sector = scan_item.get("sector", "Diger") if scan_item else "Diger"
+                        score = scan_item["overall"] if scan_item else None
                         results.append({
                             "ticker": t, "price": round(float(last), 2),
                             "change_pct": round(chg, 2),
                             "market_cap": float(mcap) if mcap else None,
-                            "sector": "",  # will be filled from analysis cache
+                            "sector": sector or "Diger",
+                            "score": score,
                         })
                 except Exception:
                     continue
@@ -2746,7 +2758,6 @@ def _fetch_heatmap_data():
     symbols = [normalize_symbol(t) for t in UNIVERSE]
     try:
         df = yf.download(symbols, period="2d", group_by="ticker", progress=False, threads=True)
-        results = []
         for t in UNIVERSE:
             sym = normalize_symbol(t)
             try:
@@ -2760,7 +2771,6 @@ def _fetch_heatmap_data():
                 last_close = float(ticker_df["Close"].iloc[-1])
                 if prev_close == 0: continue
                 chg_pct = ((last_close - prev_close) / prev_close) * 100
-                # Get cached scan data for sector/market_cap
                 scan_item = None
                 for item in TOP10_CACHE.get("items", []):
                     if item["ticker"] == t:
@@ -2781,7 +2791,7 @@ def _fetch_heatmap_data():
                 continue
         return results
     except Exception as e:
-        log.warning(f"heatmap download: {e}")
+        log.warning(f"heatmap yfinance download: {e}")
         return []
 
 @app.get("/api/heatmap")
@@ -3060,6 +3070,47 @@ async def api_batch(tickers: str):
     return {"items": clean_for_json(results)}
 
 # Serve frontend — landing page at /, terminal at /terminal
+# ================================================================
+# V9 DEBUG — gerçek İsyatırım satır isimlerini göster
+# ================================================================
+@app.get("/api/debug/rows/{ticker}")
+async def api_debug_rows(ticker: str):
+    """Debug: İsyatırım'dan gelen gerçek satır isimlerini döndür"""
+    ticker_clean = ticker.strip().upper().replace(".IS", "")
+    try:
+        import borsapy as bp
+        tk = bp.Ticker(ticker_clean)
+        result = {"ticker": ticker_clean}
+        
+        for stmt_name, stmt_func in [
+            ("balance_sheet", lambda: tk.get_balance_sheet(quarterly=False, last_n=2)),
+            ("income_stmt", lambda: tk.get_income_stmt(quarterly=False, last_n=2)),
+            ("cashflow", lambda: tk.get_cashflow(quarterly=False, last_n=2)),
+        ]:
+            try:
+                df = stmt_func()
+                if df is not None and not df.empty:
+                    rows = list(df.index)
+                    cols = list(df.columns)
+                    # İlk 3 satırın değerlerini de göster
+                    sample = {}
+                    for row in rows[:5]:
+                        sample[row] = {str(c): df.loc[row, c] if not pd.isna(df.loc[row, c]) else None for c in cols}
+                    result[stmt_name] = {
+                        "row_count": len(rows),
+                        "columns": cols,
+                        "all_rows": rows,
+                        "sample_values": sample,
+                    }
+                else:
+                    result[stmt_name] = {"error": "empty DataFrame"}
+            except Exception as e:
+                result[stmt_name] = {"error": str(e)}
+        
+        return clean_for_json(result)
+    except Exception as e:
+        return {"error": str(e)}
+
 _BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 _INDEX_HTML_PATH = os.path.join(_BASE_DIR, "index.html")
 _LANDING_HTML_PATH = os.path.join(_BASE_DIR, "landing.html")
