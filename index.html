@@ -582,22 +582,34 @@ function showAddPF(){$('pfAddForm').style.display='block';$('pfTicker').focus();
 function doAddPF(){const t=$('pfTicker').value.trim().toUpperCase();const l=parseInt($('pfLot').value)||0;const a=parseFloat($('pfAvg').value)||0;if(!t||t.length<3||l<=0||a<=0){alert('Ticker, lot ve maliyet girin');return;}addPF(t,l,a);$('pfAddForm').style.display='none';$('pfTicker').value='';$('pfLot').value='';$('pfAvg').value='';renderPortfoyPage();}
 async function askDedePortfoy(){const pf=getPF();if(!pf.length){alert('Önce portföye hisse ekleyin');return;}const box=$('pfDedeBox');box.style.display='block';box.innerHTML=`<div class="aib"><div class="aib-t">🤖 Q PORTFÖY ANALİZİ</div><div class="aib-tx">Portföy analiz ediliyor...</div></div>`;const desc=pf.map(p=>`${p.ticker} ${p.lot} lot (maliyet: ${p.avg} TL)`).join(', ');try{const d=await api('/api/agent?q='+encodeURIComponent('Portfoyumde sunlar var: '+desc+'. Sektörel dağılım ve risk hakkında ne düşünüyorsun?'));box.innerHTML=`<div class="aib"><div class="aib-t">🤖 Q PORTFÖY ANALİZİ</div><div class="aib-tx">${esc(d.answer)}</div></div>`;}catch(e){box.innerHTML='';}}
 
-// ===== INIT — parallel loading =====
+// ===== INIT — progressive lazy loading =====
 (async()=>{
-renderHome(); // skeleton
-// Phase 1: fast parallel
-await Promise.all([loadQuote(), loadBook(), loadMacro(), loadLiveStats(), loadMarketStatus(), api('/api/health').catch(()=>null)]);
-renderHome();
-// Phase 2: scan data (background scan should already have data)
-try{
-  const d=await api('/api/top10');
-  if(d.items&&d.items.length>0){
-    S.scan=d;
-    const [dashR,heroR]=await Promise.all([api('/api/dashboard').catch(()=>null),api('/api/hero-summary').catch(()=>null)]);
-    if(dashR)S.dash=dashR;if(heroR)S.hero=heroR;updCnt(S.dash);
-  }else{
-    // V9.2: Smart polling with scan-status progress
-    const pollScan=async()=>{
+renderHome(); // skeleton anında göster
+
+// Debounced render — çok fazla re-render'ı engelle
+let _renderTimer=null;
+function scheduleRender(){if(_renderTimer)return;_renderTimer=setTimeout(()=>{_renderTimer=null;renderHome();},150);}
+
+// Phase 1: Hepsi paralel fire — biten render eder
+loadQuote().then(scheduleRender);
+loadBook().then(scheduleRender);
+loadMacro(); // kendi render'ını yapıyor
+loadLiveStats().then(scheduleRender);
+loadMarketStatus().then(scheduleRender);
+
+// Phase 2: Scan data — en yavaş parça, bağımsız çalışsın
+(async()=>{
+  try{
+    const d=await api('/api/top10');
+    if(d.items&&d.items.length>0){
+      S.scan=d;
+      renderHome();
+      // dashboard + hero arka planda
+      Promise.all([api('/api/dashboard').catch(()=>null),api('/api/hero-summary').catch(()=>null)]).then(([dashR,heroR])=>{
+        if(dashR)S.dash=dashR;if(heroR)S.hero=heroR;updCnt(S.dash);renderHome();
+      });
+    }else{
+      // Poll: scan henüz bitmemiş
       for(let i=0;i<60;i++){
         await new Promise(r=>setTimeout(r,3000));
         try{
@@ -608,24 +620,27 @@ try{
             if(ldEl)ldEl.textContent=st.phase==='raw_fetch'?`Veri çekiliyor... ${pct}%`:st.phase==='analyzing'?`Analiz ediliyor... ${pct}%`:'Tarama başlatılıyor...';
           }
           const d2=await api('/api/top10');
-          if(d2.items&&d2.items.length>0){S.scan=d2;const[dashR,heroR]=await Promise.all([api('/api/dashboard').catch(()=>null),api('/api/hero-summary').catch(()=>null)]);if(dashR)S.dash=dashR;if(heroR)S.hero=heroR;updCnt(S.dash);renderHome();return;}
+          if(d2.items&&d2.items.length>0){
+            S.scan=d2;
+            Promise.all([api('/api/dashboard').catch(()=>null),api('/api/hero-summary').catch(()=>null)]).then(([dashR,heroR])=>{
+              if(dashR)S.dash=dashR;if(heroR)S.hero=heroR;updCnt(S.dash);renderHome();
+            });
+            renderHome();return;
+          }
         }catch(e){}
       }
-    };
-    pollScan();
-  }
-}catch(e){
-  const pollScan=async()=>{
+    }
+  }catch(e){
     for(let i=0;i<60;i++){
       await new Promise(r=>setTimeout(r,3000));
-      try{const d2=await api('/api/top10');if(d2.items&&d2.items.length>0){S.scan=d2;const[dashR,heroR]=await Promise.all([api('/api/dashboard').catch(()=>null),api('/api/hero-summary').catch(()=>null)]);if(dashR)S.dash=dashR;if(heroR)S.hero=heroR;updCnt(S.dash);renderHome();return;}}catch(e2){}
+      try{const d2=await api('/api/top10');if(d2.items&&d2.items.length>0){S.scan=d2;Promise.all([api('/api/dashboard').catch(()=>null),api('/api/hero-summary').catch(()=>null)]).then(([dashR,heroR])=>{if(dashR)S.dash=dashR;if(heroR)S.hero=heroR;updCnt(S.dash);renderHome();});renderHome();return;}}catch(e2){}
     }
-  };
-  pollScan();
-}
-// Phase 3: cross + heatmap (background)
-await Promise.all([api('/api/cross').then(d=>{S.cross=d;}).catch(()=>{}), loadHeatmap()]);
-renderHome();
+  }
+})();
+
+// Phase 3: cross + heatmap — tamamen bağımsız, bloklamaz
+api('/api/cross').then(d=>{S.cross=d;scheduleRender();}).catch(()=>{});
+loadHeatmap().then(scheduleRender).catch(()=>{});
 })();
 
 // ===== Q ASSISTANT (XSS-safe) =====

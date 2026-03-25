@@ -17,6 +17,7 @@ import numpy as np
 import pandas as pd
 
 from cache import raw_cache
+from config import BATCH_HISTORY_WORKERS
 
 log = logging.getLogger("bistbull")
 
@@ -194,75 +195,93 @@ def _pick_debt(
 # FETCH RAW V9 — SafeCache entegreli
 # ================================================================
 def fetch_raw_v9(symbol: str) -> dict:
-    """borsapy ile ham veri çek. Thread-safe SafeCache kullanır."""
+    """borsapy ile ham veri çek — paralel HTTP. Thread-safe SafeCache."""
     if not BORSAPY_AVAILABLE:
         raise ImportError("borsapy yok")
 
-    # SafeCache check — .get() ile thread-safe erişim
     cached = raw_cache.get(symbol)
     if cached is not None:
         return cached
 
     tc = symbol.upper().replace(".IS", "").replace(".E", "")
     tk = bp.Ticker(tc)
-
-    # fast_info
-    fast: dict = {}
-    try:
-        fi = tk.fast_info
-        for a in [
-            "last_price", "open", "day_high", "day_low", "previous_close",
-            "volume", "market_cap", "shares", "pe_ratio", "pb_ratio",
-            "year_high", "year_low", "fifty_day_average", "two_hundred_day_average",
-            "free_float", "foreign_ratio",
-        ]:
-            try:
-                fast[a] = getattr(fi, a)
-            except Exception:
-                fast[a] = None
-    except Exception as e:
-        log.warning(f"fast_info {tc}: {e}")
-
-    # info
-    info: dict = {}
-    try:
-        full = tk.info
-        for k in [
-            "sector", "industry", "shortName", "longName", "currency",
-            "marketCap", "trailingPE", "forwardPE", "priceToBook",
-            "enterpriseToEbitda", "dividendYield", "returnOnEquity",
-            "returnOnAssets", "operatingMargins", "profitMargins",
-            "currentRatio", "debtToEquity", "beta", "revenueGrowth",
-            "earningsGrowth", "freeCashflow", "currentPrice", "trailingEps",
-            "bookValue", "heldPercentInstitutions", "effectiveTaxRate",
-        ]:
-            try:
-                info[k] = full[k]
-            except Exception:
-                info[k] = None
-    except Exception:
-        info["currentPrice"] = fast.get("last_price")
-        info["marketCap"] = fast.get("market_cap")
-        info["trailingPE"] = fast.get("pe_ratio")
-        info["priceToBook"] = fast.get("pb_ratio")
-        info["currency"] = "TRY"
-
-    # Financial statements
     fg = "UFRS" if is_bank(tc) else None
-    fin = bal = cf = None
-    try:
-        fin = tk.get_income_stmt(quarterly=False, financial_group=fg, last_n=4)
-    except Exception as e:
-        log.warning(f"income {tc}: {e}")
-    try:
-        bal = tk.get_balance_sheet(quarterly=False, financial_group=fg, last_n=4)
-    except Exception as e:
-        log.warning(f"balance {tc}: {e}")
-    try:
-        cf = tk.get_cashflow(quarterly=False, financial_group=fg, last_n=4)
-    except Exception as e:
-        if not is_bank(tc):
-            log.warning(f"cashflow {tc}: {e}")
+
+    # 5 bağımsız HTTP call — hepsi paralel
+    def _fast():
+        d = {}
+        try:
+            fi = tk.fast_info
+            for a in [
+                "last_price", "open", "day_high", "day_low", "previous_close",
+                "volume", "market_cap", "shares", "pe_ratio", "pb_ratio",
+                "year_high", "year_low", "fifty_day_average", "two_hundred_day_average",
+                "free_float", "foreign_ratio",
+            ]:
+                try: d[a] = getattr(fi, a)
+                except Exception: d[a] = None
+        except Exception as e:
+            log.warning(f"fast_info {tc}: {e}")
+        return d
+
+    def _info():
+        d = {}
+        try:
+            full = tk.info
+            for k in [
+                "sector", "industry", "shortName", "longName", "currency",
+                "marketCap", "trailingPE", "forwardPE", "priceToBook",
+                "enterpriseToEbitda", "dividendYield", "returnOnEquity",
+                "returnOnAssets", "operatingMargins", "profitMargins",
+                "currentRatio", "debtToEquity", "beta", "revenueGrowth",
+                "earningsGrowth", "freeCashflow", "currentPrice", "trailingEps",
+                "bookValue", "heldPercentInstitutions", "effectiveTaxRate",
+            ]:
+                try: d[k] = full[k]
+                except Exception: d[k] = None
+        except Exception:
+            d = None  # signal fallback needed
+        return d
+
+    def _income():
+        try: return tk.get_income_stmt(quarterly=False, financial_group=fg, last_n=4)
+        except Exception as e:
+            log.warning(f"income {tc}: {e}")
+            return None
+
+    def _balance():
+        try: return tk.get_balance_sheet(quarterly=False, financial_group=fg, last_n=4)
+        except Exception as e:
+            log.warning(f"balance {tc}: {e}")
+            return None
+
+    def _cashflow():
+        try: return tk.get_cashflow(quarterly=False, financial_group=fg, last_n=4)
+        except Exception as e:
+            if not is_bank(tc): log.warning(f"cashflow {tc}: {e}")
+            return None
+
+    with ThreadPoolExecutor(max_workers=5) as pool:
+        f_fast = pool.submit(_fast)
+        f_info = pool.submit(_info)
+        f_fin  = pool.submit(_income)
+        f_bal  = pool.submit(_balance)
+        f_cf   = pool.submit(_cashflow)
+        fast = f_fast.result()
+        info = f_info.result()
+        fin  = f_fin.result()
+        bal  = f_bal.result()
+        cf   = f_cf.result()
+
+    # info fallback
+    if info is None:
+        info = {
+            "currentPrice": fast.get("last_price"),
+            "marketCap": fast.get("market_cap"),
+            "trailingPE": fast.get("pe_ratio"),
+            "priceToBook": fast.get("pb_ratio"),
+            "currency": "TRY",
+        }
 
     raw = {
         "info": info, "fast": fast,
@@ -270,7 +289,6 @@ def fetch_raw_v9(symbol: str) -> dict:
         "source": "borsapy", "ticker_clean": tc, "is_bank": is_bank(tc),
     }
 
-    # SafeCache'e yaz — .set() ile thread-safe
     raw_cache.set(symbol, raw)
     return raw
 
@@ -466,7 +484,7 @@ def batch_download_history_v9(
             pass
         return sym, None
 
-    with ThreadPoolExecutor(max_workers=min(10, len(symbols))) as pool:
+    with ThreadPoolExecutor(max_workers=min(BATCH_HISTORY_WORKERS, len(symbols))) as pool:
         futures = [pool.submit(_fetch_one, s) for s in symbols]
         for future in as_completed(futures):
             sym, df = future.result()

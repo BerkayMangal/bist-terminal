@@ -24,7 +24,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, Response
 from config import (
     BOT_VERSION, APP_NAME, CONFIDENCE_MIN, UNIVERSE,
     MACRO_SYMBOLS, FINANCE_QUOTES, FINANCE_BOOKS,
-    SCAN_MAX_WORKERS, RAW_PREFETCH_WORKERS,
+    SCAN_MAX_WORKERS,
     BACKGROUND_SCAN_STARTUP_DELAY,
     BACKGROUND_SCAN_INTERVAL_OPEN, BACKGROUND_SCAN_INTERVAL_CLOSED,
 )
@@ -93,18 +93,7 @@ def scan_universe_blocking() -> list[dict]:
         log.info("Scan zaten çalışıyor, skip")
         return get_top10_items()
     try:
-        update_scan_status(running=True, phase="raw_fetch", progress=0, total=len(UNIVERSE), started=time.time())
-        symbols_to_fetch = [normalize_symbol(t) for t in UNIVERSE if normalize_symbol(t) not in raw_cache]
-        if symbols_to_fetch:
-            log.info(f"Pre-warm: {len(symbols_to_fetch)} hisse")
-            with ThreadPoolExecutor(max_workers=RAW_PREFETCH_WORKERS) as pool:
-                def _fs(sym):
-                    try: fetch_raw(sym)
-                    except Exception: pass
-                futs = [pool.submit(_fs, s) for s in symbols_to_fetch]
-                for f in as_completed(futs): f.result()
-            log.info(f"Pre-warm tamamlandı: {len(raw_cache)} cached")
-        update_scan_status(phase="analyzing", progress=0)
+        update_scan_status(running=True, phase="analyzing", progress=0, total=len(UNIVERSE), started=time.time())
         ranked = []
         with ThreadPoolExecutor(max_workers=min(SCAN_MAX_WORKERS, len(UNIVERSE))) as pool:
             futures = {pool.submit(_analyze_safe, t): t for t in UNIVERSE}
