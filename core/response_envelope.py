@@ -1,30 +1,20 @@
 # ================================================================
-# BISTBULL TERMINAL V10.0 — RESPONSE ENVELOPE
-# Tüm API endpoint'leri için standart response yapısı.
+# BISTBULL TERMINAL V10.0 — RESPONSE ENVELOPE (V9.1-UYUMLU)
+# Tüm API endpoint'leri için meta-zenginleştirilmiş response.
 #
-# FORMAT:
-# {
-#   "ok": true,
-#   "data": { ... },
-#   "meta": {
-#     "as_of": "2026-03-25T14:30:00Z",
-#     "stale": false,
-#     "source": "scan_2026_03_25_143000",
-#     "latency_ms": 45,
-#     "build_version": "V10.0",
-#     "cache_status": "hit"
-#   },
-#   "error": null
-# }
+# KRİTİK TASARIM KARARI:
+# Frontend (index.html) V9.1 formatını bekliyor:
+#   {"items": [...], "asof": "..."}
+# V10 envelope {"ok": true, "data": {"items": [...]}} formatı
+# frontend'i kırar çünkü d.items → undefined olur.
 #
-# NEDEN:
-# V9.1'de her endpoint farklı format dönüyordu.
-# Frontend neyin taze neyin bayat olduğunu bilemiyordu.
-# Bu envelope ile her response:
-# - freshness bilgisi taşır (as_of, stale)
-# - cache durumunu gösterir (hit/miss/stale_hit)
-# - hata durumunda tutarlı format döner
-# - build version ile uyumluluk kontrolü yapılabilir
+# ÇÖZÜM: FLAT FORMAT
+# data dict'i üst seviyeye açılır, meta "_meta" key'i ile eklenir:
+#   {"items": [...], "asof": "...", "_meta": {"build_version": "V10.0", "stale": false}}
+#
+# Frontend d.items → çalışır ✅
+# V10 meta bilgisi _meta'da mevcut ✅
+# İleride frontend güncellenince nested formata geçilebilir ✅
 # ================================================================
 
 from __future__ import annotations
@@ -40,7 +30,7 @@ from utils.helpers import clean_for_json
 
 
 # ================================================================
-# ENVELOPE BUILDERS
+# SUCCESS — flat format, V9.1 uyumlu
 # ================================================================
 def success(
     data: Any,
@@ -54,23 +44,19 @@ def success(
     status_code: int = 200,
 ) -> JSONResponse:
     """
-    Başarılı response envelope.
+    Başarılı response — V9.1 uyumlu flat format.
 
-    Args:
-        data: Response payload (dict, list, veya herhangi bir JSON-serializable nesne)
-        as_of: Verinin üretildiği zaman (ISO format string)
-        stale: Veri bayat mı?
-        source: Verinin kaynağı (ör: "scan_xxx", "cache", "borsapy")
-        cache_status: "hit", "miss", "stale_hit", "l2_restore"
-        latency_ms: İşlem süresi (ms)
-        scan_id: İlişkili scan ID
-        extra_meta: Ek metadata alanları
-        status_code: HTTP status code (default 200)
+    data dict ise → key'leri üst seviyeye açılır + _meta eklenir
+    data list ise → {"items": data, "_meta": {...}} olarak sarılır
+    data scalar ise → {"value": data, "_meta": {...}} olarak sarılır
+
+    Frontend d.items, d.asof, d.commentary gibi erişimlere dokunmaz.
+    Meta bilgisi _meta altında her zaman mevcut.
     """
+    # Meta oluştur
     meta: dict[str, Any] = {
         "build_version": RESPONSE_BUILD_VERSION,
     }
-
     if as_of is not None:
         meta["as_of"] = as_of
     if stale:
@@ -86,16 +72,29 @@ def success(
     if extra_meta:
         meta.update(extra_meta)
 
-    body = {
-        "ok": True,
-        "data": clean_for_json(data),
-        "meta": meta,
-        "error": None,
-    }
+    # Flat format oluştur
+    if isinstance(data, dict):
+        # Dict → key'leri üst seviyeye aç
+        body = clean_for_json(data)
+        body["_meta"] = meta
+    elif isinstance(data, list):
+        # List → items key'ine sar
+        body = {"items": clean_for_json(data), "_meta": meta}
+    else:
+        # Scalar → value key'ine sar
+        body = {"value": clean_for_json(data), "_meta": meta}
+
+    # V9.1 uyumluluk: frontend d.asof erişimi bekliyor
+    # as_of parametresi varsa üst seviyeye de "asof" key'i olarak ekle
+    if as_of is not None and "asof" not in body:
+        body["asof"] = as_of
 
     return JSONResponse(content=body, status_code=status_code)
 
 
+# ================================================================
+# ERROR RESPONSES — flat format, frontend try/catch uyumlu
+# ================================================================
 def error(
     message: str,
     status_code: int = 500,
@@ -104,33 +103,20 @@ def error(
     retry_after: Optional[float] = None,
 ) -> JSONResponse:
     """
-    Hata response envelope.
-
-    Args:
-        message: Kullanıcıya gösterilecek hata mesajı
-        status_code: HTTP status code
-        error_code: Programatik hata kodu (ör: "RATE_LIMIT", "CB_OPEN", "NOT_FOUND")
-        detail: Ek hata detayı
-        retry_after: Kaç saniye sonra tekrar denenebilir (429 için)
+    Hata response — flat format.
+    Frontend try/catch ile yakaladığı için body formatı çok kritik değil.
+    Ama bazı endpoint'ler d.error kontrolü yapıyor, o yüzden error field'ı üst seviyede.
     """
-    error_body: dict[str, Any] = {
-        "message": message,
+    body: dict[str, Any] = {
+        "error": message,
+        "_meta": {"build_version": RESPONSE_BUILD_VERSION},
     }
     if error_code is not None:
-        error_body["code"] = error_code
+        body["error_code"] = error_code
     if detail is not None:
-        error_body["detail"] = detail
+        body["detail"] = detail
     if retry_after is not None:
-        error_body["retry_after"] = round(retry_after, 1)
-
-    body = {
-        "ok": False,
-        "data": None,
-        "meta": {
-            "build_version": RESPONSE_BUILD_VERSION,
-        },
-        "error": error_body,
-    }
+        body["retry_after"] = round(retry_after, 1)
 
     headers = {}
     if retry_after is not None:
@@ -140,7 +126,7 @@ def error(
 
 
 def not_found(message: str = "Kaynak bulunamadı") -> JSONResponse:
-    """404 Not Found envelope."""
+    """404 Not Found."""
     return error(message=message, status_code=404, error_code="NOT_FOUND")
 
 
@@ -148,7 +134,7 @@ def rate_limited(
     message: str = "Çok fazla istek — lütfen bekleyin",
     retry_after: float = 60,
 ) -> JSONResponse:
-    """429 Too Many Requests envelope."""
+    """429 Too Many Requests."""
     return error(
         message=message,
         status_code=429,
@@ -161,7 +147,7 @@ def service_unavailable(
     message: str = "Servis geçici olarak kullanılamıyor",
     provider: Optional[str] = None,
 ) -> JSONResponse:
-    """503 Service Unavailable envelope (CB open durumunda)."""
+    """503 Service Unavailable (CB open durumunda)."""
     detail = {"provider": provider} if provider else None
     return error(
         message=message,
@@ -172,7 +158,7 @@ def service_unavailable(
 
 
 # ================================================================
-# HELPER — timestamp üretimi
+# HELPER
 # ================================================================
 def now_iso() -> str:
     """Şu anki UTC zamanı ISO format string olarak döner."""

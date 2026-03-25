@@ -111,8 +111,9 @@ def validate_all() -> bool:
         import json
         r = success({"test": 1})
         body = json.loads(r.body.decode())
-        assert body["ok"] is True
-        assert body["data"]["test"] == 1
+        assert body["test"] == 1
+        assert "_meta" in body
+        assert body["_meta"]["build_version"] == "V10.0"
         ts = now_iso()
         assert "T" in ts
     check("core/response_envelope.py", _envelope)
