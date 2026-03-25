@@ -152,6 +152,11 @@ AI_CACHE = TTLCache(maxsize=200, ttl=7200)
 HISTORY_CACHE = TTLCache(maxsize=500, ttl=3600)  # shared price history for tech + cross
 TOP10_CACHE = {"asof": None, "items": []}
 
+# V9.2: Scan lock — prevents concurrent scans from background + frontend
+import threading
+_SCAN_LOCK = threading.Lock()
+_SCAN_STATUS = {"running": False, "phase": "idle", "progress": 0, "total": len(UNIVERSE_BIST30) + len(UNIVERSE_EXTRA), "started": None}
+
 logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
 log = logging.getLogger("bistbull")
 
@@ -526,6 +531,7 @@ SECTOR_THRESHOLDS = {
         "ev_ebitda": None,              # bankalar için anlamsız
         "debt_equity": None,            # bankalar için anlamsız
         "current_ratio": None,          # bankalar için anlamsız
+        "altman_z": None,               # V9.2: bankalar için anlamsız (manufacturing modeli)
     },
     "holding": {
         "pe": (18, 12, 8, 5),
@@ -544,6 +550,8 @@ SECTOR_THRESHOLDS = {
         "ev_ebitda": (10, 7, 5, 3),
         "net_margin": (0.01, 0.04, 0.08, 0.15),
         "net_debt_ebitda": (3.5, 2.5, 1.5, 0.5),
+        "debt_equity": (80, 150, 250, 400),  # V9.2: enerji sektörü sermaye yoğun
+        "altman_z": (0.8, 1.5, 2.5, 3.5),   # V9.2: sermaye yoğun → Z düşük normal
     },
     "perakende": {
         "pe": (22, 16, 10, 6),
@@ -556,6 +564,9 @@ SECTOR_THRESHOLDS = {
         "ev_ebitda": (8, 6, 4, 3),
         "roe": (0.05, 0.10, 0.16, 0.24),
         "net_debt_ebitda": (3.5, 2.5, 1.5, 0.5),
+        "debt_equity": (150, 300, 500, 700),   # V9.2: havayolu/lojistik yüksek borç normaldir
+        "current_ratio": (0.6, 0.9, 1.2, 1.8), # V9.2: ulasim düşük cari oran normaldir
+        "altman_z": (0.5, 1.0, 1.8, 2.8),     # V9.2: havayolları için Z sistematik düşük
     },
     "sanayi": {
         "pe": (20, 14, 8, 5),
@@ -601,8 +612,8 @@ _PENALTY_INT_COV_LOW = [(0, -25), (1.0, -18), (1.5, -12), (2.0, -8), (3.0, -4)]
 _PENALTY_DILUTION = [(0.20, -20), (0.10, -12), (0.05, -6), (0.02, -3)]
 _PENALTY_BENEISH = [(-1.5, -18), (-1.78, -10), (-2.22, -3)]
 
-def _compute_risk_penalties(m):
-    """Kademeli risk penaltileri hesapla — toplam döndür"""
+def _compute_risk_penalties(m, sector_group=None):
+    """Kademeli risk penaltileri hesapla — V9.2: sektör-aware"""
     total = 0
     reasons = []
     # Negatif özsermaye — en ağır
@@ -614,10 +625,15 @@ def _compute_risk_penalties(m):
     # Negatif nakit akış
     if m.get("operating_cf") is not None and m["operating_cf"] < 0:
         total -= 8; reasons.append("Negatif nakit akışı (-8)")
-    # NB/FAVÖK kademeli
+    # NB/FAVÖK kademeli — V9.2: sektör-bazlı eşikler
     nd = m.get("net_debt_ebitda")
     if nd is not None and nd > 0:
-        p = _graduated_penalty(nd, _PENALTY_ND_EBITDA)
+        # Yüksek borçlu sektörlerde eşikler yukarı kaydırılır
+        if sector_group in ("ulasim", "enerji"):
+            nd_thresholds = [(7.0, -25), (5.5, -18), (4.5, -12), (3.5, -8), (3.0, -4)]
+        else:
+            nd_thresholds = _PENALTY_ND_EBITDA
+        p = _graduated_penalty(nd, nd_thresholds)
         if p: total += p; reasons.append(f"Yüksek NB/FAVÖK {nd:.1f}x ({p:+d})")
     # Faiz karşılama kademeli (düşük = kötü)
     ic = m.get("interest_coverage")
@@ -733,6 +749,7 @@ def score_balance(m, sector_group=None):
     th_nde = _get_threshold(sector_group, "net_debt_ebitda", (0.5, 1.5, 2.5, 4.0))
     th_de = _get_threshold(sector_group, "debt_equity", (30, 80, 150, 300))
     th_cr = _get_threshold(sector_group, "current_ratio", (0.8, 1.1, 1.5, 2.2))
+    th_az = _get_threshold(sector_group, "altman_z", (1.2, 1.8, 3.0, 4.5))  # V9.2: sektör-bazlı
     nde = m.get("net_debt_ebitda")
     nde_s = None
     if th_nde:
@@ -741,7 +758,7 @@ def score_balance(m, sector_group=None):
         score_lower(m.get("debt_equity"), *th_de) if th_de else None,
         score_higher(m.get("current_ratio"), *th_cr) if th_cr else None,
         score_higher(m.get("interest_coverage"), 1.5, 3.0, 6.0, 12.0),
-        score_higher(m.get("altman_z"), 1.2, 1.8, 3.0, 4.5),
+        score_higher(m.get("altman_z"), *th_az) if th_az else None,  # V9.2: sektör-aware
     ])
 
 def score_earnings(m):
@@ -765,7 +782,14 @@ def score_moat(m):
     pricing = score_higher(m.get("gross_margin"), 0.12, 0.22, 0.35, 0.50) if m.get("gross_margin") else None
     at_trend = None
     if m.get("asset_turnover") is not None and m.get("asset_turnover_prev") is not None:
-        at_trend = 75 if m["asset_turnover"] >= m["asset_turnover_prev"] else 35
+        # V9.2: Tolerans bandı — |ΔAT| < 0.02 → nötr (55)
+        delta_at = m["asset_turnover"] - m["asset_turnover_prev"]
+        if abs(delta_at) < 0.02:
+            at_trend = 55  # nötr — pratik olarak değişmemiş
+        elif delta_at >= 0:
+            at_trend = 75
+        else:
+            at_trend = 35
     return avg([stab, op_stab, pricing, at_trend])
 
 def score_capital(m):
@@ -1085,8 +1109,8 @@ def analyze_symbol(symbol):
       + 0.10 * scores["earnings"]
       + 0.08 * scores["moat"]
     )
-    # Kademeli penaltiler
-    risk_penalty, risk_reasons = _compute_risk_penalties(m)
+    # Kademeli penaltiler — V9.2: sektör-aware
+    risk_penalty, risk_reasons = _compute_risk_penalties(m, sector_group)
     deger_raw += risk_penalty
     deger_score = round(max(1, min(99, deger_raw)), 1)
 
@@ -1567,27 +1591,27 @@ class CrossHunter:
         new_signals = []
         all_signals = {}
 
-        # V8.1: 14 sinyal — güvenilirlik yıldızları (1-5)
+        # V9.2: 14 sinyal — güvenilirlik yıldızları (1-5) + kategori
         SIGNAL_INFO = {
-            # === MEVCUT (güvenilirlik kalibrasyonu eklendi) ===
-            "Golden Cross":       {"icon": "bullish", "stars": 5, "explanation": "MA50 yukarı kesti MA200'ü — orta/uzun vade yukarı dönüşü. Nadir ve güçlü sinyal."},
-            "Death Cross":        {"icon": "bearish", "stars": 5, "explanation": "MA50 aşağı kesti MA200'ü — orta/uzun vade aşağı dönüşü. Ciddi uyarı."},
-            "MACD Bullish Cross":  {"icon": "bullish", "stars": 3, "explanation": "MACD sinyal çizgisini yukarı kesti — kısa vadeli momentum artıyor."},
-            "MACD Bearish Cross":  {"icon": "bearish", "stars": 3, "explanation": "MACD sinyal çizgisini aşağı kesti — kısa vadeli momentum zayıflıyor."},
-            "RSI Aşırı Alım":     {"icon": "bearish", "stars": 1, "explanation": "RSI 70+ — aşırı alım bölgesi. BIST'te false positive oranı yüksek, dikkatli ol."},
-            "RSI Aşırı Satım":    {"icon": "bullish", "stars": 1, "explanation": "RSI 30- — aşırı satım bölgesi. Dip fırsatı olabilir ama teyit bekle."},
-            "BB Üst Band Kırılım": {"icon": "neutral", "stars": 2, "explanation": "Fiyat Bollinger üst bandını kırdı — momentum güçlü ama geri çekilme riski var."},
-            "BB Alt Band Kırılım": {"icon": "neutral", "stars": 2, "explanation": "Fiyat Bollinger alt bandını kırdı — oversold veya trend devam edebilir."},
-            # === YENİ V2 SİNYALLERİ ===
-            "Ichimoku Kumo Breakout": {"icon": "bullish", "stars": 5, "explanation": "Fiyat Ichimoku bulutu (kumo) üzerine çıktı — güçlü trend değişimi. BIST'te en güvenilir sinyallerden biri."},
-            "Ichimoku Kumo Breakdown": {"icon": "bearish", "stars": 5, "explanation": "Fiyat Ichimoku bulutu altına düştü — trend aşağı dönüyor."},
-            "Ichimoku TK Cross":  {"icon": "bullish", "stars": 4, "explanation": "Tenkan-sen Kijun-sen'i yukarı kesti — Ichimoku'nun golden cross'u, orta vade pozitif."},
-            "VCP Kırılım":        {"icon": "bullish", "stars": 5, "explanation": "Volatilite daralma paterni (VCP) kırılımı — BIST trend piyasasında çok güçlü. Hacimle teyit önemli."},
-            "Rectangle Breakout": {"icon": "bullish", "stars": 4, "explanation": "Konsolidasyon kırılımı — dar aralığı yukarı kırdı. Devam formasyonu."},
-            "Rectangle Breakdown": {"icon": "bearish", "stars": 4, "explanation": "Konsolidasyon kırılımı — dar aralığı aşağı kırdı."},
-            "52W High Breakout":  {"icon": "bullish", "stars": 5, "explanation": "52 haftalık zirveyi kırdı — yeni alan açıyor, trend takipçileri için en güçlü sinyal."},
-            "Direnç Kırılımı":    {"icon": "bullish", "stars": 4, "explanation": "Pivot direnç seviyesi kırıldı — yukarı potansiyel açıyor."},
-            "Destek Kırılımı":    {"icon": "bearish", "stars": 4, "explanation": "Pivot destek seviyesi kırıldı — aşağı risk artıyor."},
+            # === KIRILIMLAR (teknik kırılım sinyalleri) ===
+            "Golden Cross":       {"icon": "bullish", "stars": 5, "category": "kirilim", "explanation": "MA50 yukarı kesti MA200'ü — orta/uzun vade yukarı dönüşü. Nadir ve güçlü sinyal."},
+            "Death Cross":        {"icon": "bearish", "stars": 5, "category": "kirilim", "explanation": "MA50 aşağı kesti MA200'ü — orta/uzun vade aşağı dönüşü. Ciddi uyarı."},
+            "Ichimoku Kumo Breakout": {"icon": "bullish", "stars": 5, "category": "kirilim", "explanation": "Fiyat Ichimoku bulutu (kumo) üzerine çıktı — güçlü trend değişimi. BIST'te en güvenilir sinyallerden biri."},
+            "Ichimoku Kumo Breakdown": {"icon": "bearish", "stars": 5, "category": "kirilim", "explanation": "Fiyat Ichimoku bulutu altına düştü — trend aşağı dönüyor."},
+            "Ichimoku TK Cross":  {"icon": "bullish", "stars": 4, "category": "kirilim", "explanation": "Tenkan-sen Kijun-sen'i yukarı kesti — Ichimoku'nun golden cross'u, orta vade pozitif."},
+            "VCP Kırılım":        {"icon": "bullish", "stars": 5, "category": "kirilim", "explanation": "Volatilite daralma paterni (VCP) kırılımı — BIST trend piyasasında çok güçlü. Hacimle teyit önemli."},
+            "Rectangle Breakout": {"icon": "bullish", "stars": 4, "category": "kirilim", "explanation": "Konsolidasyon kırılımı — dar aralığı yukarı kırdı. Devam formasyonu."},
+            "Rectangle Breakdown": {"icon": "bearish", "stars": 4, "category": "kirilim", "explanation": "Konsolidasyon kırılımı — dar aralığı aşağı kırdı."},
+            "52W High Breakout":  {"icon": "bullish", "stars": 5, "category": "kirilim", "explanation": "52 haftalık zirveyi kırdı — yeni alan açıyor, trend takipçileri için en güçlü sinyal."},
+            "Direnç Kırılımı":    {"icon": "bullish", "stars": 4, "category": "kirilim", "explanation": "Pivot direnç seviyesi kırıldı — yukarı potansiyel açıyor."},
+            "Destek Kırılımı":    {"icon": "bearish", "stars": 4, "category": "kirilim", "explanation": "Pivot destek seviyesi kırıldı — aşağı risk artıyor."},
+            # === MOMENTUMLAR (trend gücü sinyalleri) ===
+            "MACD Bullish Cross":  {"icon": "bullish", "stars": 3, "category": "momentum", "explanation": "MACD sinyal çizgisini yukarı kesti — kısa vadeli momentum artıyor."},
+            "MACD Bearish Cross":  {"icon": "bearish", "stars": 3, "category": "momentum", "explanation": "MACD sinyal çizgisini aşağı kesti — kısa vadeli momentum zayıflıyor."},
+            "RSI Aşırı Alım":     {"icon": "bearish", "stars": 1, "category": "momentum", "explanation": "RSI 70+ — aşırı alım bölgesi. BIST'te false positive oranı yüksek, dikkatli ol."},
+            "RSI Aşırı Satım":    {"icon": "bullish", "stars": 1, "category": "momentum", "explanation": "RSI 30- — aşırı satım bölgesi. Dip fırsatı olabilir ama teyit bekle."},
+            "BB Üst Band Kırılım": {"icon": "neutral", "stars": 2, "category": "momentum", "explanation": "Fiyat Bollinger üst bandını kırdı — momentum güçlü ama geri çekilme riski var."},
+            "BB Alt Band Kırılım": {"icon": "neutral", "stars": 2, "category": "momentum", "explanation": "Fiyat Bollinger alt bandını kırdı — oversold veya trend devam edebilir."},
         }
 
         # Batch download
@@ -1673,11 +1697,12 @@ class CrossHunter:
                 prev = self.prev_signals.get(t, set())
                 for sig in signals:
                     if sig not in prev:
-                        si = SIGNAL_INFO.get(sig, {"icon": "neutral", "stars": 1, "explanation": ""})
+                        si = SIGNAL_INFO.get(sig, {"icon": "neutral", "stars": 1, "explanation": "", "category": "momentum"})
                         new_signals.append({
                             "signal": sig,
                             "signal_type": si["icon"],
                             "stars": si["stars"],
+                            "category": si.get("category", "momentum"),  # V9.2
                             "explanation": si["explanation"],
                             "vol_confirmed": vol_confirmed,
                             **details,
@@ -1710,24 +1735,61 @@ cross_hunter = CrossHunter()
 # ================================================================
 def _analyze_safe(ticker):
     try:
-        return analyze_symbol(normalize_symbol(ticker))
+        r = analyze_symbol(normalize_symbol(ticker))
+        # V9.2: Update progress
+        _SCAN_STATUS["progress"] += 1
+        return r
     except Exception as e:
+        _SCAN_STATUS["progress"] += 1
         log.debug(f"scan skip {ticker}: {e}")
         return None
 
 def scan_universe_blocking():
-    ranked = []
-    with ThreadPoolExecutor(max_workers=min(25, len(UNIVERSE))) as pool:
-        futures = {pool.submit(_analyze_safe, t): t for t in UNIVERSE}
-        for future in as_completed(futures):
-            r = future.result()
-            if r and r["confidence"] >= CONFIDENCE_MIN:
-                ranked.append(r)
-    ranked.sort(key=lambda x: (x["overall"], x["scores"]["quality"]), reverse=True)
-    TOP10_CACHE["asof"] = dt.datetime.now(dt.timezone.utc)
-    TOP10_CACHE["items"] = ranked
-    log.info(f"Scan tamamlandi: {len(ranked)} hisse")
-    return ranked
+    """V9.2: Lock-protected scan with progress tracking"""
+    acquired = _SCAN_LOCK.acquire(blocking=False)
+    if not acquired:
+        log.info("Scan zaten çalışıyor, skip")
+        # Return existing data if available
+        return TOP10_CACHE.get("items", [])
+    try:
+        _SCAN_STATUS.update({"running": True, "phase": "raw_fetch", "progress": 0, "total": len(UNIVERSE), "started": time.time()})
+        
+        # V9.2 P1: Batch pre-warm RAW_CACHE (8 parallel, throttled)
+        symbols_to_fetch = [normalize_symbol(t) for t in UNIVERSE if normalize_symbol(t) not in RAW_CACHE]
+        if symbols_to_fetch:
+            log.info(f"Pre-warm: {len(symbols_to_fetch)} hisse raw data çekilecek")
+            with ThreadPoolExecutor(max_workers=8) as pool:
+                def _fetch_safe(sym):
+                    try:
+                        fetch_raw(sym)
+                    except Exception as e:
+                        log.debug(f"pre-warm skip {sym}: {e}")
+                futs = [pool.submit(_fetch_safe, s) for s in symbols_to_fetch]
+                for f in as_completed(futs):
+                    f.result()  # propagate exceptions if any
+            log.info(f"Pre-warm tamamlandı: {len(RAW_CACHE)} cached")
+        
+        _SCAN_STATUS["phase"] = "analyzing"
+        _SCAN_STATUS["progress"] = 0
+        
+        ranked = []
+        with ThreadPoolExecutor(max_workers=min(15, len(UNIVERSE))) as pool:
+            futures = {pool.submit(_analyze_safe, t): t for t in UNIVERSE}
+            for future in as_completed(futures):
+                r = future.result()
+                if r and r["confidence"] >= CONFIDENCE_MIN:
+                    ranked.append(r)
+        ranked.sort(key=lambda x: (x["overall"], x["scores"]["quality"]), reverse=True)
+        TOP10_CACHE["asof"] = dt.datetime.now(dt.timezone.utc)
+        TOP10_CACHE["items"] = ranked
+        _SCAN_STATUS.update({"running": False, "phase": "done", "progress": len(UNIVERSE), "total": len(UNIVERSE)})
+        log.info(f"Scan tamamlandi: {len(ranked)} hisse ({time.time()-_SCAN_STATUS['started']:.1f}s)")
+        return ranked
+    except Exception as e:
+        _SCAN_STATUS.update({"running": False, "phase": "error"})
+        raise
+    finally:
+        _SCAN_LOCK.release()
 
 # ================================================================
 # PIYASA DURUMU — tatil, seans saati, açık/kapalı kontrolü
@@ -1856,26 +1918,28 @@ def is_scan_worthwhile():
 # BACKGROUND AUTO-SCAN — respects market hours
 # ================================================================
 async def _background_scanner():
-    await asyncio.sleep(3)  # let server start
+    await asyncio.sleep(2)  # let server start
     while True:
         try:
             if is_scan_worthwhile():
                 log.info("Background scan başladı...")
+                t0 = time.time()
 
-                # P1 FIX: Batch history'yi bir kere indir, HISTORY_CACHE'e yaz
-                # scan_universe → analyze_symbol → compute_technical HISTORY_CACHE'den okur
-                # cross_hunter.scan_all da HISTORY_CACHE'den okur (TECH_CACHE hit eder)
+                # P1: Batch history'yi bir kere indir, HISTORY_CACHE'e yaz
                 symbols = [normalize_symbol(t) for t in UNIVERSE]
                 history_map = await asyncio.to_thread(
                     batch_download_history, symbols, "1y", "1d"
                 )
                 for sym, hist_df in history_map.items():
                     HISTORY_CACHE[sym] = hist_df
-                log.info(f"Batch history indirildi: {len(history_map)} sembol")
+                log.info(f"Batch history indirildi: {len(history_map)} sembol ({time.time()-t0:.1f}s)")
 
+                # P2: Full scan (lock-protected, includes raw pre-warm)
                 await asyncio.to_thread(scan_universe_blocking)
+                
+                # P3: Cross hunter (uses HISTORY_CACHE + TECH_CACHE)
                 await asyncio.to_thread(cross_hunter.scan_all)
-                log.info(f"Background scan tamamlandı. {len(TOP10_CACHE['items'])} hisse, {len(cross_hunter.last_results)} sinyal")
+                log.info(f"Background scan tamamlandı: {len(TOP10_CACHE['items'])} hisse, {len(cross_hunter.last_results)} sinyal ({time.time()-t0:.1f}s)")
 
                 # Pre-compute top 5 AI summaries
                 if AI_AVAILABLE and TOP10_CACHE["items"]:
@@ -2036,7 +2100,13 @@ async def api_top10():
 
 @app.get("/api/scan")
 async def api_scan():
-    """Trigger full universe scan"""
+    """Trigger full universe scan — V9.2: returns cached if already running"""
+    if _SCAN_STATUS["running"]:
+        # Don't trigger another scan, return whatever we have
+        if TOP10_CACHE["items"]:
+            items = [_build_scan_item(r) for r in TOP10_CACHE["items"]]
+            return {"asof": TOP10_CACHE["asof"].isoformat() if TOP10_CACHE["asof"] else None, "items": clean_for_json(items), "total_scanned": len(UNIVERSE), "scan_running": True}
+        return {"asof": None, "items": [], "total_scanned": 0, "message": "Tarama devam ediyor...", "scan_running": True}
     try:
         ranked = await asyncio.to_thread(scan_universe_blocking)
         items = [_build_scan_item(r) for r in ranked]
@@ -2044,6 +2114,19 @@ async def api_scan():
     except Exception as e:
         log.error(f"scan: {e}")
         raise HTTPException(status_code=500, detail="Scan başarısız")
+
+@app.get("/api/scan-status")
+async def api_scan_status():
+    """V9.2: Scan progress — frontend polling"""
+    return {
+        "running": _SCAN_STATUS["running"],
+        "phase": _SCAN_STATUS["phase"],
+        "progress": _SCAN_STATUS["progress"],
+        "total": _SCAN_STATUS["total"],
+        "has_data": bool(TOP10_CACHE["items"]),
+        "asof": TOP10_CACHE["asof"].isoformat() if TOP10_CACHE["asof"] else None,
+        "elapsed": round(time.time() - _SCAN_STATUS["started"], 1) if _SCAN_STATUS["started"] and _SCAN_STATUS["running"] else None,
+    }
 
 @app.get("/api/cross")
 async def api_cross():
@@ -2075,12 +2158,16 @@ async def api_cross():
             except Exception as e:
                 log.debug(f"cross AI: {e}")
 
+        kirilim_count = sum(1 for s in new_signals if s.get("category") == "kirilim")
+        momentum_count = sum(1 for s in new_signals if s.get("category") == "momentum")
+
         return {
             "timestamp": dt.datetime.now(dt.timezone.utc).isoformat(),
             "signals": clean_for_json(new_signals),
             "ai_commentary": ai_commentary,
             "summary": {
                 "total": len(new_signals), "bullish": bullish, "bearish": bearish,
+                "kirilim": kirilim_count, "momentum": momentum_count,  # V9.2
                 "total_stars": total_stars, "vol_confirmed": vol_confirmed,
                 "scanned": len(UNIVERSE),
             },
@@ -2099,7 +2186,8 @@ async def api_health():
         "universe": len(UNIVERSE),
         "ai": AI_PROVIDERS or False,
         "chart": CHART_AVAILABLE,
-        "scanning": TOP10_CACHE["asof"] is None,
+        "scanning": _SCAN_STATUS["running"],
+        "scan_phase": _SCAN_STATUS["phase"],
         "market": ms,
         "cache": {"raw": len(RAW_CACHE), "analysis": len(ANALYSIS_CACHE), "tech": len(TECH_CACHE)},
     }
