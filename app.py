@@ -53,6 +53,7 @@ from engine.technical import (
     batch_download_history, cross_hunter, CHART_AVAILABLE,
 )
 from data.macro import fetch_all_macro, is_yfinance_available
+from engine.signal_tracker import signal_tracker
 
 try:
     import yfinance as yf
@@ -151,6 +152,118 @@ async def _background_scanner():
 # ================================================================
 # LIFESPAN
 # ================================================================
+# ================================================================
+# PAPER TRADE CHECKER — Background price tracker
+# ================================================================
+async def _paper_trade_checker() -> None:
+    """
+    Her 5 dakikada bir aktif sinyallerin anlık fiyatlarını çeker,
+    TP ve SL kontrolü yapar, SignalTracker'ı günceller.
+
+    Fiyat kaynağı önceliği:
+      1. yfinance batch download (hızlı, düşük bant genişliği)
+      2. compute_technical() bireysel çağrı (yavaş, fallback)
+      3. tech_cache'den son bilinen fiyat (statik ama hiç yoktan iyi)
+    """
+    await asyncio.sleep(90)  # İlk başlangıçta 90sn bekle (yfinance soğuma süresi)
+
+    while True:
+        try:
+            active = signal_tracker.get_all_active()
+
+            if not active:
+                log.debug("PaperTrade: Aktif sinyal yok, kontrol atlanıyor")
+                await asyncio.sleep(300)
+                continue
+
+            tickers = list({s["ticker"] for s in active})
+            log.info(f"PaperTrade: {len(tickers)} ticker fiyat kontrolü başladı")
+            price_map: dict[str, float] = {}
+
+            # ── 1. yfinance batch download (tercih edilen) ──────────────
+            if YF_AVAILABLE and tickers:
+                try:
+                    symbols = [normalize_symbol(t) for t in tickers]
+                    # Sadece son 2 günü çek — minimum bant genişliği
+                    raw_df = await asyncio.to_thread(
+                        yf.download,
+                        symbols if len(symbols) > 1 else symbols[0],
+                        period="2d",
+                        progress=False,
+                        threads=True,
+                    )
+                    if raw_df is not None and not raw_df.empty:
+                        for t in tickers:
+                            sym = normalize_symbol(t)
+                            try:
+                                if len(tickers) == 1:
+                                    price_val = float(raw_df["Close"].iloc[-1])
+                                else:
+                                    # MultiIndex DataFrame
+                                    col_key = ("Close", sym)
+                                    if col_key in raw_df.columns:
+                                        price_val = float(raw_df[col_key].iloc[-1])
+                                    elif sym in raw_df.get("Close", {}):
+                                        price_val = float(raw_df["Close"][sym].iloc[-1])
+                                    else:
+                                        continue
+                                if price_val > 0:
+                                    price_map[t] = round(price_val, 4)
+                            except Exception as e:
+                                log.debug(f"PaperTrade fiyat parse [{t}]: {e}")
+                    log.debug(f"PaperTrade yfinance: {len(price_map)}/{len(tickers)} fiyat alındı")
+                except Exception as e:
+                    log.warning(f"PaperTrade yfinance batch hatası: {e}")
+
+            # ── 2. Eksik kalanlar için tech_cache fallback ──────────────
+            missing = [t for t in tickers if t not in price_map]
+            if missing:
+                for t in missing:
+                    try:
+                        sym = normalize_symbol(t)
+                        cached_tech = tech_cache.get(sym)
+                        if cached_tech and cached_tech.get("price") and cached_tech["price"] > 0:
+                            price_map[t] = round(float(cached_tech["price"]), 4)
+                    except Exception:
+                        pass
+
+            # ── 3. Hâlâ eksik olanlar için bireysel compute_technical ──
+            still_missing = [t for t in tickers if t not in price_map]
+            if still_missing and YF_AVAILABLE:
+                for t in still_missing[:5]:  # Max 5 bireysel çağrı
+                    try:
+                        tech = await asyncio.to_thread(
+                            compute_technical, normalize_symbol(t)
+                        )
+                        if tech and tech.get("price") and float(tech["price"]) > 0:
+                            price_map[t] = round(float(tech["price"]), 4)
+                        await asyncio.sleep(0.5)  # Rate limit koruması
+                    except Exception as e:
+                        log.debug(f"PaperTrade compute_technical [{t}]: {e}")
+
+            # ── TP/SL kontrolü ──────────────────────────────────────────
+            if price_map:
+                counts = await asyncio.to_thread(signal_tracker.update_prices, price_map)
+                log.info(
+                    f"PaperTrade tamamlandı: "
+                    f"TP={counts['tp']} SL={counts['sl']} "
+                    f"Aktif={counts['still_active']} "
+                    f"FiyatYok={counts['no_price']}"
+                )
+            else:
+                log.warning(f"PaperTrade: Hiç fiyat alınamadı, {len(active)} sinyal güncellenemedi")
+
+            # Günlük temizlik (01:00-02:00 arasında)
+            current_hour = dt.datetime.now().hour
+            if current_hour == 1:
+                await asyncio.to_thread(signal_tracker.purge_old)
+
+        except Exception as e:
+            log.error(f"PaperTrade checker genel hata: {e}", exc_info=True)
+
+        await asyncio.sleep(300)  # 5 dakika
+
+
 @asynccontextmanager
 async def lifespan(application: FastAPI):
     redis_client.startup()
@@ -162,8 +275,11 @@ async def lifespan(application: FastAPI):
         f"Restore: {restore_results}"
     )
     task = asyncio.create_task(_background_scanner())
+    paper_task = asyncio.create_task(_paper_trade_checker())
+    log.info(f"SignalTracker: {signal_tracker} başlatıldı")
     yield
     task.cancel()
+    paper_task.cancel()
     redis_client.shutdown()
     log.info(f"{APP_NAME} shutting down")
 
@@ -293,6 +409,17 @@ async def api_cross():
                 ai_commentary = await asyncio.to_thread(ai_call, prompt, 250)
             except Exception as e:
                 log.debug(f"cross AI: {e}")
+        # ── Paper Trade motoru: yeni sinyalleri kaydet ──────────────
+        if new_signals:
+            try:
+                logged = await asyncio.to_thread(
+                    signal_tracker.log_signals, new_signals, "1G"
+                )
+                if logged > 0:
+                    log.info(f"PaperTrade: {logged} yeni sinyal kaydedildi")
+            except Exception as e:
+                log.warning(f"PaperTrade log_signals hatası: {e}")
+
         return success({
             "signals": new_signals, "ai_commentary": ai_commentary,
             "summary": {"total": len(new_signals), "bullish": bullish, "bearish": bearish,
@@ -303,6 +430,39 @@ async def api_cross():
     except Exception as e:
         log.error(f"cross: {e}")
         return error("Cross Hunter hatası", status_code=500)
+
+# ================================================================
+# SIGNALS TRACK RECORD — Paper Trade sonuçları
+# ================================================================
+@app.get("/api/signals/track-record")
+async def api_signals_track_record(days: int = 30):
+    """
+    CrossHunter sinyallerinin gerçek zamanlı Track Record istatistiklerini döndürür.
+
+    Response:
+        period_days    : Kaç günlük veri
+        total          : Toplam sinyal sayısı
+        tp             : Hedef vuran sinyal sayısı
+        sl             : Stop olan sinyal sayısı
+        active         : Hâlâ açık sinyal sayısı
+        win_rate       : Başarı oranı (%) — sadece kapanan pozisyonlar
+        avg_pnl_pct    : Ortalama getiri (%)
+        best_pnl_pct   : En iyi getiri (%)
+        worst_pnl_pct  : En kötü getiri (%)
+        active_signals : Aktif pozisyonların tam listesi
+        recent_closed  : Son 30 kapanan pozisyon
+        by_timeframe   : Zaman dilimine göre breakdown
+        generated_at   : Hesaplama zamanı (UTC ISO)
+    """
+    try:
+        # days parametresini 1-365 arasında sınırla
+        days = max(1, min(365, days))
+        record = await asyncio.to_thread(signal_tracker.get_track_record, days)
+        return success(record, as_of=record["generated_at"])
+    except Exception as e:
+        log.error(f"track-record: {e}")
+        return error("Track Record alınamadı", status_code=500)
+
 
 # ================================================================
 # HEALTH & STATUS
