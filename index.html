@@ -79,7 +79,16 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg0);color:var(
 .wl-item{display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--bdr);min-height:44px}.wl-item:last-child{border:0}.wl-tick{font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:700;color:var(--cyn);cursor:pointer}.wl-tick:hover{text-decoration:underline}.wl-rm{background:0;border:0;color:var(--t4);cursor:pointer;font-size:14px;width:44px;height:44px;display:flex;align-items:center;justify-content:center}.wl-rm:hover{color:var(--red)}
 
 /* BUTTONS */
-.btn{font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:600;padding:8px 18px;border:0;border-radius:var(--rad);cursor:pointer;text-transform:uppercase;letter-spacing:.5px;transition:.2s;color:var(--t1);min-height:44px;display:inline-flex;align-items:center;justify-content:center}.btn:disabled{opacity:.4;cursor:not-allowed}.btn-grn{background:linear-gradient(135deg,var(--acc),var(--acc2));color:#000}.btn-grn:hover:not(:disabled){box-shadow:0 4px 16px var(--accd);transform:translateY(-1px)}.btn-orn{background:linear-gradient(135deg,var(--orn),#ff6d00);color:#000}.btn-blu{background:linear-gradient(135deg,var(--blu),#1565c0);color:#fff}.btn-cyn{background:linear-gradient(135deg,var(--cyn),#00838f);color:#000}.btn-sm{font-size:9px;padding:4px 10px;min-height:32px}
+.btn{font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:600;padding:8px 18px;border:0;border-radius:var(--rad);cursor:pointer;text-transform:uppercase;letter-spacing:.5px;transition:.2s;color:var(--t1);min-height:44px;display:inline-flex;align-items:center;justify-content:center}.btn:disabled{opacity:.4;cursor:not-allowed}.btn-grn{background:linear-gradient(135deg,var(--acc),var(--acc2));color:#000}.btn-grn:hover:not(:disabled){box-shadow:0 4px 16px var(--accd);transform:translateY(-1px)}.btn-orn{background:linear-gradient(135deg,var(--orn),#ff6d00);color:#000}.btn-blu{background:linear-gradient(135deg,var(--blu),#1565c0);color:#fff}.btn-cyn{background:linear-gradient(135deg,var(--cyn),#00838f);color:#000}.btn-sm{font-size:9px;padding:4px 10px;min-height:32px}.btn-dim{background:var(--bg3);color:var(--t3);border:1px solid var(--bdr)}
+/* GLASSMORPHISM TOOLTIP */
+#bbTip{display:none;position:fixed;z-index:9999;pointer-events:none;min-width:210px;max-width:280px;padding:12px 16px;background:rgba(10,14,20,.88);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid rgba(255,255,255,.1);border-radius:10px;font-family:'JetBrains Mono',monospace;font-size:11px;color:#e0e0e0;line-height:1.7;box-shadow:0 8px 32px rgba(0,0,0,.45)}
+#bbTip .tt-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+#bbTip .tt-tick{font-size:13px;font-weight:700;color:#fff}
+#bbTip .tt-dec{font-size:9px;padding:2px 8px;border-radius:4px;font-weight:600}
+#bbTip .tt-sub{font-size:10px;color:#78909c;margin-bottom:8px}
+#bbTip .tt-grid{display:grid;grid-template-columns:1fr 1fr;gap:2px 14px}
+#bbTip .tt-lbl{color:#607d8b}
+#bbTip .tt-val{text-align:right;font-weight:600}
 
 /* OVERLAY / DETAIL PANEL */
 .ov{position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:200;display:none;backdrop-filter:blur(4px)}.ov.open{display:flex;justify-content:center;align-items:flex-start;padding-top:32px}
@@ -363,8 +372,8 @@ h+=`<div class="g2" style="margin-bottom:20px"><div class="card"><div class="car
 // === 5. TOP 10 TABLE ===
 if(hasSc){h+=`<div class="card" style="margin-bottom:20px"><div class="card-h"><span class="card-t">🏛️ Top 10 — Temel Analiz Radar</span><button class="btn btn-sm btn-grn" onclick="goPage('radar')">TÜMÜ →</button></div><div style="padding:8px 16px;background:var(--bg3);border-bottom:1px solid var(--bdr);font-size:var(--fs-xs);color:var(--t3)">Uzun vadeli değer tarayıcı — Değerleme, Kalite, Bilanço, Büyüme</div><div class="card-b" style="overflow-x:auto">${renderRadarTbl(sc.items.slice(0,10),S._radarSort||'deger')}</div></div>`;}
 
-// === 6. SEKTÖR + HEATMAP ===
-h+=`<div class="g2" style="margin-bottom:20px"><div class="card"><div class="card-h"><span class="card-t">🏢 Sektör Güç Haritası</span></div><div class="card-b">${hr&&hr.strong_sectors?renderSectorCards(hr):(hasD&&d.sectors?renderSectors(d.sectors):'<p style="color:var(--t3)">Tarama sonrası</p>')}</div></div><div class="card"><div class="card-h"><span class="card-t">🔥 Sektörel Isı Haritası</span><button class="btn btn-sm btn-orn" onclick="S._heatLoaded=false;loadHeatmap()">🔄</button></div><div class="card-b">${S.heatmapHtml||'<div style="color:var(--t4);font-size:var(--fs-sm)">Yükleniyor...</div>'}</div></div></div>`;
+// === 6. SEKTÖR + HEATMAP + ALPHA QUADRANT ===
+h+=`<div class="g2" style="margin-bottom:20px"><div class="card"><div class="card-h"><span class="card-t">🏢 Sektör Güç Haritası</span></div><div class="card-b">${hr&&hr.strong_sectors?renderSectorCards(hr):(hasD&&d.sectors?renderSectors(d.sectors):'<p style="color:var(--t3)">Tarama sonrası</p>')}</div></div><div class="card"><div class="card-h" style="display:flex;justify-content:space-between;align-items:center"><div style="display:flex;gap:4px"><button class="btn btn-sm ${S._vizTab!=='alpha'?'btn-orn':'btn-dim'}" onclick="S._vizTab='heat';renderHome()">🔥 Isı Haritası</button><button class="btn btn-sm ${S._vizTab==='alpha'?'btn-blu':'btn-dim'}" onclick="S._vizTab='alpha';renderHome()">🎯 Alpha Quadrant</button></div><button class="btn btn-sm btn-orn" onclick="S._heatLoaded=false;loadHeatmap()">🔄</button></div><div class="card-b">${S._vizTab==='alpha'?(S.alphaHtml||'<div style="color:var(--t4);font-size:var(--fs-sm)">Scan sonrası aktif olacak</div>'):(S.heatmapHtml||'<div style="color:var(--t4);font-size:var(--fs-sm)">Yükleniyor...</div>')}</div></div></div>`;
 
 // === 7. KARSILASTIRMA ===
 h+=`<div class="card" style="margin-bottom:20px"><div class="card-h"><span class="card-t">📊 Neden BistBull?</span></div><div class="card-b" style="overflow-x:auto">`;
@@ -495,19 +504,25 @@ function dtab(btn,id){btn.closest('.dp-tabs').querySelectorAll('.dp-tab').forEac
 function openD(){$('ov').classList.add('open');document.body.style.overflow='hidden';}
 function closeD(){$('ov').classList.remove('open');document.body.style.overflow='';if(S.page==='home')renderHome();}
 
-// ===== HEATMAP =====
+// ===== TOOLTIP HELPERS =====
+function _decCol(d){return d==='AL'?'#00e676':d==='İZLE'?'#ffb300':d==='BEKLE'?'#78909c':'#ef5350';}
+function _showTip(e,html){const t=$('bbTip');if(!t)return;t.innerHTML=html;t.style.display='block';const bx=t.getBoundingClientRect();let tx=e.clientX+14,ty=e.clientY-10;if(tx+bx.width>window.innerWidth-10)tx=e.clientX-bx.width-14;if(ty+bx.height>window.innerHeight-10)ty=window.innerHeight-bx.height-10;if(ty<10)ty=10;t.style.left=tx+'px';t.style.top=ty+'px';}
+function _moveTip(e){const t=$('bbTip');if(!t||t.style.display==='none')return;const bx=t.getBoundingClientRect();let tx=e.clientX+14,ty=e.clientY-10;if(tx+bx.width>window.innerWidth-10)tx=e.clientX-bx.width-14;if(ty+bx.height>window.innerHeight-10)ty=window.innerHeight-bx.height-10;if(ty<10)ty=10;t.style.left=tx+'px';t.style.top=ty+'px';}
+function _hideTip(){const t=$('bbTip');if(t)t.style.display='none';}
+
+// ===== HEATMAP — Finviz-grade treemap + glassmorphism tooltip =====
 async function loadHeatmap(){
   try{
     const d=await api('/api/heatmap');
     if(!d.sectors||!d.sectors.length){S.heatmapHtml='<p style="color:var(--t4);font-size:12px">Tarama sonrası gelecek</p>';return;}
-    // Treemap renk skalası — canlı
+    // 7-grade renk skalası: koyu kırmızı → siyah → neon yeşil
     function heatCol(chg){
-      if(chg>=3)return'#00e676';if(chg>=1.5)return'#00c853';if(chg>=0.5)return'#2e7d32';
-      if(chg>=-0.5)return'#455a64';
-      if(chg>=-1.5)return'#c62828';if(chg>=-3)return'#b71c1c';return'#7f0000';
+      if(chg>=3)return'#00e676';if(chg>=2)return'#00c853';if(chg>=1)return'#2e7d32';if(chg>=0.3)return'#1b5e20';
+      if(chg>=-0.3)return'#37474f';
+      if(chg>=-1)return'#b71c1c';if(chg>=-2)return'#991b1b';if(chg>=-3)return'#7f1d1d';return'#4a0000';
     }
     // Squarified treemap layout
-    function treemap(items,x,y,w,h){
+    function sqr(items,x,y,w,h){
       if(!items.length)return;
       if(items.length===1){items[0]._r={x,y,w,h};return;}
       const total=items.reduce((s,i)=>s+(i._v||1),0);
@@ -530,50 +545,165 @@ async function loadHeatmap(){
       if(isH){
         const sw=w*frac;let cy=y;
         for(const ri of row){const ih=h*((ri._v||1)/rowSum);ri._r={x,y:cy,w:sw,h:ih};cy+=ih;}
-        treemap(items.slice(row.length),x+sw,y,w-sw,h);
+        sqr(items.slice(row.length),x+sw,y,w-sw,h);
       }else{
         const sh=h*frac;let cx=x;
         for(const ri of row){const iw=w*((ri._v||1)/rowSum);ri._r={x:cx,y,w:iw,h:sh};cx+=iw;}
-        treemap(items.slice(row.length),x,y+sh,w,h-sh);
+        sqr(items.slice(row.length),x,y+sh,w,h-sh);
       }
     }
-    // Flatten all stocks, sort by mcap desc
+    // Scan verisinden zenginleştirme (Piotroski, Altman, AI karar)
+    const scanMap={};
+    if(S.scan&&S.scan.items){S.scan.items.forEach(it=>{scanMap[it.ticker]=it;});}
+    // Flatten, sort, layout
     const allStocks=[];
     d.sectors.forEach(sec=>{sec.stocks.forEach(st=>{allStocks.push({...st,sector:sec.sector});});});
     allStocks.sort((a,b)=>(b.market_cap||0)-(a.market_cap||0));
     allStocks.forEach(s=>{s._v=Math.max(s.market_cap||1,1);});
     const W=750,H=420;
-    treemap(allStocks,0,0,W,H);
-    // Sector label positions
-    const sectorBounds={};
-    allStocks.forEach(s=>{
-      if(!s._r)return;
-      if(!sectorBounds[s.sector])sectorBounds[s.sector]={x:s._r.x,y:s._r.y,x2:s._r.x+s._r.w,y2:s._r.y+s._r.h};
-      const b=sectorBounds[s.sector];
-      b.x=Math.min(b.x,s._r.x);b.y=Math.min(b.y,s._r.y);
-      b.x2=Math.max(b.x2,s._r.x+s._r.w);b.y2=Math.max(b.y2,s._r.y+s._r.h);
-    });
-    let h2=`<div style="position:relative;width:100%;max-width:${W}px;height:${H}px;overflow:hidden;border-radius:var(--rad);border:1px solid var(--bdr)">`;
-    allStocks.forEach(s=>{
+    sqr(allStocks,0,0,W,H);
+    // Store for tooltip lookup
+    window._heatStocks=allStocks;
+    window._heatScanMap=scanMap;
+    // Build HTML
+    let h2=`<div style="position:relative;width:100%;max-width:${W}px;height:${H}px;overflow:hidden;border-radius:var(--rad);border:1px solid var(--bdr);background:#0c0f14">`;
+    allStocks.forEach((s,idx)=>{
       if(!s._r)return;
       const r=s._r;const chg=s.change_pct||0;
-      const bg=heatCol(chg);const fs=r.w>70&&r.h>35?11:r.w>45&&r.h>25?9:7;
-      const showPct=r.w>30&&r.h>20;const showName=r.w>40&&r.h>18;
-      h2+=`<div onclick="loadTicker('${esc(s.ticker)}')" style="position:absolute;left:${r.x.toFixed(1)}px;top:${r.y.toFixed(1)}px;width:${r.w.toFixed(1)}px;height:${r.h.toFixed(1)}px;background:${bg};display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;border:0.5px solid rgba(0,0,0,.3);overflow:hidden;box-sizing:border-box">`;
-      if(showName)h2+=`<div style="font-family:'JetBrains Mono',monospace;font-size:${fs}px;font-weight:700;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.5);line-height:1.1">${esc(s.ticker)}</div>`;
-      if(showPct)h2+=`<div style="font-family:'JetBrains Mono',monospace;font-size:${Math.max(fs-1,7)}px;font-weight:700;color:${chg>=0?'#e8f5e9':'#ffcdd2'};text-shadow:0 1px 2px rgba(0,0,0,.4)">${chg>=0?'+':''}${chg.toFixed(1)}%</div>`;
+      const bg=heatCol(chg);const fs=r.w>70&&r.h>35?12:r.w>50&&r.h>28?10:r.w>35&&r.h>20?8:0;
+      const showPct=r.w>32&&r.h>22;
+      h2+=`<div onclick="loadTicker('${esc(s.ticker)}')" onmouseenter="_heatTip(event,${idx})" onmousemove="_moveTip(event)" onmouseleave="_hideTip()" style="position:absolute;left:${r.x.toFixed(1)}px;top:${r.y.toFixed(1)}px;width:${r.w.toFixed(1)}px;height:${r.h.toFixed(1)}px;background:${bg};display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;border:0.5px solid rgba(0,0,0,.35);overflow:hidden;box-sizing:border-box;transition:filter .12s" onmousedown="this.style.filter='brightness(1.3)'" onmouseup="this.style.filter=''">`;
+      if(fs>0)h2+=`<div style="font-family:'JetBrains Mono',monospace;font-size:${fs}px;font-weight:700;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.6);letter-spacing:.3px;line-height:1.1">${esc(s.ticker)}</div>`;
+      if(showPct)h2+=`<div style="font-family:'JetBrains Mono',monospace;font-size:${Math.max(fs-1,8)}px;font-weight:600;color:${chg>=0?'#c8e6c9':'#ffcdd2'};text-shadow:0 1px 2px rgba(0,0,0,.5)">${chg>=0?'+':''}${chg.toFixed(1)}%</div>`;
       h2+=`</div>`;
     });
     h2+=`</div>`;
-    // Sector legend
-    h2+=`<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;font-family:'JetBrains Mono',monospace;font-size:9px">`;
+    // Renk skalası legend
+    h2+=`<div style="margin-top:8px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px"><div style="display:flex;gap:3px;align-items:center;font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--t4)"><span style="display:inline-block;width:10px;height:10px;background:#4a0000;border-radius:2px"></span><span>-3%</span>`;
+    ['#7f1d1d','#991b1b','#b71c1c','#37474f','#1b5e20','#2e7d32','#00c853','#00e676'].forEach(c=>{h2+=`<span style="display:inline-block;width:10px;height:10px;background:${c};border-radius:2px"></span>`;});
+    h2+=`<span>+3%</span></div>`;
+    // Sektör legend
+    h2+=`<div style="display:flex;gap:4px;flex-wrap:wrap;font-family:'JetBrains Mono',monospace;font-size:9px">`;
     d.sectors.forEach(sec=>{
       const col=sec.avg_change>=0?'var(--grn)':'var(--red)';
-      h2+=`<span style="padding:2px 6px;background:var(--bg3);border:1px solid var(--bdr);border-radius:3px"><span style="color:var(--t2)">${esc(sec.sector.slice(0,15))}</span> <span style="color:${col};font-weight:700">${sec.avg_change>=0?'+':''}${sec.avg_change.toFixed(1)}%</span></span>`;
+      h2+=`<span style="padding:2px 6px;background:var(--bg3);border:1px solid var(--bdr);border-radius:3px"><span style="color:var(--t2)">${esc(sec.sector.slice(0,12))}</span> <span style="color:${col};font-weight:700">${sec.avg_change>=0?'+':''}${sec.avg_change.toFixed(1)}%</span></span>`;
     });
-    h2+=`</div>`;
+    h2+=`</div></div>`;
     S.heatmapHtml=h2;
-  }catch(e){S.heatmapHtml='';}
+  }catch(e){S.heatmapHtml='<p style="color:var(--red);font-size:11px">Heatmap yüklenemedi</p>';}
+}
+// Glassmorphism tooltip builder — scan data enriched
+function _heatTip(e,idx){
+  const s=window._heatStocks?.[idx];if(!s)return;
+  const si=window._heatScanMap?.[s.ticker];
+  const dec=si?.decision||'—';const decBg=_decCol(dec);
+  const pf=si?.legendary?.piotroski||'—';
+  const az=si?.legendary?.altman||'—';
+  const bn=si?.legendary?.beneish||'—';
+  const deger=si?.deger||si?.overall||'—';
+  const ivme=si?.ivme||'—';
+  const sty=si?.style||'—';
+  const chg=s.change_pct||0;
+  let html=`<div class="tt-head"><span class="tt-tick">${esc(s.ticker)}</span><span class="tt-dec" style="background:${decBg}22;color:${decBg}">${dec}</span></div>`;
+  html+=`<div class="tt-sub">${esc(s.sector)} · ${sty}</div>`;
+  html+=`<div class="tt-grid">`;
+  html+=`<span class="tt-lbl">Fiyat</span><span class="tt-val" style="color:#fff">${s.price?('₺'+s.price.toLocaleString('tr-TR')):'—'}</span>`;
+  html+=`<span class="tt-lbl">Gün</span><span class="tt-val" style="color:${chg>=0?'#69f0ae':'#ef9a9a'}">${chg>=0?'+':''}${chg.toFixed(2)}%</span>`;
+  html+=`<span class="tt-lbl">Değer</span><span class="tt-val" style="color:#22d3ee">${deger}</span>`;
+  html+=`<span class="tt-lbl">İvme</span><span class="tt-val" style="color:#a78bfa">${ivme}</span>`;
+  html+=`<span class="tt-lbl">Piotroski</span><span class="tt-val">${pf}</span>`;
+  html+=`<span class="tt-lbl">Altman Z</span><span class="tt-val">${az}</span>`;
+  html+=`<span class="tt-lbl">Beneish</span><span class="tt-val">${bn}</span>`;
+  html+=`</div>`;
+  _showTip(e,html);
+}
+
+// ===== ALPHA QUADRANT — 4-bölgeli scatter/bubble chart =====
+function renderAlphaQuadrant(){
+  if(!S.scan||!S.scan.items||!S.scan.items.length){S.alphaHtml='<div style="color:var(--t4);font-size:12px;text-align:center;padding:40px 0">Scan sonrası Alpha Quadrant aktif olacak</div>';return;}
+  const items=S.scan.items;
+  const maxMc=Math.max(...items.map(i=>i.market_cap||0),1);
+  // Quadrant label hesapla
+  const alphaCount=items.filter(i=>(i.deger||i.overall||0)>=55&&(i.ivme||0)>=55).length;
+  const hypeCount=items.filter(i=>(i.deger||i.overall||0)<55&&(i.ivme||0)>=55).length;
+  const valueCount=items.filter(i=>(i.deger||i.overall||0)>=55&&(i.ivme||0)<55).length;
+  const avoidCount=items.filter(i=>(i.deger||i.overall||0)<55&&(i.ivme||0)<55).length;
+  // SVG ile elle çizim — canvas yerine (inline HTML olması gerekiyor)
+  const W=720,H=440,PAD=42,PB=32,PL=42;
+  const iW=W-PL-12,iH=H-PAD-PB;
+  let svg=`<div style="position:relative;width:100%;max-width:${W}px;overflow:hidden">`;
+  svg+=`<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;font-family:'JetBrains Mono',monospace">`;
+  // Quadrant fills
+  svg+=`<rect x="${PL}" y="${PAD}" width="${iW/2}" height="${iH/2}" fill="rgba(156,39,176,.06)" rx="0"/>`;
+  svg+=`<rect x="${PL+iW/2}" y="${PAD}" width="${iW/2}" height="${iH/2}" fill="rgba(0,230,118,.06)" rx="0"/>`;
+  svg+=`<rect x="${PL}" y="${PAD+iH/2}" width="${iW/2}" height="${iH/2}" fill="rgba(239,83,80,.06)" rx="0"/>`;
+  svg+=`<rect x="${PL+iW/2}" y="${PAD+iH/2}" width="${iW/2}" height="${iH/2}" fill="rgba(255,179,0,.06)" rx="0"/>`;
+  // Quadrant labels
+  svg+=`<text x="${PL+iW*0.75}" y="${PAD+16}" fill="rgba(0,230,118,.45)" font-size="10" font-weight="600" text-anchor="middle">ALPHA ZONE (${alphaCount})</text>`;
+  svg+=`<text x="${PL+iW*0.25}" y="${PAD+16}" fill="rgba(156,39,176,.4)" font-size="10" font-weight="600" text-anchor="middle">HYPE RİSKİ (${hypeCount})</text>`;
+  svg+=`<text x="${PL+iW*0.75}" y="${PAD+iH-6}" fill="rgba(255,179,0,.4)" font-size="10" font-weight="600" text-anchor="middle">DEĞER — İVME YOK (${valueCount})</text>`;
+  svg+=`<text x="${PL+iW*0.25}" y="${PAD+iH-6}" fill="rgba(239,83,80,.35)" font-size="10" font-weight="600" text-anchor="middle">UZAK DUR (${avoidCount})</text>`;
+  // Axes
+  svg+=`<line x1="${PL}" y1="${PAD}" x2="${PL}" y2="${PAD+iH}" stroke="rgba(255,255,255,.1)" stroke-width="1"/>`;
+  svg+=`<line x1="${PL}" y1="${PAD+iH}" x2="${PL+iW}" y2="${PAD+iH}" stroke="rgba(255,255,255,.1)" stroke-width="1"/>`;
+  // Center cross (dashed)
+  svg+=`<line x1="${PL+iW/2}" y1="${PAD}" x2="${PL+iW/2}" y2="${PAD+iH}" stroke="rgba(255,255,255,.08)" stroke-width="1" stroke-dasharray="4,4"/>`;
+  svg+=`<line x1="${PL}" y1="${PAD+iH/2}" x2="${PL+iW}" y2="${PAD+iH/2}" stroke="rgba(255,255,255,.08)" stroke-width="1" stroke-dasharray="4,4"/>`;
+  // Axis labels
+  svg+=`<text x="${PL+iW/2}" y="${H-4}" fill="rgba(255,255,255,.35)" font-size="10" text-anchor="middle">DEĞER SKORU →</text>`;
+  svg+=`<text transform="rotate(-90,12,${PAD+iH/2})" x="12" y="${PAD+iH/2}" fill="rgba(255,255,255,.35)" font-size="10" text-anchor="middle">İVME SKORU →</text>`;
+  // Axis ticks
+  for(let v=20;v<=90;v+=10){
+    const px=PL+((v-15)/80)*iW;
+    svg+=`<text x="${px}" y="${PAD+iH+14}" fill="rgba(255,255,255,.2)" font-size="8" text-anchor="middle">${v}</text>`;
+    const py=PAD+iH-((v-15)/80)*iH;
+    svg+=`<text x="${PL-6}" y="${py+3}" fill="rgba(255,255,255,.2)" font-size="8" text-anchor="end">${v}</text>`;
+  }
+  // Bubbles
+  items.forEach((it,idx)=>{
+    const dg=it.deger||it.overall||50;
+    const iv=it.ivme||50;
+    const mc=it.market_cap||0;
+    const dec=it.decision||'BEKLE';
+    const bCol=dec==='AL'?'rgba(0,230,118,.5)':dec==='İZLE'?'rgba(255,179,0,.4)':dec==='BEKLE'?'rgba(120,144,156,.35)':'rgba(239,83,80,.4)';
+    const sCol=dec==='AL'?'#00e676':dec==='İZLE'?'#ffb300':dec==='BEKLE'?'#78909c':'#ef5350';
+    const r=Math.max(5,Math.min(20,4+Math.sqrt(mc/1e9)*1.1));
+    const px=PL+((dg-15)/80)*iW;
+    const py=PAD+iH-((iv-15)/80)*iH;
+    svg+=`<circle cx="${px.toFixed(1)}" cy="${py.toFixed(1)}" r="${r.toFixed(1)}" fill="${bCol}" stroke="${sCol}" stroke-width="1.2" style="cursor:pointer" onclick="loadTicker('${esc(it.ticker)}')" onmouseenter="_alphaTip(event,${idx})" onmousemove="_moveTip(event)" onmouseleave="_hideTip()"/>`;
+    if(r>=8)svg+=`<text x="${px.toFixed(1)}" y="${(py-r-3).toFixed(1)}" fill="rgba(255,255,255,.7)" font-size="${r>=12?10:8}" font-weight="600" text-anchor="middle" style="pointer-events:none">${esc(it.ticker)}</text>`;
+  });
+  svg+=`</svg>`;
+  // Legend
+  svg+=`<div style="margin-top:8px;display:flex;gap:12px;flex-wrap:wrap;font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--t3)">`;
+  svg+=`<span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#00e676;margin-right:3px"></span>AL (${items.filter(i=>i.decision==='AL').length})</span>`;
+  svg+=`<span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#ffb300;margin-right:3px"></span>İZLE (${items.filter(i=>i.decision==='İZLE').length})</span>`;
+  svg+=`<span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#78909c;margin-right:3px"></span>BEKLE (${items.filter(i=>i.decision==='BEKLE').length})</span>`;
+  svg+=`<span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#ef5350;margin-right:3px"></span>KAÇIN (${items.filter(i=>i.decision==='KAÇIN').length})</span>`;
+  svg+=`<span style="margin-left:auto;color:var(--t4)">Boyut = piyasa değeri</span>`;
+  svg+=`</div></div>`;
+  S.alphaHtml=svg;
+}
+// Alpha Quadrant tooltip
+function _alphaTip(e,idx){
+  const items=S.scan?.items;if(!items||!items[idx])return;
+  const it=items[idx];
+  const dec=it.decision||'—';const decBg=_decCol(dec);
+  const pf=it.legendary?.piotroski||'—';
+  const az=it.legendary?.altman||'—';
+  let html=`<div class="tt-head"><span class="tt-tick">${esc(it.ticker)}</span><span class="tt-dec" style="background:${decBg}22;color:${decBg}">${dec}</span></div>`;
+  html+=`<div class="tt-sub">${esc(it.name||'')} · ${esc(it.style||'')}</div>`;
+  html+=`<div class="tt-grid">`;
+  html+=`<span class="tt-lbl">Değer</span><span class="tt-val" style="color:#22d3ee">${(it.deger||it.overall||0).toFixed(0)}</span>`;
+  html+=`<span class="tt-lbl">İvme</span><span class="tt-val" style="color:#a78bfa">${(it.ivme||0).toFixed(0)}</span>`;
+  html+=`<span class="tt-lbl">Overall</span><span class="tt-val" style="color:#fff">${(it.overall||0).toFixed(0)}</span>`;
+  html+=`<span class="tt-lbl">Piotroski</span><span class="tt-val">${pf}</span>`;
+  html+=`<span class="tt-lbl">Altman Z</span><span class="tt-val">${az}</span>`;
+  html+=`<span class="tt-lbl">Giriş</span><span class="tt-val" style="color:var(--ylw)">${it.entry_label||'—'}</span>`;
+  html+=`<span class="tt-lbl">Kalite</span><span class="tt-val">${it.quality_tag||'—'}</span>`;
+  html+=`<span class="tt-lbl">Fiyat</span><span class="tt-val" style="color:#fff">${it.price?('₺'+fN(it.price)):'—'}</span>`;
+  html+=`</div>`;
+  _showTip(e,html);
 }
 
 // ===== PORTFOY — FIXED weighted average bug =====
@@ -689,7 +819,7 @@ api('/api/health').catch(()=>null);
           }
           const d2=await api('/api/top10');
           if(d2.items&&d2.items.length>0){
-            S.scan=d2;renderHome();
+            S.scan=d2;renderAlphaQuadrant();renderHome();
             Promise.all([api('/api/dashboard').catch(()=>null),api('/api/hero-summary').catch(()=>null)]).then(([dashR,heroR])=>{
               if(dashR)S.dash=dashR;if(heroR)S.hero=heroR;updCnt(S.dash);renderHome();
             });
@@ -701,7 +831,7 @@ api('/api/health').catch(()=>null);
   }catch(e){
     for(let i=0;i<90;i++){
       await new Promise(r=>setTimeout(r,3000));
-      try{const d2=await api('/api/top10');if(d2.items&&d2.items.length>0){S.scan=d2;renderHome();Promise.all([api('/api/dashboard').catch(()=>null),api('/api/hero-summary').catch(()=>null)]).then(([dashR,heroR])=>{if(dashR)S.dash=dashR;if(heroR)S.hero=heroR;updCnt(S.dash);renderHome();});break;}}catch(e2){}
+      try{const d2=await api('/api/top10');if(d2.items&&d2.items.length>0){S.scan=d2;renderAlphaQuadrant();renderHome();Promise.all([api('/api/dashboard').catch(()=>null),api('/api/hero-summary').catch(()=>null)]).then(([dashR,heroR])=>{if(dashR)S.dash=dashR;if(heroR)S.hero=heroR;updCnt(S.dash);renderHome();});break;}}catch(e2){}
     }
   }
 })();
@@ -736,6 +866,9 @@ async function sendAgent(){
   }
 }
 </script>
+
+<!-- GLASSMORPHISM TOOLTIP -->
+<div id="bbTip"></div>
 
 <!-- FOOTER -->
 <div style="background:var(--bg1);border-top:1px solid var(--bdr);padding:16px 20px;margin-top:20px;text-align:center">
