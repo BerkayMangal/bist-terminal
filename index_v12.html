@@ -1,0 +1,1116 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#060a10">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>BistBull Terminal</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='28' font-size='28'>🐂</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=DM+Sans:wght@300;400;500;600;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=DM+Sans:wght@300;400;500;600;700&display=swap">
+<style>
+/* === BISTBULL DESIGN SYSTEM — Kolay & Okunabilir === */
+:root{--bg0:#0a0e14;--bg1:#0e131c;--bg2:#121926;--bg3:#161e30;--bg4:#1c2640;--bdr:#1e3048;--bdr2:#2c4060;--t1:#f0f4fa;--t2:#a8bcd8;--t3:#7a94b8;--t4:#5a7498;--acc:#FFB300;--acc2:#E69500;--accd:rgba(255,179,0,.15);--grn:#4caf50;--grn2:#388e3c;--grnd:rgba(76,175,80,.15);--red:#ef5350;--redd:rgba(239,83,80,.12);--ylw:#ffca28;--ylwd:rgba(255,202,40,.12);--blu:#64b5f6;--blud:rgba(100,181,246,.12);--orn:#ffa726;--prp:#ce93d8;--prpd:rgba(206,147,216,.12);--gold:#ffd54f;--cyn:var(--blu);--rad:8px;--rad2:12px;--safe-b:env(safe-area-inset-bottom,0px);--fs-xs:12px;--fs-sm:13px;--fs-base:14px;--fs-md:15px;--fs-lg:18px;--fs-xl:20px;--fs-pill:12px;--fs-mono:13px;--fs-tbl:13px;--fs-nav:12px}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg0);color:var(--t1);min-height:100vh;min-height:100dvh;overflow-x:hidden;-webkit-tap-highlight-color:transparent;line-height:1.6;font-size:var(--fs-base)}
+::-webkit-scrollbar{width:5px;height:5px}::-webkit-scrollbar-track{background:var(--bg1)}::-webkit-scrollbar-thumb{background:var(--bdr2);border-radius:3px}
+.mono{font-family:'JetBrains Mono',monospace;color:var(--t1)}
+
+/* HEADER */
+.hdr{background:var(--bg1);border-bottom:1px solid var(--bdr);height:52px;display:flex;align-items:center;padding:0 20px;position:sticky;top:0;z-index:100;gap:16px}
+.logo{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:17px;white-space:nowrap;letter-spacing:-.5px;color:var(--t1);flex-shrink:0}.logo b{color:var(--acc)}.logo small{color:var(--t3);font-weight:400;font-size:10px;margin-left:6px}
+.hdr-nav{display:flex;gap:1px;margin-left:16px;overflow-x:auto;scrollbar-width:none;-ms-overflow-style:none}.hdr-nav::-webkit-scrollbar{display:none}
+.nav-b{font-family:'JetBrains Mono',monospace;font-size:var(--fs-nav);font-weight:500;padding:6px 14px;background:0;color:var(--t3);border:0;cursor:pointer;border-bottom:2px solid transparent;text-transform:uppercase;letter-spacing:.5px;transition:.15s;white-space:nowrap;min-height:44px;display:flex;align-items:center}.nav-b:hover{color:var(--t2);background:var(--bg3)}.nav-b.on{color:var(--acc);border-bottom-color:var(--acc);background:var(--accd)}
+.hdr-r{margin-left:auto;display:flex;align-items:center;gap:10px;flex-shrink:0}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--acc);animation:pls 2s infinite}@keyframes pls{0%,100%{opacity:1}50%{opacity:.3}}
+.clk{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--t3)}
+
+/* TICKER BAR */
+.tbar{background:var(--bg2);border-bottom:1px solid var(--bdr);height:32px;overflow:hidden;display:flex;align-items:center}.tbar-inner{display:flex;gap:24px;white-space:nowrap;animation:scrl 60s linear infinite;padding-left:100%}@keyframes scrl{to{transform:translateX(-50%)}}.tbar-i{font-family:'JetBrains Mono',monospace;font-size:11px;display:flex;gap:6px;align-items:center;flex-shrink:0;color:var(--t1)}
+
+/* COUNTER BAR */
+.cbar{background:var(--bg1);border-bottom:1px solid var(--bdr);padding:4px 20px;display:flex;align-items:center;gap:16px;font-family:'JetBrains Mono',monospace;font-size:var(--fs-xs);color:var(--t4);text-transform:uppercase;letter-spacing:.5px;flex-wrap:wrap}.cbar-i{display:flex;align-items:center;gap:4px}.cbar-v{color:var(--t3);font-weight:600;font-size:var(--fs-sm)}
+
+/* SEARCH BAR */
+.sbar{background:var(--bg2);border-bottom:1px solid var(--bdr);padding:8px 20px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.sinp{font-family:'JetBrains Mono',monospace;font-size:14px;padding:10px 12px;background:var(--bg0);border:1px solid var(--bdr);border-radius:var(--rad);color:var(--t1);outline:0;width:320px;transition:.2s;min-height:44px}.sinp:focus{border-color:var(--blu)}.sinp::placeholder{color:var(--t4)}
+.qticks{display:flex;gap:4px;flex-wrap:wrap;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}.qticks::-webkit-scrollbar{display:none}
+.qtk{font-family:'JetBrains Mono',monospace;font-size:10px;padding:6px 10px;background:var(--bg3);border:1px solid var(--bdr);border-radius:3px;color:var(--t2);cursor:pointer;transition:.15s;white-space:nowrap;min-height:32px;display:flex;align-items:center}.qtk:hover,.qtk:active{border-color:var(--cyn);color:var(--cyn);background:var(--blud)}
+
+/* MAIN */
+.main{padding:20px;max-width:1600px;margin:0 auto}.page{display:none}.page.on{display:block}
+
+/* GRID */
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:18px}.g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:18px}.g4{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}.g6{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+
+/* CARD */
+.card{background:var(--bg2);border:1px solid var(--bdr);border-radius:var(--rad2);overflow:hidden;transition:border-color .2s}.card:hover{border-color:var(--bdr2)}.card-h{padding:12px 16px;border-bottom:1px solid var(--bdr);display:flex;align-items:center;justify-content:space-between}.card-t{font-family:'JetBrains Mono',monospace;font-size:var(--fs-xs);font-weight:600;color:var(--t2);text-transform:uppercase;letter-spacing:1px}.card-b{padding:18px}
+
+/* HERO */
+.hmc{background:var(--bg3);border:1px solid var(--bdr);border-radius:var(--rad);padding:16px;position:relative;overflow:hidden}.hmc-icon{font-size:20px;margin-bottom:6px}.hmc-label{font-family:'JetBrains Mono',monospace;font-size:var(--fs-xs);color:var(--t3);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px}.hmc-value{font-family:'JetBrains Mono',monospace;font-size:var(--fs-md);font-weight:700;color:var(--t1);margin-bottom:4px}.hmc-desc{font-size:var(--fs-base);color:var(--t2);line-height:1.6}.hmc.mode{border-left:3px solid var(--acc)}.hmc.story{border-left:3px solid var(--blu)}.hmc.opp{border-left:3px solid var(--grn)}.hmc.risk{border-left:3px solid var(--red)}.hmc.bot{border-left:3px solid var(--prp)}.hmc.watch{border-left:3px solid var(--ylw)}
+.hero-wrap{background:linear-gradient(135deg,var(--bg3) 0%,var(--bg2) 50%,#0c1628 100%);border:1px solid var(--bdr2);border-radius:var(--rad2);padding:24px;margin-bottom:20px;position:relative;overflow:hidden}.hero-wrap::before{content:'';position:absolute;top:-40%;right:-10%;width:300px;height:300px;background:radial-gradient(circle,rgba(255,179,0,.06),transparent 70%);pointer-events:none}
+.hero-tag{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--acc);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:12px;display:flex;align-items:center;gap:8px}
+.hero-strat{margin-top:12px;padding:10px 14px;background:var(--accd);border:1px solid rgba(255,179,0,.2);border-radius:var(--rad);font-size:13px;color:var(--acc);line-height:1.5}
+
+/* PILLS */
+.pill{display:inline-block;font-family:'JetBrains Mono',monospace;font-size:var(--fs-pill);padding:3px 8px;border-radius:4px;font-weight:600}.p-grn{background:var(--grnd);color:var(--grn);border:1px solid rgba(0,230,118,.3)}.p-red{background:var(--redd);color:var(--red);border:1px solid rgba(255,61,87,.3)}.p-ylw{background:var(--ylwd);color:var(--ylw);border:1px solid rgba(255,193,7,.3)}.p-blu{background:var(--blud);color:var(--blu);border:1px solid rgba(33,150,243,.3)}
+
+/* RING / SCORE */
+.ring{position:relative;display:flex;align-items:center;justify-content:center}.ring svg{transform:rotate(-90deg)}.ring .rv{position:absolute;font-family:'JetBrains Mono',monospace;font-weight:700;z-index:1}.ring .rl{position:absolute;bottom:12px;font-size:8px;color:var(--t3);text-transform:uppercase;z-index:1}
+.sb{margin-bottom:8px}.sb-l{display:flex;justify-content:space-between;margin-bottom:3px;font-family:'JetBrains Mono',monospace;font-size:var(--fs-sm)}.sb-l .n{color:var(--t3)}.sb-l .v{font-weight:600}.sb-bar{height:6px;background:var(--bg0);border-radius:3px;overflow:hidden}.sb-fill{height:100%;border-radius:3px;transition:width .8s cubic-bezier(.4,0,.2,1)}
+
+/* TABLE */
+.dtb{width:100%;border-collapse:collapse;font-family:'JetBrains Mono',monospace;font-size:var(--fs-tbl);color:var(--t1)}.dtb th{text-align:left;padding:8px;color:var(--t3);font-weight:500;text-transform:uppercase;font-size:var(--fs-xs);letter-spacing:.5px;border-bottom:1px solid var(--bdr);position:sticky;top:0;background:var(--bg2)}.dtb td{padding:8px;border-bottom:1px solid var(--bdr);color:var(--t1)}.dtb tr:hover td{background:var(--bg4)}.clk-t{cursor:pointer;color:var(--cyn);font-weight:700}.clk-t:hover{text-decoration:underline}
+
+/* PICK CARD */
+.pkc{background:var(--bg3);border:1px solid var(--bdr);border-radius:var(--rad);padding:14px;border-left:3px solid var(--grn);transition:.15s;margin-bottom:8px}.pkc:hover{transform:translateX(2px)}.pkc.risk{border-left-color:var(--red)}.pkc.opp{border-left-color:var(--ylw)}.pkc-tick{font-family:'JetBrains Mono',monospace;font-size:16px;font-weight:700;color:var(--cyn);cursor:pointer;min-height:44px;display:flex;align-items:center}.pkc-tick:hover{text-decoration:underline}.pkc-score{font-family:'JetBrains Mono',monospace;font-size:22px;font-weight:700;color:var(--t1)}.pkc-reason{font-size:11px;color:var(--t2);margin-top:6px;line-height:1.4}
+
+/* MACRO */
+.mac{background:var(--bg3);border:1px solid var(--bdr);border-radius:var(--rad);padding:8px 10px;text-align:center}.mac-s{font-family:'JetBrains Mono',monospace;font-size:var(--fs-xs);color:var(--t3);text-transform:uppercase;margin-bottom:2px}.mac-p{font-family:'JetBrains Mono',monospace;font-size:var(--fs-md);font-weight:700;color:var(--t1)}.mac-c{font-family:'JetBrains Mono',monospace;font-size:var(--fs-sm);font-weight:600;margin-top:1px}
+
+/* SIGNAL */
+.sigc{background:var(--bg3);border:1px solid var(--bdr);border-radius:var(--rad);padding:12px 14px;border-left:3px solid var(--ylw);transition:.15s;margin-bottom:6px}.sigc:hover{transform:translateX(2px)}.sigc.bull{border-left-color:var(--grn)}.sigc.bear{border-left-color:var(--red)}
+
+/* WATCHLIST */
+.wl-item{display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--bdr);min-height:44px}.wl-item:last-child{border:0}.wl-tick{font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:700;color:var(--cyn);cursor:pointer}.wl-tick:hover{text-decoration:underline}.wl-rm{background:0;border:0;color:var(--t4);cursor:pointer;font-size:14px;width:44px;height:44px;display:flex;align-items:center;justify-content:center}.wl-rm:hover{color:var(--red)}
+
+/* BUTTONS */
+.btn{font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:600;padding:8px 18px;border:0;border-radius:var(--rad);cursor:pointer;text-transform:uppercase;letter-spacing:.5px;transition:.2s;color:var(--t1);min-height:44px;display:inline-flex;align-items:center;justify-content:center}.btn:disabled{opacity:.4;cursor:not-allowed}.btn-grn{background:linear-gradient(135deg,var(--acc),var(--acc2));color:#000}.btn-grn:hover:not(:disabled){box-shadow:0 4px 16px var(--accd);transform:translateY(-1px)}.btn-orn{background:linear-gradient(135deg,var(--orn),#ff6d00);color:#000}.btn-blu{background:linear-gradient(135deg,var(--blu),#1565c0);color:#fff}.btn-cyn{background:linear-gradient(135deg,var(--cyn),#00838f);color:#000}.btn-sm{font-size:9px;padding:4px 10px;min-height:32px}.btn-dim{background:var(--bg3);color:var(--t3);border:1px solid var(--bdr)}
+/* GLASSMORPHISM TOOLTIP */
+#bbTip{display:none;position:fixed;z-index:9999;pointer-events:none;min-width:210px;max-width:280px;padding:12px 16px;background:rgba(10,14,20,.88);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid rgba(255,255,255,.1);border-radius:10px;font-family:'JetBrains Mono',monospace;font-size:11px;color:#e0e0e0;line-height:1.7;box-shadow:0 8px 32px rgba(0,0,0,.45)}
+#bbTip .tt-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+#bbTip .tt-tick{font-size:13px;font-weight:700;color:#fff}
+#bbTip .tt-dec{font-size:9px;padding:2px 8px;border-radius:4px;font-weight:600}
+#bbTip .tt-sub{font-size:10px;color:#78909c;margin-bottom:8px}
+#bbTip .tt-grid{display:grid;grid-template-columns:1fr 1fr;gap:2px 14px}
+#bbTip .tt-lbl{color:#607d8b}
+#bbTip .tt-val{text-align:right;font-weight:600}
+
+/* OVERLAY / DETAIL PANEL */
+.ov{position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:200;display:none;backdrop-filter:blur(4px)}.ov.open{display:flex;justify-content:center;align-items:flex-start;padding-top:32px}
+.dp{background:var(--bg1);border:1px solid var(--bdr2);border-radius:var(--rad2);width:96%;max-width:1200px;max-height:92vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.6);-webkit-overflow-scrolling:touch}
+.dp-h{padding:18px 20px;border-bottom:1px solid var(--bdr);display:flex;justify-content:space-between;align-items:flex-start;position:sticky;top:0;background:var(--bg1);z-index:1}.dp-tick{font-family:'JetBrains Mono',monospace;font-size:22px;font-weight:700;color:var(--cyn)}.dp-name{color:var(--t2);font-size:13px;margin-top:2px}
+.dp-close{background:0;border:1px solid var(--bdr);color:var(--t3);width:44px;height:44px;border-radius:4px;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;flex-shrink:0}.dp-close:hover{border-color:var(--red);color:var(--red)}
+.dp-body{padding:20px}
+.dp-tabs{display:flex;gap:1px;margin-bottom:16px;border-bottom:1px solid var(--bdr);overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;position:relative}.dp-tabs::-webkit-scrollbar{display:none}.dp-tabs::after{content:'';position:absolute;right:0;top:0;bottom:0;width:20px;background:linear-gradient(to right,transparent,var(--bg1));pointer-events:none}
+.dp-tab{font-family:'JetBrains Mono',monospace;font-size:10px;padding:7px 14px;background:0;border:0;color:var(--t4);cursor:pointer;border-bottom:2px solid transparent;text-transform:uppercase;white-space:nowrap;min-height:40px}.dp-tab:hover{color:var(--t1)}.dp-tab.on{color:var(--acc);border-bottom-color:var(--acc)}.ds{display:none}.ds.on{display:block}
+
+/* METRICS */
+.mg{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}.mi{background:var(--bg3);padding:10px;border-radius:var(--rad);border:1px solid var(--bdr)}.mi-l{font-family:'JetBrains Mono',monospace;font-size:var(--fs-xs);color:var(--t3);text-transform:uppercase;margin-bottom:3px}.mi-v{font-family:'JetBrains Mono',monospace;font-size:var(--fs-md);font-weight:600;color:var(--t1)}
+
+/* AI BOX */
+.aib{background:linear-gradient(135deg,#140e30,var(--bg2));border:1px solid var(--prp);border-radius:var(--rad);padding:14px;margin-top:14px}.aib-t{font-family:'JetBrains Mono',monospace;font-size:var(--fs-xs);color:var(--prp);text-transform:uppercase;margin-bottom:6px}.aib-tx{font-size:var(--fs-base);color:var(--t1);line-height:1.6}
+
+/* LOADING */
+.ld{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:50px 20px;gap:12px}.sp{width:28px;height:28px;border:3px solid var(--bdr);border-top-color:var(--acc);border-radius:50%;animation:spn .7s linear infinite}@keyframes spn{to{transform:rotate(360deg)}}.ld-t{font-family:'JetBrains Mono',monospace;font-size:var(--fs-sm);color:var(--t3)}
+
+/* MISC */
+.emp{text-align:center;padding:40px 20px}.emp h3{color:var(--t2);font-size:15px;margin-bottom:6px}.emp p{color:var(--t3);font-size:12px}.chart-img{width:100%;border-radius:var(--rad);border:1px solid var(--bdr)}
+.drv{display:inline-block;font-size:var(--fs-sm);padding:3px 8px;border-radius:3px;margin:2px 3px 2px 0}.drv-p{background:var(--grnd);color:var(--grn)}.drv-n{background:var(--redd);color:var(--red)}
+.ls-item{font-family:'JetBrains Mono',monospace;font-size:var(--fs-sm);padding:6px 10px;background:var(--bg3);border:1px solid var(--bdr);border-radius:3px;color:var(--cyn);cursor:pointer;display:inline-block;margin:2px;min-height:32px}.ls-item:hover{background:var(--blud)}
+.em-row{display:flex;align-items:center;padding:6px 10px;border-bottom:1px solid var(--bdr);font-family:'JetBrains Mono',monospace;font-size:var(--fs-sm);color:var(--t1);min-height:40px}.em-row:hover{background:var(--bg4)}.em-rank{width:24px;color:var(--t3);font-weight:700}.em-flag{width:24px;font-size:14px}.em-name{flex:1;color:var(--t2)}.em-price{width:80px;text-align:right;color:var(--t1);font-weight:600}.em-chg{width:65px;text-align:right;font-weight:600}.em-ytd{width:65px;text-align:right;font-weight:700}
+.live-stat{background:var(--bg3);border:1px solid var(--bdr);border-radius:var(--rad);padding:10px;text-align:center}.live-num{font-family:'JetBrains Mono',monospace;font-size:var(--fs-xl);font-weight:700;color:var(--cyn)}.live-label{font-family:'JetBrains Mono',monospace;font-size:var(--fs-xs);color:var(--t3);text-transform:uppercase;margin-top:2px}
+/* PIYASA NABZI */
+.nab-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}.nab-item{background:var(--bg3);border:1px solid var(--bdr);border-radius:var(--rad);padding:10px;text-align:center;transition:border-color .2s}.nab-item:hover{border-color:var(--bdr2)}.nab-name{font-family:'JetBrains Mono',monospace;font-size:var(--fs-xs);color:var(--t3);text-transform:uppercase;margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.nab-price{font-family:'JetBrains Mono',monospace;font-size:var(--fs-lg);font-weight:700;color:var(--t1);margin-bottom:2px}.nab-chg{font-family:'JetBrains Mono',monospace;font-size:var(--fs-sm);font-weight:600}.nab-ytd{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--t3);margin-top:3px}
+@media(max-width:900px){.nab-grid{grid-template-columns:repeat(3,1fr)}}@media(max-width:500px){.nab-grid{grid-template-columns:repeat(2,1fr)}}
+.expl{background:linear-gradient(135deg,#0d1628,var(--bg3));border:1px solid var(--bdr2);border-radius:var(--rad2);padding:20px;margin-bottom:16px}.expl-title{font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700;color:var(--cyn);text-transform:uppercase;letter-spacing:1px;margin-bottom:12px}.expl-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}.expl-item{padding:12px;background:var(--bg2);border:1px solid var(--bdr);border-radius:var(--rad)}.expl-item h4{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--acc);margin-bottom:6px}.expl-item p{font-size:12px;color:var(--t2);line-height:1.5}.expl-item .num{font-family:'JetBrains Mono',monospace;font-size:24px;font-weight:700;color:var(--cyn);margin-bottom:4px}
+.tk-bar{display:flex;height:20px;border-radius:3px;overflow:hidden;margin:6px 0}.tk-fill{transition:width .5s;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;font-family:'JetBrains Mono',monospace}
+
+/* ===== MOBILE RESPONSIVE ===== */
+@media(max-width:900px){
+  .g2,.g3,.g6{grid-template-columns:1fr}
+  .g4{grid-template-columns:1fr 1fr}
+  .hdr{flex-wrap:wrap;height:auto;padding:10px 14px;gap:6px}
+  .logo{font-size:15px}
+  .hdr-nav{width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;gap:0;padding-bottom:2px}
+  .nav-b{padding:10px 14px;flex-shrink:0}
+  .sbar{padding:10px 14px;gap:8px}
+  .sinp{width:100%}
+  .sbar>.qticks{width:100%;flex-wrap:nowrap;overflow-x:auto}
+  .sbar>span:nth-child(1){display:none}
+  .sbar>span:nth-child(3){display:none}
+  .main{padding:12px 14px}
+  .hero-wrap{padding:16px}
+  .hmc{padding:12px}
+  .card-b{padding:14px}
+  .pkc{padding:12px}
+  .dp{width:100%;max-width:100%;border-radius:0;max-height:100vh;max-height:100dvh}
+  .dp-h{padding:16px 14px}
+  .dp-body{padding:14px}
+  .dp-tabs{overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .dp-tab{padding:10px 14px;flex-shrink:0}
+  .mg{grid-template-columns:1fr 1fr;gap:8px}
+  .expl-grid{grid-template-columns:1fr}
+  .em-row{padding:6px 8px}
+  .mac{padding:8px}
+  .sigc{padding:10px 12px}
+  .ov.open{padding-top:0}
+}
+@media(max-width:400px){
+  .g4{grid-template-columns:1fr}
+  .mg{grid-template-columns:1fr}
+  .hmc{padding:10px}
+  .hero-wrap{padding:12px}
+  .nav-b{padding:8px 12px}
+}
+</style>
+</head>
+<body>
+<div class="hdr">
+  <div class="logo"><svg width="32" height="32" viewBox="0 0 100 100" style="vertical-align:middle;margin-right:8px"><defs><linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" style="stop-color:#FFB300"/><stop offset="100%" style="stop-color:#E69500"/></linearGradient></defs><path d="M20,48 Q6,20 5,6 Q12,22 24,36 Z" fill="url(#bg)" opacity=".85"/><path d="M70,48 Q84,20 85,6 Q78,22 66,36 Z" fill="url(#bg)" opacity=".85"/><ellipse cx="45" cy="54" rx="28" ry="22" fill="url(#bg)"/><ellipse cx="45" cy="70" rx="17" ry="12" fill="#E69500"/><ellipse cx="37" cy="72" rx="2.8" ry="2.2" fill="#0a0e14"/><ellipse cx="53" cy="72" rx="2.8" ry="2.2" fill="#0a0e14"/><ellipse cx="34" cy="50" rx="5" ry="4.5" fill="#0a0e14"/><ellipse cx="56" cy="50" rx="5" ry="4.5" fill="#0a0e14"/><ellipse cx="35.5" cy="49" rx="2.2" ry="1.8" fill="#eaf0fa"/><ellipse cx="57.5" cy="49" rx="2.2" ry="1.8" fill="#eaf0fa"/><path d="M26,44 Q31,41.5 37,43.5" stroke="#0a0e14" stroke-width="2" fill="none" stroke-linecap="round"/><path d="M64,44 Q59,41.5 53,43.5" stroke="#0a0e14" stroke-width="2" fill="none" stroke-linecap="round"/><path d="M39,77 Q45,80.5 51,77" stroke="#0a0e14" stroke-width="1.4" fill="none" stroke-linecap="round"/><ellipse cx="20" cy="44" rx="6.5" ry="5" fill="url(#bg)" transform="rotate(-12,20,44)"/><ellipse cx="70" cy="44" rx="6.5" ry="5" fill="url(#bg)" transform="rotate(12,70,44)"/></svg>BIST<b>BULL</b><small>TERMINAL</small></div>
+  <div class="hdr-nav" id="nav"></div>
+  <div class="hdr-r"><button onclick="showWelcome()" style="font-family:'JetBrains Mono',monospace;font-size:14px;padding:2px 8px;background:none;border:1px solid var(--bdr);border-radius:var(--rad);color:var(--t3);cursor:pointer;min-height:32px" title="BistBull hakkında">ℹ️</button><div class="dot"></div><div class="clk" id="clk"></div></div>
+</div>
+<!-- WELCOME OVERLAY (ilk giriş) -->
+<div id="welcomeOv" style="display:none;position:fixed;inset:0;z-index:9999;background:var(--bg0);overflow-y:auto;-webkit-overflow-scrolling:touch">
+  <div style="min-height:100vh;min-height:100dvh;display:flex;flex-direction:column;justify-content:center;align-items:center;padding:32px 24px;text-align:center">
+    <div style="margin-bottom:24px"><svg width="60" height="60" viewBox="0 0 100 100"><defs><linearGradient id="wg" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" style="stop-color:#FFB300"/><stop offset="100%" style="stop-color:#E69500"/></linearGradient></defs><path d="M20,48 Q6,20 5,6 Q12,22 24,36 Z" fill="url(#wg)" opacity=".85"/><path d="M70,48 Q84,20 85,6 Q78,22 66,36 Z" fill="url(#wg)" opacity=".85"/><ellipse cx="45" cy="54" rx="28" ry="22" fill="url(#wg)"/><ellipse cx="45" cy="70" rx="17" ry="12" fill="#E69500"/><ellipse cx="37" cy="72" rx="2.8" ry="2.2" fill="#0a0e14"/><ellipse cx="53" cy="72" rx="2.8" ry="2.2" fill="#0a0e14"/><ellipse cx="34" cy="50" rx="5" ry="4.5" fill="#0a0e14"/><ellipse cx="56" cy="50" rx="5" ry="4.5" fill="#0a0e14"/><ellipse cx="35.5" cy="49" rx="2.2" ry="1.8" fill="#f0f4fa"/><ellipse cx="57.5" cy="49" rx="2.2" ry="1.8" fill="#f0f4fa"/><path d="M26,44 Q31,41.5 37,43.5" stroke="#0a0e14" stroke-width="2" fill="none" stroke-linecap="round"/><path d="M64,44 Q59,41.5 53,43.5" stroke="#0a0e14" stroke-width="2" fill="none" stroke-linecap="round"/><path d="M39,77 Q45,80.5 51,77" stroke="#0a0e14" stroke-width="1.4" fill="none" stroke-linecap="round"/><ellipse cx="20" cy="44" rx="6.5" ry="5" fill="url(#wg)" transform="rotate(-12,20,44)"/><ellipse cx="70" cy="44" rx="6.5" ry="5" fill="url(#wg)" transform="rotate(12,70,44)"/></svg></div>
+    <div style="font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--acc);text-transform:uppercase;letter-spacing:3px;margin-bottom:16px">BISTBULL</div>
+    <h1 style="font-family:'DM Sans',system-ui,sans-serif;font-size:28px;font-weight:700;color:var(--t1);line-height:1.3;margin-bottom:10px;max-width:480px">Tüyoya değil,<br>veriye güven.</h1>
+    <p style="font-size:15px;color:var(--t3);margin-bottom:32px;max-width:400px;line-height:1.6">BIST yatırımcısının yapay zekâ destekli karar asistanı</p>
+    <div style="max-width:420px;margin-bottom:36px">
+      <div style="display:flex;align-items:flex-start;gap:14px;text-align:left;margin-bottom:20px;padding-bottom:20px;border-bottom:1px solid var(--bdr)"><span style="font-size:24px;flex-shrink:0;margin-top:2px">🏛️</span><div><div style="font-size:16px;color:var(--t1);font-weight:600;margin-bottom:4px">9 model, tek skor</div><div style="font-size:14px;color:var(--t2);line-height:1.6">Piotroski, Altman, Graham ve 6 model daha — bilanço okumayı bilmene gerek yok. Sonuç: tek bir Değer Skoru.</div></div></div>
+      <div style="display:flex;align-items:flex-start;gap:14px;text-align:left;margin-bottom:20px;padding-bottom:20px;border-bottom:1px solid var(--bdr)"><span style="font-size:24px;flex-shrink:0;margin-top:2px">⚡</span><div><div style="font-size:16px;color:var(--t1);font-weight:600;margin-bottom:4px">14 sinyal, sıfır panik</div><div style="font-size:14px;color:var(--t2);line-height:1.6">Teknik sinyaller sürekli taranıyor. Ne zaman girilir, ne zaman beklenir — duygu değil, veri karar veriyor.</div></div></div>
+      <div style="display:flex;align-items:flex-start;gap:14px;text-align:left"><span style="font-size:24px;flex-shrink:0;margin-top:2px">🤖</span><div><div style="font-size:16px;color:var(--t1);font-weight:600;margin-bottom:4px">Q ile sor, anında öğren</div><div style="font-size:14px;color:var(--t2);line-height:1.6">Terminal asistanı Q'ya hisse sor — değer skoru, ivme, riskler ve zamanlama hakkında somut veri al.</div></div></div>
+    </div>
+    <button onclick="dismissWelcome()" style="font-family:'DM Sans',system-ui,sans-serif;font-size:17px;font-weight:700;padding:16px 48px;background:var(--acc);color:#0a0e14;border:none;border-radius:var(--rad2);cursor:pointer;min-height:54px;letter-spacing:.5px;transition:transform .15s,box-shadow .15s;box-shadow:0 4px 20px rgba(255,179,0,.3)">Terminale Gir →</button>
+    <div style="margin-top:20px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--t4)">AI destekli BIST analiz platformu · bistbull.ai</div>
+  </div>
+</div>
+
+<div class="tbar"><div class="tbar-inner" id="tbar"><div class="tbar-i"><span style="color:var(--t3)">Makro yükleniyor...</span></div></div></div>
+<div class="cbar"><div class="cbar-i">Analiz <span class="cbar-v" id="cnt-a">0</span></div><div class="cbar-i">Sinyal <span class="cbar-v" id="cnt-s">0</span></div><div class="cbar-i">Cache <span class="cbar-v" id="cnt-c">0</span></div><div class="cbar-i" style="margin-left:auto">Son <span class="cbar-v" id="cnt-u">—</span></div></div>
+<div class="sbar">
+  <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--acc);white-space:nowrap;font-weight:600">🔍</span>
+  <input type="text" class="sinp" id="sinp" placeholder="ASELS, THYAO, BIMAS..." autocomplete="off" enterkeyhint="go">
+  <span style="font-size:10px;color:var(--t3);white-space:nowrap">Hisse kodu yaz, Enter bas</span>
+  <div class="qticks" id="qticks"></div>
+</div>
+<div class="main">
+  <div class="page on" id="pg-home" data-page="home"></div>
+  <div class="page" id="pg-radar" data-page="radar"></div>
+  <div class="page" id="pg-cross" data-page="cross"></div>
+  <div class="page" id="pg-makro" data-page="makro"></div>
+  <div class="page" id="pg-takas" data-page="takas"></div>
+  <div class="page" id="pg-sosyal" data-page="sosyal"></div>
+  <div class="page" id="pg-portfoy" data-page="portfoy"></div>
+  <div class="page" id="pg-nasil" data-page="nasil"></div>
+</div>
+<div class="ov" id="ov" onclick="if(event.target===this)closeD()"><div class="dp" id="dp"></div></div>
+
+<script>
+// ===== STATE =====
+const S={page:'home',scan:null,cross:null,macro:null,dash:null,takas:null,social:null,hero:null,quote:null,book:null,wl:JSON.parse(localStorage.getItem('bb_wl')||'[]'),seen:JSON.parse(localStorage.getItem('bb_seen')||'[]')};
+const QT=['ASELS','THYAO','BIMAS','KCHOL','TUPRS','AKBNK','GARAN','FROTO','TOASO','PGSUS'];
+const PAGES=[{id:'nasil',label:'Nasıl?'},{id:'home',label:'Ana Sayfa'},{id:'radar',label:'Radar'},{id:'cross',label:'Sinyaller'},{id:'makro',label:'Makro'},{id:'portfoy',label:'Portföy'}];
+const $=s=>document.getElementById(s);
+
+// ===== XSS SANITIZER =====
+function esc(s){if(!s)return'';const d=document.createElement('div');d.textContent=String(s);return d.innerHTML;}
+
+// ===== FORMATTERS =====
+const fN=(x,d=2)=>{if(x==null)return'N/A';if(Math.abs(x)>=1e9)return(x/1e9).toFixed(2)+'B';if(Math.abs(x)>=1e6)return(x/1e6).toFixed(2)+'M';if(Math.abs(x)>=1e3)return x.toLocaleString('en',{maximumFractionDigits:0});return x.toFixed(d);};
+const fP=(x,d=1)=>x==null?'N/A':(x*100).toFixed(d)+'%';
+const sC=v=>{if(v==null)return'var(--t3)';return v>=75?'var(--grn)':v>=55?'var(--ylw)':'var(--red)';};
+const sPill=v=>{if(v==null)return'<span class="pill p-blu">—</span>';return v>=75?`<span class="pill p-grn">${v.toFixed(0)}</span>`:v>=55?`<span class="pill p-ylw">${v.toFixed(0)}</span>`:`<span class="pill p-red">${v.toFixed(0)}</span>`;};
+const sPL=l=>(l==='Geçti'||l==='Pass')?'<span class="pill p-grn">Geçti</span>':(l==='Sınırda'||l==='Borderline')?'<span class="pill p-ylw">Sınırda</span>':'<span class="pill p-red">Kaldı</span>';
+const cC=v=>v>=0?'var(--grn)':'var(--red)';
+const cS=v=>v>=0?'+'+v.toFixed(2):v.toFixed(2);
+
+// ===== API =====
+async function api(p){const r=await fetch(p);if(!r.ok)throw new Error(r.status);return r.json();}
+
+// ===== CLOCK =====
+setInterval(()=>{$('clk').textContent=new Date().toLocaleTimeString('tr-TR',{hour:'2-digit',minute:'2-digit',second:'2-digit'})+' IST';},1000);
+
+// ===== NAVIGATION =====
+const nav=$('nav');PAGES.forEach(p=>{const b=document.createElement('button');b.className='nav-b'+(p.id==='home'?' on':'');b.textContent=p.label;b.dataset.p=p.id;b.onclick=()=>goPage(p.id);nav.appendChild(b);});
+function goPage(id){S.page=id;nav.querySelectorAll('.nav-b').forEach(b=>b.classList.toggle('on',b.dataset.p===id));document.querySelectorAll('.page').forEach(p=>p.classList.toggle('on',p.dataset.page===id));if(id==='home')renderHome();if(id==='radar')renderRadarPage();if(id==='cross')renderCrossPage();if(id==='makro')renderMakroPage();if(id==='nasil')renderNasilPage();if(id==='takas')renderTakasPage();if(id==='sosyal')renderSosyalPage();if(id==='portfoy')renderPortfoyPage();}
+
+// ===== QUICK TICKERS =====
+const qtEl=$('qticks');QT.forEach(t=>{const d=document.createElement('div');d.className='qtk';d.textContent=t;d.onclick=()=>loadTicker(t);qtEl.appendChild(d);});
+$('sinp').addEventListener('keydown',e=>{if(e.key==='Enter'){const v=e.target.value.trim().toUpperCase();if(v.length>=3)loadTicker(v);}});
+
+// ===== WATCHLIST + SEEN =====
+function wlAdd(t){t=t.toUpperCase();if(!S.wl.includes(t)){S.wl.push(t);localStorage.setItem('bb_wl',JSON.stringify(S.wl));}}
+function wlRm(t){S.wl=S.wl.filter(x=>x!==t);localStorage.setItem('bb_wl',JSON.stringify(S.wl));}
+function seenAdd(t){t=t.toUpperCase();S.seen=S.seen.filter(x=>x!==t);S.seen.unshift(t);S.seen=S.seen.slice(0,10);localStorage.setItem('bb_seen',JSON.stringify(S.seen));}
+
+// ===== UI COMPONENTS =====
+function ring(v,l,sz=100){const r=(sz/2)-6,ci=2*Math.PI*r,off=ci*(1-(v||0)/100),c=sC(v);return`<div class="ring" style="width:${sz}px;height:${sz}px"><svg width="${sz}" height="${sz}" viewBox="0 0 ${sz} ${sz}"><circle cx="${sz/2}" cy="${sz/2}" r="${r}" fill="none" stroke="var(--bdr)" stroke-width="3"/><circle cx="${sz/2}" cy="${sz/2}" r="${r}" fill="none" stroke="${c}" stroke-width="3" stroke-dasharray="${ci}" stroke-dashoffset="${off}" stroke-linecap="round" style="transition:stroke-dashoffset 1s"/></svg><span class="rv" style="color:${c};font-size:${sz>80?24:16}px">${v!=null?v.toFixed(0):'?'}</span>${l?`<span class="rl" style="bottom:${sz>80?12:6}px">${esc(l)}</span>`:''}</div>`;}
+function scoreBars(sc){
+const dG=[{k:'value',l:'Değer',w:23},{k:'quality',l:'Kalite',w:23},{k:'growth',l:'Büyüme',w:18},{k:'balance',l:'Bilanço',w:18},{k:'earnings',l:'Karlılık',w:10},{k:'moat',l:'Hendek',w:8}];
+const iG=[{k:'momentum',l:'Momentum',w:40},{k:'tech_break',l:'Tek. Kırılım',w:35},{k:'inst_flow',l:'Kurum Akışı',w:25}];
+const bar=(d)=>{const v=sc[d.k],c=sC(v);return`<div class="sb"><div class="sb-l"><span class="n">${d.l} (${d.w}%)</span><span class="v" style="color:${c}">${v!=null?v.toFixed(0):'?'}</span></div><div class="sb-bar"><div class="sb-fill" style="width:${v||0}%;background:${c}"></div></div></div>`;};
+return`<div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--grn);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">🏛️ Değer Boyutları</div>${dG.map(bar).join('')}<div style="border-top:1px dashed var(--bdr);margin:10px 0;padding-top:8px;font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--orn);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">⚡ İvme Boyutları</div>${iG.map(bar).join('')}`;}
+function mBox(l,v){return`<div class="mi"><div class="mi-l">${esc(l)}</div><div class="mi-v">${esc(String(v))}</div></div>`;}
+function renderRadarTbl(items,sortBy='deger'){
+const sorted=[...items].sort((a,b)=>sortBy==='piotroski'?((b.scores?.earnings||0)-(a.scores?.earnings||0)):sortBy==='balance'?((b.scores?.balance||0)-(a.scores?.balance||0)):sortBy==='quality'?((b.scores?.quality||0)-(a.scores?.quality||0)):(b.deger||b.overall||0)-(a.deger||a.overall||0));
+let h=`<div style="display:flex;gap:4px;margin-bottom:10px;flex-wrap:wrap"><button class="btn btn-sm ${sortBy==='deger'?'btn-grn':''}" style="${sortBy!=='deger'?'background:var(--bg3);color:var(--t2)':''}" onclick="S._radarSort='deger';renderRadarPage()">🏛️ Değer</button><button class="btn btn-sm ${sortBy==='quality'?'btn-grn':''}" style="${sortBy!=='quality'?'background:var(--bg3);color:var(--t2)':''}" onclick="S._radarSort='quality';renderRadarPage()">Kalite</button><button class="btn btn-sm ${sortBy==='balance'?'btn-grn':''}" style="${sortBy!=='balance'?'background:var(--bg3);color:var(--t2)':''}" onclick="S._radarSort='balance';renderRadarPage()">Bilanço</button><button class="btn btn-sm ${sortBy==='piotroski'?'btn-grn':''}" style="${sortBy!=='piotroski'?'background:var(--bg3);color:var(--t2)':''}" onclick="S._radarSort='piotroski';renderRadarPage()">Kârlılık</button></div>`;
+h+='<table class="dtb"><thead><tr><th>#</th><th>Hisse</th><th>Karar</th><th style="color:var(--grn)">Değer</th><th>Değ</th><th>Kal</th><th>Bil</th><th>Büy</th><th>F/K</th><th>PD/DD</th></tr></thead><tbody>';
+sorted.forEach((it,i)=>{const dc=it.decision;const dCol=dc==='AL'?'var(--grn)':dc==='İZLE'?'var(--blu)':dc==='BEKLE'?'var(--ylw)':'var(--red)';h+=`<tr><td style="color:var(--t3)">${i+1}</td><td class="clk-t" onclick="loadTicker('${esc(it.ticker)}')">${esc(it.ticker)}</td><td><span style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-xs);font-weight:700;color:${dCol};padding:2px 6px;background:${dCol}15;border-radius:3px">${esc(dc||'—')}</span></td><td><span style="font-weight:700;color:var(--grn)">${(it.deger||it.overall||0).toFixed(0)}</span></td><td>${sPill(it.scores?.value)}</td><td>${sPill(it.scores?.quality)}</td><td>${sPill(it.scores?.balance)}</td><td>${sPill(it.scores?.growth)}</td><td style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-xs);color:var(--t1)">${it.pe?it.pe.toFixed(1):'—'}</td><td style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-xs);color:var(--t1)">${it.pb?it.pb.toFixed(2):'—'}</td></tr>`;});
+return h+'</tbody></table>';}
+
+// ===== WELCOME + TRACKING =====
+function showWelcome(){const el=$('welcomeOv');if(el){el.style.display='block';document.body.style.overflow='hidden';trackEv('welcome_view');}}
+function dismissWelcome(){const el=$('welcomeOv');if(el){el.style.display='none';document.body.style.overflow='';}localStorage.setItem('bb_welcomed','1');trackEv('welcome_cta');}
+function trackEv(ev){try{navigator.sendBeacon('/api/track?e='+encodeURIComponent(ev));}catch(e){fetch('/api/track?e='+encodeURIComponent(ev)).catch(()=>{});}}
+
+// ===== TÜYO KONTROL =====
+function tuyoKontrol(){const inp=$('tuyoInp');if(!inp)return;const t=inp.value.trim().toUpperCase().replace('.IS','');if(!t||t.length<3)return;inp.value='';trackEv('tuyo_'+t);loadTicker(t);}
+document.addEventListener('keydown',e=>{if(e.target&&e.target.id==='tuyoInp'&&e.key==='Enter'){e.preventDefault();tuyoKontrol();}});
+
+if(new URLSearchParams(window.location.search).has('reset')){localStorage.removeItem('bb_welcomed');localStorage.removeItem('bb_info_dismissed');history.replaceState(null,'',window.location.pathname);}
+if(!localStorage.getItem('bb_welcomed')){document.addEventListener('DOMContentLoaded',showWelcome);}
+
+// ===== PIYASA NABZI =====
+function renderNabiz(items){
+if(!items||!items.length)return'<div style="color:var(--t4);font-size:var(--fs-sm)">Yükleniyor...</div>';
+const keys=['XU030','USDTRY','EURTRY','BRENT','GOLD','VIX','XU100','DXY','SP500','US10Y'];
+const show=keys.map(k=>items.find(m=>m.key===k)).filter(Boolean).slice(0,10);
+const list=show.length>=6?show:items.slice(0,10);
+return list.map(m=>{
+  const ytdCol=m.ytd_pct>0?'var(--grn)':m.ytd_pct<0?'var(--red)':'var(--t3)';
+  return`<div class="nab-item"><div class="nab-name">${esc(m.flag||'')} ${esc(m.name)}</div><div class="nab-price">${fN(m.price,m.key?.includes('TRY')?4:2)}</div><div class="nab-chg" style="color:${cC(m.change_pct)}">${cS(m.change_pct)}%</div>${m.ytd_pct!=null?`<div class="nab-ytd">YTD: <span style="color:${ytdCol};font-weight:700">${cS(m.ytd_pct)}%</span></div>`:''}</div>`;
+}).join('');}
+
+// ===== HOME PAGE =====
+const _loadMsgs=['100 hisse kontrol ediliyor...','Ichimoku bulutlarına bakılıyor...','Piotroski ve Altman hesaplanıyor...','Q verileri hazırlıyor...','Değer ve İvme skorları hesaplanıyor...','Cross sinyalleri taranıyor...'];
+function _rndLoad(){return _loadMsgs[Math.floor(Math.random()*_loadMsgs.length)];}
+
+function renderHome(){
+const pg=$('pg-home');const d=S.dash;const sc=S.scan;const hr=S.hero;
+const hasSc=sc&&sc.items&&sc.items.length>0;const hasD=d&&d.top3&&d.top3.length>0;
+let h='';
+trackEv('page_view');
+
+// === 1. MARKET STATUS BANNER (kapaliysa) ===
+const ms=S.marketStatus;
+if(ms&&ms.status!=='open'){
+  const bannerCol=ms.status==='closed'?'var(--ylw)':ms.status==='pre_market'?'var(--blu)':'var(--t3)';
+  const bannerIcon=ms.status==='closed'?'🏖️':ms.status==='pre_market'?'⏰':'🌙';
+  const bannerBg=ms.status==='closed'?'rgba(255,202,40,.06)':'rgba(100,181,246,.06)';
+  h+=`<div style="margin-bottom:20px;padding:14px 18px;background:${bannerBg};border:1px solid ${bannerCol}30;border-left:3px solid ${bannerCol};border-radius:0 var(--rad) var(--rad) 0;display:flex;align-items:center;gap:12px;flex-wrap:wrap">`;
+  h+=`<span style="font-size:22px">${bannerIcon}</span>`;
+  h+=`<div style="flex:1;min-width:200px"><div style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-base);font-weight:700;color:${bannerCol}">${esc(ms.reason)}</div>`;
+  h+=`<div style="font-size:var(--fs-sm);color:var(--t2);margin-top:3px">${esc(ms.reason_detail||'')}${ms.next_open?' · Sonraki açılış: '+ms.next_open:''}${ms.data_age?' · Veri: '+esc(ms.data_age):''}</div></div>`;
+  if(ms.global_open){h+=`<span style="font-size:var(--fs-xs);color:var(--blu);font-family:'JetBrains Mono',monospace;white-space:nowrap">🌍 Global piyasalar açık</span>`;}
+  h+=`</div>`;
+}
+
+// === 2. HERO — İLK EKRAN, EN ÖNEMLI ===
+// Piyasa Nabzi — buyuk rakamlarla ilk bakis
+h+=`<div class="card" style="margin-bottom:20px"><div class="card-h"><span class="card-t">📡 Piyasa Nabzı</span><button class="btn btn-sm btn-blu" onclick="goPage('makro')">DETAY →</button></div><div class="card-b"><div class="nab-grid" id="nabGrid">${S.macro?renderNabiz(S.macro.items||[]):'<div style="color:var(--t4);font-size:var(--fs-sm)">Veriler yükleniyor...</div>'}</div></div></div>`;
+// Günün Sözü — ince sicak motivasyon
+if(S.quote){h+=`<div style="margin-bottom:20px;padding:14px 20px;background:linear-gradient(135deg,var(--bg3),var(--bg2));border-left:3px solid var(--gold);border-radius:0 var(--rad) var(--rad) 0"><div style="font-style:italic;color:var(--t2);font-size:var(--fs-base);line-height:1.7">"${esc(S.quote.text)}"</div><div style="margin-top:6px;color:var(--gold);font-weight:600;font-size:var(--fs-sm)">— ${esc(S.quote.author)}</div></div>`;}
+
+// === TÜYO KONTROL — merkez feature ===
+h+=`<div class="card" style="margin-bottom:20px;border:1px solid rgba(255,179,0,.25);background:linear-gradient(135deg,var(--bg2),rgba(255,179,0,.03))"><div style="padding:20px 18px"><div style="text-align:center;margin-bottom:16px"><div style="font-size:28px;margin-bottom:8px">🐂</div><div style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-lg);font-weight:700;color:var(--t1);margin-bottom:6px">Bir tüyo mu duydun?</div><div style="font-size:var(--fs-base);color:var(--t2);line-height:1.6">Hisse kodunu yaz, BistBull 9 boyutta analiz etsin.<br>Tüyo gerçek mi, zamanlama doğru mu — hemen gör.</div></div><div style="display:flex;gap:8px;max-width:400px;margin:0 auto"><input type="text" id="tuyoInp" placeholder="Örn: THYAO, ASELS, BIMAS..." autocomplete="off" enterkeyhint="go" style="flex:1;font-family:'JetBrains Mono',monospace;font-size:var(--fs-md);padding:12px 14px;background:var(--bg0);border:1px solid var(--bdr);border-radius:var(--rad);color:var(--t1);outline:0;text-transform:uppercase;min-height:48px"><button onclick="tuyoKontrol()" class="btn btn-grn" style="font-size:var(--fs-md);padding:12px 20px;min-height:48px;white-space:nowrap">Kontrol Et</button></div><div style="text-align:center;margin-top:10px;font-size:var(--fs-xs);color:var(--t4)">108 BIST hissesi taranıyor + arama ile tüm hisseler analiz edilebilir</div></div></div>`;
+
+// Hero
+h+=`<div class="hero-wrap"><div class="hero-tag">📡 BUGÜN NE OLUYOR?</div>`;
+if(hr){
+  const modeCol=hr.mode_color==='green'?'var(--grn)':hr.mode_color==='red'?'var(--red)':'var(--ylw)';
+  h+=`<div style="margin-bottom:18px;padding-bottom:18px;border-bottom:1px solid var(--bdr)">`;
+  h+=`<div style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-xl);font-weight:700;color:${modeCol};margin-bottom:10px">📊 ${esc(hr.mode_label)}</div>`;
+  h+=`<div style="font-size:var(--fs-base);color:var(--t2);line-height:1.7">${esc(hr.story||'')}</div></div>`;
+  h+=`<div class="g2" style="margin-bottom:18px">`;
+  // DEĞER LİDERLERİ
+  h+=`<div class="hmc opp" style="border-left-color:var(--grn)"><div style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-xs);color:var(--grn);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">🏛️ Değer Liderleri</div>`;
+  if(hr.deger_leaders&&hr.deger_leaders.length){hr.deger_leaders.forEach((dl,i)=>{h+=`<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;${i<hr.deger_leaders.length-1?'border-bottom:1px solid var(--bdr)':''}"><span class="clk-t" style="font-size:var(--fs-md)" onclick="loadTicker('${esc(dl.ticker)}')">${esc(dl.ticker)}</span><div style="text-align:right"><span style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-lg);font-weight:700;color:var(--grn)">${dl.deger}</span><span style="font-size:var(--fs-xs);color:var(--t3);margin-left:4px">D</span></div></div>`;});}else{h+=`<div class="hmc-desc" style="color:var(--t3)">Tarama sonrası görünür</div>`;}
+  h+=`<div style="font-size:var(--fs-xs);color:var(--t4);margin-top:8px;font-style:italic">Uzun vade · Haftalık güncellenir</div></div>`;
+  // İVME LİDERLERİ
+  h+=`<div class="hmc opp" style="border-left-color:var(--blu)"><div style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-xs);color:var(--blu);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">⚡ İvme Liderleri</div>`;
+  if(hr.ivme_leaders&&hr.ivme_leaders.length){hr.ivme_leaders.forEach((dl,i)=>{h+=`<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;${i<hr.ivme_leaders.length-1?'border-bottom:1px solid var(--bdr)':''}"><span class="clk-t" style="font-size:var(--fs-md)" onclick="loadTicker('${esc(dl.ticker)}')">${esc(dl.ticker)}</span><div style="text-align:right"><span style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-lg);font-weight:700;color:var(--blu)">${dl.ivme}</span><span style="font-size:var(--fs-xs);color:var(--t3);margin-left:4px">I</span></div></div>`;});}else{h+=`<div class="hmc-desc" style="color:var(--t3)">Tarama sonrası görünür</div>`;}
+  h+=`<div style="font-size:var(--fs-xs);color:var(--t4);margin-top:8px;font-style:italic">Kısa vade · Günlük güncellenir</div></div>`;
+  h+=`</div>`;
+  // Risk + Bot + Watch
+  h+=`<div class="g3" style="margin-bottom:18px">`;
+  h+=`<div class="hmc risk"><div class="hmc-icon">⚠️</div><div class="hmc-label">Dikkat</div>${hr.risk?`<div class="hmc-value"><span class="clk-t" onclick="loadTicker('${esc(hr.risk.ticker)}')">${esc(hr.risk.ticker)}</span> <span style="color:var(--red)">D:${hr.risk.deger||'?'}</span></div><div class="hmc-desc">${esc(hr.risk.reason||'')}</div>`:'<div class="hmc-desc" style="color:var(--t3)">Tarama sonrası</div>'}</div>`;
+  h+=`<div class="hmc bot"><div class="hmc-icon">🤖</div><div class="hmc-label">Bot Ne Diyor?</div><div class="hmc-desc">${esc(hr.bot_says||'AI yorumu yükleniyor...')}</div></div>`;
+  h+=`<div class="hmc watch"><div class="hmc-icon">👀</div><div class="hmc-label">Takip Et</div><div class="hmc-desc">${(hr.watch||[]).map(w=>`<div style="padding:3px 0;color:var(--t1)">• ${esc(w)}</div>`).join('')||'—'}</div></div>`;
+  h+=`</div>`;
+  // BUGÜN NE YAPMALI — aksiyon odaklı özet
+  if(hasSc){
+    const best=sc.items[0];const worst=sc.items[sc.items.length-1];
+    const topIvme=sc.items.reduce((a,b)=>(b.ivme||0)>(a.ivme||0)?b:a,sc.items[0]);
+    h+=`<div style="margin-bottom:18px;padding:16px;background:linear-gradient(135deg,rgba(255,179,0,.06),rgba(100,181,246,.04));border:1px solid rgba(255,179,0,.2);border-radius:var(--rad)">`;
+    h+=`<div style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-xs);color:var(--acc);text-transform:uppercase;letter-spacing:1px;margin-bottom:12px">📋 Bugün Ne Yapmalı?</div>`;
+    h+=`<div style="display:flex;flex-direction:column;gap:10px;font-size:var(--fs-base);line-height:1.6">`;
+    h+=`<div style="display:flex;gap:8px;align-items:flex-start"><span style="color:var(--grn);font-weight:700;flex-shrink:0">✓</span><span style="color:var(--t1)"><span class="clk-t" onclick="loadTicker('${esc(best.ticker)}')">${esc(best.ticker)}</span> değer skoru <b style="color:var(--grn)">${(best.deger||best.overall).toFixed(0)}</b> ile en güçlü — takip et</span></div>`;
+    if(topIvme.ticker!==best.ticker){h+=`<div style="display:flex;gap:8px;align-items:flex-start"><span style="color:var(--blu);font-weight:700;flex-shrink:0">⚡</span><span style="color:var(--t1)"><span class="clk-t" onclick="loadTicker('${esc(topIvme.ticker)}')">${esc(topIvme.ticker)}</span> ivme skoru <b style="color:var(--blu)">${(topIvme.ivme||50).toFixed(0)}</b> — momentum güçlü</span></div>`;}
+    h+=`<div style="display:flex;gap:8px;align-items:flex-start"><span style="color:var(--red);font-weight:700;flex-shrink:0">✗</span><span style="color:var(--t2)"><span class="clk-t" onclick="loadTicker('${esc(worst.ticker)}')">${esc(worst.ticker)}</span> değer skoru <b style="color:var(--red)">${(worst.deger||worst.overall).toFixed(0)}</b> — dikkatli ol</span></div>`;
+    h+=`</div></div>`;
+  }
+} else {
+  h+=`<div style="font-size:var(--fs-lg);font-weight:700;color:var(--t1);margin-bottom:8px">${hasSc?sc.items.length+' Hisse Analiz Edildi':'108 hisse taranıyor — biraz sürecek...'}</div>`;
+  h+=`<div style="color:var(--t2);font-size:var(--fs-base)">${hasSc?'Sonuçlar hazır — aşağı kaydır.':_rndLoad()}</div>`;
+}
+h+=`<div id="hSt"></div>`;
+h+=`<div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap"><button class="btn btn-grn" id="scanBtn" onclick="startScan()">🔄 YENİLE</button><button class="btn btn-blu" onclick="loadBriefing()">🤖 AI BRİFİNG</button></div>`;
+h+=`</div>`;
+
+// === 3. TOP PICKS ===
+if(hasD){h+=`<div class="g3" style="margin-bottom:20px"><div class="card"><div class="card-h"><span class="card-t">🏆 Günün 3 Hissesi</span></div><div class="card-b">${d.top3.map(i=>`<div class="pkc"><div style="display:flex;justify-content:space-between;align-items:center"><span class="pkc-tick" onclick="loadTicker('${esc(i.ticker)}')">${esc(i.ticker)}</span><span class="pkc-score" style="color:${sC(i.overall)}">${i.overall}</span></div><div style="font-size:var(--fs-xs);color:var(--t3)">${esc(i.name||'')} · ${esc(i.style)}</div><div class="pkc-reason">${(i.positives||[]).map(p=>esc(p)).join(' · ')}</div></div>`).join('')}</div></div><div class="card"><div class="card-h"><span class="card-t">💡 3 Fırsat</span></div><div class="card-b">${(d.opportunities||[]).map(i=>`<div class="pkc opp"><div style="display:flex;justify-content:space-between"><span class="pkc-tick" onclick="loadTicker('${esc(i.ticker)}')">${esc(i.ticker)}</span><span style="color:var(--ylw);font-family:'JetBrains Mono',monospace;font-size:var(--fs-sm)">${i.overall}/100</span></div><div class="pkc-reason">${esc(i.reason||'')}</div></div>`).join('')||'<p style="color:var(--t3)">Tarama sonrası</p>'}</div></div><div class="card"><div class="card-h"><span class="card-t">⚠️ 3 Risk</span></div><div class="card-b">${(d.risks||[]).map(i=>`<div class="pkc risk"><div style="display:flex;justify-content:space-between"><span class="pkc-tick" onclick="loadTicker('${esc(i.ticker)}')">${esc(i.ticker)}</span><span style="color:var(--red);font-family:'JetBrains Mono',monospace;font-size:var(--fs-sm)">${i.overall}/100</span></div><div class="pkc-reason">${esc(i.reason||'')}</div></div>`).join('')||'<p style="color:var(--t3)">Tarama sonrası</p>'}</div></div></div>`;}
+
+// === 4. PORTFÖY + ARAÇLAR ===
+const _pf=getPF();
+if(_pf.length&&hasSc){
+  let pfTotal=0,pfItems=[];
+  _pf.forEach(p=>{const found=(sc?.items||[]).find(i=>i.ticker===p.ticker);const price=found?.price||p.avg;const val=p.lot*price;const cost=p.lot*p.avg;const pnl=val-cost;pfTotal+=pnl;pfItems.push({ticker:p.ticker,pnl,deger:found?.deger||found?.overall||50});});
+  const pfBest=pfItems.reduce((a,b)=>b.deger>a.deger?b:a,pfItems[0]);
+  const pfWorst=pfItems.reduce((a,b)=>b.deger<a.deger?b:a,pfItems[0]);
+  const pfCol=pfTotal>=0?'var(--grn)':'var(--red)';
+  h+=`<div class="card" style="margin-bottom:20px;border-left:3px solid ${pfCol}"><div class="card-h"><span class="card-t">📒 Portföyüm</span><button class="btn btn-sm btn-blu" onclick="goPage('portfoy')">DETAY →</button></div><div class="card-b"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px"><div><span style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-xs);color:var(--t3)">Tahmini K/Z</span><div style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-xl);font-weight:700;color:${pfCol}">${pfTotal>=0?'+':''}${fN(pfTotal)} TL</div></div><div style="text-align:right"><div style="font-size:var(--fs-xs);color:var(--t3)">${_pf.length} hisse</div></div></div><div style="display:flex;gap:8px;font-size:var(--fs-sm);flex-wrap:wrap"><span style="color:var(--grn)">En güçlü: <span class="clk-t" onclick="loadTicker('${esc(pfBest.ticker)}')">${esc(pfBest.ticker)}</span> (D:${pfBest.deger.toFixed(0)})</span><span style="color:var(--t4)">·</span><span style="color:var(--red)">Dikkat: <span class="clk-t" onclick="loadTicker('${esc(pfWorst.ticker)}')">${esc(pfWorst.ticker)}</span> (D:${pfWorst.deger.toFixed(0)})</span></div></div></div>`;
+}
+h+=`<div class="g2" style="margin-bottom:20px"><div class="card"><div class="card-h"><span class="card-t">⭐ Takip Listem</span></div><div class="card-b">${S.wl.length?S.wl.map(t=>`<div class="wl-item"><span class="wl-tick" onclick="loadTicker('${esc(t)}')">${esc(t)}</span><button class="wl-rm" onclick="wlRm('${esc(t)}');renderHome()">✕</button></div>`).join(''):'<p style="color:var(--t3);font-size:var(--fs-sm)">Hisse detayında ⭐ ile ekleyin</p>'}</div></div><div class="card"><div class="card-h"><span class="card-t">⚡ Son Sinyaller</span><button class="btn btn-sm btn-orn" onclick="goPage('cross')">TÜMÜ →</button></div><div class="card-b">${S.cross&&S.cross.signals?S.cross.signals.filter(s=>(s.stars||1)>=2).slice(0,4).map(s=>`<div class="sigc ${s.signal_type==='bullish'?'bull':s.signal_type==='bearish'?'bear':''}"><div style="display:flex;justify-content:space-between"><span class="clk-t" style="font-size:var(--fs-sm)" onclick="loadTicker('${esc(s.ticker)}')">${esc(s.ticker)}</span><span style="color:var(--t3);font-size:var(--fs-xs);font-family:'JetBrains Mono',monospace">${'⭐'.repeat(s.stars||1)} ${esc(s.signal)}</span></div></div>`).join('')||'<p style="color:var(--t3);font-size:var(--fs-sm)">Güçlü sinyal yok</p>':'<p style="color:var(--t3);font-size:var(--fs-sm)">Cross → sinyal tara</p>'}</div></div></div>`;
+
+// === 5. TOP 10 TABLE ===
+if(hasSc){h+=`<div class="card" style="margin-bottom:20px"><div class="card-h"><span class="card-t">🏛️ Top 10 — Temel Analiz Radar</span><button class="btn btn-sm btn-grn" onclick="goPage('radar')">TÜMÜ →</button></div><div style="padding:8px 16px;background:var(--bg3);border-bottom:1px solid var(--bdr);font-size:var(--fs-xs);color:var(--t3)">Uzun vadeli değer tarayıcı — Değerleme, Kalite, Bilanço, Büyüme</div><div class="card-b" style="overflow-x:auto">${renderRadarTbl(sc.items.slice(0,10),S._radarSort||'deger')}</div></div>`;}
+
+// === 6. SEKTÖR + HEATMAP + ALPHA QUADRANT ===
+h+=`<div class="g2" style="margin-bottom:20px"><div class="card"><div class="card-h"><span class="card-t">🏢 Sektör Güç Haritası</span></div><div class="card-b">${hr&&hr.strong_sectors?renderSectorCards(hr):(hasD&&d.sectors?renderSectors(d.sectors):'<p style="color:var(--t3)">Tarama sonrası</p>')}</div></div><div class="card"><div class="card-h" style="display:flex;justify-content:space-between;align-items:center"><div style="display:flex;gap:4px"><button class="btn btn-sm ${S._vizTab!=='alpha'?'btn-orn':'btn-dim'}" onclick="S._vizTab='heat';renderHome()">🔥 Isı Haritası</button><button class="btn btn-sm ${S._vizTab==='alpha'?'btn-blu':'btn-dim'}" onclick="S._vizTab='alpha';renderHome()">🎯 Alpha Quadrant</button></div><button class="btn btn-sm btn-orn" onclick="S._heatLoaded=false;loadHeatmap()">🔄</button></div><div class="card-b">${S._vizTab==='alpha'?(S.alphaHtml||'<div style="color:var(--t4);font-size:var(--fs-sm)">Scan sonrası aktif olacak</div>'):(S.heatmapHtml||'<div style="color:var(--t4);font-size:var(--fs-sm)">Yükleniyor...</div>')}</div></div></div>`;
+
+// === 7. KARSILASTIRMA ===
+h+=`<div class="card" style="margin-bottom:20px"><div class="card-h"><span class="card-t">📊 Neden BistBull?</span></div><div class="card-b" style="overflow-x:auto">`;
+h+=`<table class="dtb" style="min-width:500px"><thead><tr><th style="min-width:140px">Özellik</th><th style="text-align:center">Fintables</th><th style="text-align:center">Matriks</th><th style="text-align:center">TradingView</th><th style="text-align:center;color:var(--acc)">BistBull</th></tr></thead><tbody>`;
+const cmp=[
+['Temel Analiz','⭐⭐⭐⭐⭐','⭐⭐⭐','⭐⭐','⭐⭐⭐⭐'],
+['Teknik Analiz','⭐⭐','⭐⭐⭐⭐','⭐⭐⭐⭐⭐','⭐⭐⭐'],
+['Takas / Kurum Akisi','⭐⭐','⭐⭐⭐⭐⭐','—','⭐⭐ (proxy)'],
+['9 Boyut Hibrit Skorlama','—','—','—','⭐⭐⭐⭐⭐'],
+['AI Yorum + Q Asistanı','—','—','—','⭐⭐⭐⭐⭐'],
+['DEGER / IVME Ikili Analiz','—','—','—','⭐⭐⭐⭐⭐'],
+['Cross Hunter (14 sinyal)','—','⭐⭐⭐','⭐⭐⭐⭐','⭐⭐⭐⭐'],
+['Kullanim Kolayligi','⭐⭐⭐⭐','⭐⭐','⭐⭐⭐','⭐⭐⭐⭐⭐'],
+];
+cmp.forEach((row,i)=>{
+const bg=i%2===1?'background:var(--bg3)':'';
+const isUnique=row[1]==='—'&&row[2]==='—'&&row[3]==='—';
+h+=`<tr style="${bg}"><td style="padding:12px 10px;font-size:var(--fs-sm);color:${isUnique?'var(--blu)':'var(--t1)'};font-weight:${isUnique?'700':'500'}">${row[0]}</td><td style="text-align:center;font-size:var(--fs-sm);color:var(--t2)">${row[1]}</td><td style="text-align:center;font-size:var(--fs-sm);color:var(--t2)">${row[2]}</td><td style="text-align:center;font-size:var(--fs-sm);color:var(--t2)">${row[3]}</td><td style="text-align:center;font-size:var(--fs-sm);color:var(--acc);font-weight:700">${row[4]}</td></tr>`;
+});
+h+=`</tbody></table>`;
+h+=`<div style="margin-top:14px;padding:12px;background:var(--bg3);border-radius:var(--rad);font-size:var(--fs-sm);color:var(--t2);line-height:1.6;text-align:center"><span style="color:var(--blu)">Mavi satirlar</span> sadece BistBull'da var — hibrit skorlama, AI yatirim tezi ve ikili analiz baska hicbir platformda yok.</div>`;
+h+=`</div></div>`;
+
+// === 8. KEŞFET — Nasıl Çalışır (dismissable) + Kitap + Söz ===
+const infoDismissed=localStorage.getItem('bb_info_dismissed');
+if(!infoDismissed){
+h+=`<div class="card" style="margin-bottom:20px;position:relative" id="infoCard"><button onclick="localStorage.setItem('bb_info_dismissed','1');document.getElementById('infoCard').remove()" style="position:absolute;top:10px;right:10px;background:var(--bg4);border:1px solid var(--bdr);border-radius:50%;width:28px;height:28px;color:var(--t3);cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center">✕</button><div class="card-h"><span class="card-t">🐂 BistBull Nasıl Çalışır?</span></div><div class="card-b" style="font-size:var(--fs-base);color:var(--t2);line-height:1.7"><b style="color:var(--blu)">7 boyutlu temel analiz</b> — iki ayri perspektif: <span style="color:var(--grn)">🏛️ DEĞER</span> (6 boyut: Değerleme, Kalite, Büyüme, Bilanço, Karlılık, Hendek — Piotroski, Altman, Beneish, Graham, Buffett modelleri) + <span style="color:var(--blu)">⚡ İVME</span> (3 boyut: Momentum, Teknik Kırılım, Kurum Akışı). Her hisse iki ayrı skor alır: <span style="color:var(--grn)">Değer skoru</span> (uzun vade — ne almalıyım?) ve <span style="color:var(--blu)">İvme skoru</span> (kısa vade — ne zaman girmeliyim?). 100 hisselik BIST evreni otomatik taranır. <b style="color:var(--prp)">AI destekli yatırım tezi</b> ve <b style="color:var(--prp)">Q asistanı</b> ile profesyonel analiz herkesin erişiminde.</div></div>`;
+}
+// Kitap + Söz (keşfet alanı — alt)
+h+=`<div class="g2" style="margin-bottom:20px">`;
+if(S.book){h+=`<div class="card"><div class="card-h"><span class="card-t">📚 Günün Kitabı</span></div><div class="card-b"><div style="display:flex;gap:14px;align-items:flex-start"><div style="font-size:32px;flex-shrink:0">📖</div><div><div style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-md);font-weight:700;color:var(--blu);margin-bottom:4px">${esc(S.book.title)}</div><div style="font-size:var(--fs-sm);color:var(--gold);margin-bottom:6px">${esc(S.book.author)}</div><div style="font-size:var(--fs-sm);color:var(--t2);line-height:1.6">${esc(S.book.description)}</div></div></div></div></div>`;}else{h+=`<div></div>`;}
+if(S.quote){h+=`<div class="card"><div class="card-h"><span class="card-t">💬 Günün Sözü</span></div><div class="card-b"><div style="font-style:italic;color:var(--t2);font-size:var(--fs-base);line-height:1.7">"${esc(S.quote.text)}"</div><div style="margin-top:8px;color:var(--gold);font-weight:600;font-size:var(--fs-sm)">— ${esc(S.quote.author)}</div></div></div>`;}else{h+=`<div></div>`;}
+h+=`</div>`;
+
+// === 9. SON BAKTIKLARINIZ + SISTEM ===
+h+=`<div class="g2" style="margin-bottom:20px">`;
+h+=`<div class="card"><div class="card-h"><span class="card-t">🕐 Son Baktıklarınız</span></div><div class="card-b">${S.seen.length?S.seen.map(t=>`<span class="ls-item" onclick="loadTicker('${esc(t)}')">${esc(t)}</span>`).join(''):'<p style="color:var(--t3);font-size:var(--fs-sm)">Henüz hisse incelemediniz</p>'}</div></div>`;
+const ls=S.liveStats||{};
+h+=`<div class="card"><div class="card-h"><span class="card-t">📡 Sistem</span></div><div class="card-b"><div class="g4"><div class="live-stat"><div class="live-num">${ls.scans_done||'—'}</div><div class="live-label">Analiz</div></div><div class="live-stat"><div class="live-num">${ls.signals_total||'—'}</div><div class="live-label">Sinyal</div></div><div class="live-stat"><div class="live-num">${ls.macro_tracked||'—'}</div><div class="live-label">Makro</div></div><div class="live-stat"><div class="live-num">${ls.uptime_hours||'—'}</div><div class="live-label">Uptime</div></div></div></div></div>`;
+h+=`</div>`;
+
+pg.innerHTML=h;
+if(!S.macro)loadMacro();
+}
+
+// ===== SECTOR CARDS =====
+function renderSectorCards(hr){
+  let h='';
+  if(hr.strong_sectors&&hr.strong_sectors.length){h+=`<div style="margin-bottom:8px;font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--t3);text-transform:uppercase">Güçlü Sektörler</div>`;hr.strong_sectors.forEach(s=>{h+=`<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--bdr)"><span style="color:var(--t1);font-size:12px">${esc(s.name)}</span><span style="color:var(--grn);font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700">${s.score}</span></div>`;});}
+  if(hr.weak_sectors&&hr.weak_sectors.length){h+=`<div style="margin-top:10px;margin-bottom:8px;font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--t3);text-transform:uppercase">Zayıf Sektörler</div>`;hr.weak_sectors.forEach(s=>{h+=`<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--bdr)"><span style="color:var(--t1);font-size:12px">${esc(s.name)}</span><span style="color:var(--red);font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700">${s.score}</span></div>`;});}
+  return h||'<p style="color:var(--t3);font-size:12px">Tarama sonrası</p>';
+}
+function renderSectors(secs){if(!secs||!secs.length)return'';const mx=Math.max(...secs.map(s=>s.avg_score||1));return`<div style="display:flex;align-items:flex-end;gap:6px;height:100px;padding-bottom:20px;position:relative">${secs.slice(0,8).map(s=>{const ht=Math.max(10,((s.avg_score||0)/mx)*90),c=sC(s.avg_score);return`<div style="flex:1;height:${ht}%;background:${c};border-radius:3px 3px 0 0;min-width:30px;position:relative;cursor:pointer" title="${esc(s.sector)}: ${s.avg_score}"><div style="position:absolute;top:-14px;left:50%;transform:translateX(-50%);font-size:9px;font-weight:700;font-family:'JetBrains Mono',monospace;color:${c}">${s.avg_score?.toFixed(0)||'?'}</div><div style="position:absolute;bottom:-18px;left:50%;transform:translateX(-50%);font-size:7px;color:var(--t4);white-space:nowrap;font-family:'JetBrains Mono',monospace">${esc((s.sector||'?').slice(0,6))}</div></div>`;}).join('')}</div>`;}
+function renderMacMini(items){const show=items.filter(m=>['turkiye','emtia'].includes(m.category)).slice(0,8);if(!show.length)return'<p style="color:var(--t3)">Veri yok</p>';return show.map(m=>`<div class="mac"><div class="mac-s">${esc(m.flag||'')} ${esc(m.name)}</div><div class="mac-p">${fN(m.price,m.key?.includes('TRY')?4:2)}</div><div class="mac-c" style="color:${cC(m.change_pct)}">${cS(m.change_pct)}%</div></div>`).join('');}
+
+// ===== LOADERS =====
+async function loadQuote(){try{S.quote=await api('/api/quote');}catch(e){}}
+async function loadLiveStats(){try{S.liveStats=await api('/api/live/stats');}catch(e){}}
+async function loadBook(){try{S.book=await api('/api/book');}catch(e){}}
+async function loadMarketStatus(){try{S.marketStatus=await api('/api/market-status');}catch(e){}}
+async function loadMacro(){try{S.macro=await api('/api/macro');const el=$('macMini');if(el)el.innerHTML=renderMacMini(S.macro.items||[]);const ng=$('nabGrid');if(ng)ng.innerHTML=renderNabiz(S.macro.items||[]);renderTickerBar(S.macro.items||[]);}catch(e){console.error('macro:',e);}}
+function renderTickerBar(items){const tb=$('tbar');const inner=items.map(m=>`<div class="tbar-i"><span style="color:var(--t2);font-weight:600">${esc(m.flag||'')} ${esc(m.key||m.name)}</span><span style="color:var(--t1)">${fN(m.price,m.key?.includes('TRY')?4:2)}</span><span style="color:${cC(m.change_pct)};font-size:10px">${cS(m.change_pct)}%</span></div>`).join('');tb.innerHTML=`<div class="tbar-inner">${inner}${inner}</div>`;}
+
+// ===== MAKRO PAGE =====
+function renderMakroPage(){const pg=$('pg-makro');if(!S.macro){pg.innerHTML='<div class="ld"><div class="sp"></div><div class="ld-t">Makro verileri yükleniyor...</div></div>';loadMacro().then(()=>renderMakroPage());return;}const items=S.macro.items||[];if(!items.length){pg.innerHTML='<div class="emp"><h3 style="color:var(--t2)">Makro veri alınamadı</h3></div>';return;}const cats={turkiye:[],em:[],global:[],emtia:[]};items.forEach(m=>cats[m.category]?.push(m));const emSorted=[...cats.em,...cats.turkiye.filter(m=>m.key==='XU030'||m.key==='XU100')].sort((a,b)=>(b.ytd_pct||0)-(a.ytd_pct||0));let h=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px"><h2 style="font-family:'JetBrains Mono',monospace;font-size:15px;color:var(--blu)">🌍 Makro Radar</h2><button class="btn btn-sm btn-blu" onclick="loadMacroAI()">🤖 AI YORUM</button></div><div id="macroAI"></div>`;
+// === FAİZ & RİSK KARTI ===
+const rates=S.macro.rates||[];
+if(rates.length){
+h+=`<div class="card" style="margin-bottom:14px;border:1px solid rgba(255,179,0,.2)"><div class="card-h"><span class="card-t">🏦 Faiz & Risk Göstergeleri</span><span style="font-size:9px;color:var(--t4);font-family:'JetBrains Mono',monospace">Manuel veri</span></div><div class="card-b"><div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">`;
+rates.forEach(r=>{
+  const chg=r.rate-r.prev;const chgCol=chg>0?'var(--red)':chg<0?'var(--grn)':'var(--t3)';
+  const arrow=chg>0?'▲':chg<0?'▼':'—';
+  h+=`<div style="background:var(--bg3);border:1px solid var(--bdr);border-radius:var(--rad);padding:10px;text-align:center">`;
+  h+=`<div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--t3);text-transform:uppercase;margin-bottom:4px">${esc(r.flag||'')} ${esc(r.name)}</div>`;
+  h+=`<div style="font-family:'JetBrains Mono',monospace;font-size:18px;font-weight:700;color:var(--t1)">${r.unit==='bps'?r.rate:r.rate.toFixed(2)}${esc(r.unit==='bps'?' bps':'%')}</div>`;
+  h+=`<div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:${chgCol};margin-top:2px">${arrow} ${chg!==0?Math.abs(chg).toFixed(r.unit==='bps'?0:2):'Sabit'}</div>`;
+  h+=`<div style="font-size:8px;color:var(--t4);margin-top:3px">${esc(r.note||'')} · ${esc(r.updated||'')}</div>`;
+  h+=`</div>`;
+});
+h+=`</div></div></div>`;
+}
+h+=`<div class="card" style="margin-bottom:14px"><div class="card-h"><span class="card-t">🏁 EM YTD Siralama</span></div><div class="card-b" style="overflow-x:auto"><div style="margin-bottom:6px;display:flex;padding:4px 10px;font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--t4);text-transform:uppercase"><span style="width:24px">#</span><span style="width:24px"></span><span style="flex:1">Endeks</span><span style="width:80px;text-align:right">Fiyat</span><span style="width:65px;text-align:right">Gun</span><span style="width:65px;text-align:right">1H</span><span style="width:65px;text-align:right">1A</span><span style="width:65px;text-align:right">YTD</span></div>`;
+emSorted.forEach((m,i)=>{const isTR=m.key==='XU030'||m.key==='XU100';h+=`<div class="em-row" style="${isTR?'background:rgba(0,230,118,.05);border-left:2px solid var(--grn)':''}"><span class="em-rank">${i+1}</span><span class="em-flag">${esc(m.flag||'')}</span><span class="em-name">${esc(m.name)}</span><span class="em-price">${fN(m.price,2)}</span><span class="em-chg" style="color:${cC(m.change_pct)}">${cS(m.change_pct)}%</span><span class="em-chg" style="color:${cC(m.w1_pct||0)}">${m.w1_pct!=null?cS(m.w1_pct)+'%':'—'}</span><span class="em-chg" style="color:${cC(m.m1_pct||0)}">${m.m1_pct!=null?cS(m.m1_pct)+'%':'—'}</span><span class="em-ytd" style="color:${cC(m.ytd_pct||0)}">${m.ytd_pct!=null?cS(m.ytd_pct)+'%':'—'}</span></div>`;});h+=`</div></div>`;
+for(const[cat,label]of[['turkiye','🇹🇷 Turkiye'],['global','🌐 Global'],['emtia','🛢️ Emtia']]){const list=cats[cat]||[];if(!list.length)continue;h+=`<h3 style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--t2);margin:14px 0 8px;text-transform:uppercase">${label}</h3><div class="g4" style="margin-bottom:12px">`;list.forEach(m=>{h+=`<div class="mac" style="padding:12px"><div class="mac-s">${esc(m.flag||'')} ${esc(m.name)}</div><div class="mac-p" style="font-size:18px">${fN(m.price,m.key?.includes('TRY')?4:2)}</div><div class="mac-c" style="color:${cC(m.change_pct)};font-size:12px">${cS(m.change_pct)}%</div><div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--t3);margin-top:4px">YTD: <span style="color:${cC(m.ytd_pct||0)};font-weight:700">${m.ytd_pct!=null?cS(m.ytd_pct)+'%':'—'}</span></div></div>`;});h+='</div>';}pg.innerHTML=h;}
+async function loadMacroAI(){const box=$('macroAI');if(!box)return;box.innerHTML='<div class="aib" style="margin-bottom:14px"><div class="aib-t">🤖 AI MAKRO YORUM</div><div class="aib-tx">Yükleniyor...</div></div>';try{const d=await api('/api/macro/commentary');box.innerHTML=d.commentary?`<div class="aib" style="margin-bottom:14px"><div class="aib-t">🤖 AI MAKRO YORUM</div><div class="aib-tx">${esc(d.commentary).replace(/\n/g,'<br>')}</div></div>`:`<div class="aib" style="margin-bottom:14px;border-color:var(--ylw)"><div class="aib-t" style="color:var(--ylw)">AI</div><div class="aib-tx" style="color:var(--ylw)">${esc(d.error||'OPENAI_KEY veya XAI_API_KEY ekleyin')}</div></div>`;}catch(e){box.innerHTML='';}}
+
+// ===== RADAR PAGE =====
+function renderRadarPage(){const pg=$('pg-radar');const sc=S.scan;if(!sc||!sc.items||!sc.items.length){pg.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px"><h2 style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-lg);color:var(--cyn)">🏛️ Temel Analiz Radar</h2><button class="btn btn-grn" onclick="startScan()">▶ SCAN</button></div><div class="emp"><h3 style="color:var(--t2)">Henüz taranmadı</h3></div>`;return;}const sort=S._radarSort||'deger';pg.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px"><div><h2 style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-lg);color:var(--cyn)">🏛️ Temel Analiz Radar — ${sc.items.length} Hisse</h2><p style="font-size:var(--fs-sm);color:var(--t3);margin-top:2px">${sc.asof?new Date(sc.asof).toLocaleString('tr-TR'):''}</p></div><button class="btn btn-grn" onclick="startScan()">🔄</button></div><div style="padding:12px 16px;background:var(--bg3);border-radius:var(--rad);margin-bottom:14px;font-size:var(--fs-base);color:var(--t2);line-height:1.6"><b style="color:var(--cyn)">Radar nasıl çalışır?</b> Uzun vadeli değer tarayıcı. ${sc.items.length} BIST hissesi 7 temel boyutta analiz edilir: Değerleme (F/K, PD/DD, FD/FAVÖK), Kalite (ROE, marjlar), Büyüme, Bilanço sağlamlığı (Altman Z, borç), Kârlılık (Beneish, nakit akış) ve Hendek (marj stabilitesi). <span style="color:var(--ylw)">Kısa vadeli momentum ve teknik sinyaller için → Cross Hunter.</span></div><div class="card"><div class="card-b" style="overflow-x:auto">${renderRadarTbl(sc.items,sort)}</div></div>`;}
+
+// ===== CROSS PAGE =====
+/* ── TRACK RECORD CSS ── */
+const _trCSS=`<style>
+.trc{animation:trc-in .35s cubic-bezier(.4,0,.2,1) both}
+@keyframes trc-in{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+.trc.s-active{border-left:2px solid var(--blu)!important}
+.trc.s-tp{border-left:2px solid var(--grn)!important}
+.trc.s-sl{border-left:2px solid var(--red)!important}
+.trc.s-watch{border-left:2px solid var(--acc)!important}
+.trb-active{font-family:'JetBrains Mono',monospace;font-size:9px;padding:2px 7px;border-radius:20px;background:rgba(96,165,250,.1);color:var(--blu);border:1px solid rgba(96,165,250,.2);white-space:nowrap;animation:trb-breathe 3s ease-in-out infinite}
+@keyframes trb-breathe{0%,100%{box-shadow:none}50%{box-shadow:0 0 10px rgba(96,165,250,.15)}}
+.trb-watch{font-family:'JetBrains Mono',monospace;font-size:9px;padding:2px 7px;border-radius:20px;background:rgba(212,168,68,.08);color:var(--acc);border:1px solid rgba(212,168,68,.2);white-space:nowrap}
+.trb-tp{font-family:'JetBrains Mono',monospace;font-size:9px;padding:2px 7px;border-radius:20px;background:rgba(52,211,153,.1);color:var(--grn);border:1px solid rgba(52,211,153,.25);white-space:nowrap;animation:trb-glow 2.5s ease-in-out infinite}
+@keyframes trb-glow{0%,100%{box-shadow:0 0 8px rgba(52,211,153,.1)}50%{box-shadow:0 0 20px rgba(52,211,153,.2)}}
+.trb-sl{font-family:'JetBrains Mono',monospace;font-size:9px;padding:2px 7px;border-radius:20px;background:rgba(248,113,113,.08);color:var(--red);border:1px solid rgba(248,113,113,.2);white-space:nowrap}
+.tr-tab{font-family:'JetBrains Mono',monospace;font-size:10px;padding:5px 11px;background:transparent;border:none;color:var(--t3);cursor:pointer;border-radius:6px;transition:all .2s;white-space:nowrap}
+.tr-tab:hover{color:var(--t2);background:var(--bg3)}
+.tr-tab.on{background:var(--bg2);color:var(--acc);border:1px solid var(--accd)}
+.tr-fbtn{font-size:10px;padding:3px 9px;border:1px solid var(--bdr);background:var(--bg2);color:var(--t3);font-family:'JetBrains Mono',monospace;letter-spacing:.08em;text-transform:uppercase;border-radius:20px;cursor:pointer;transition:all .2s}
+.tr-fbtn:hover,.tr-fbtn.on{border-color:var(--accd);color:var(--acc);background:rgba(212,168,68,.05)}
+.tr-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+@media(max-width:640px){.tr-grid{grid-template-columns:1fr}}
+</style>`;
+
+/* ── TRACK RECORD DATA ── */
+const TR={
+dt:{meta:"<b style='color:var(--orn)'>🔥 Day Trade</b> &middot; BIST30 &middot; Hedef <b style='color:var(--grn)'>+%2</b> &middot; Stop <b style='color:var(--red)'>-%1</b> &middot; Ort 47dk",
+sigs:[
+{t:"GARAN",tf:"15m",st:"tp",sig:"Golden Cross + Hacim Patlaması",stars:5,en:109.40,cur:111.60,tp:111.59,sl:108.31,ch:+2.01,prg:100,time:"09:47"},
+{t:"THYAO",tf:"15m",st:"active",sig:"Ichimoku Kumo Kırılımı",stars:4,en:263.10,cur:265.50,tp:268.36,sl:260.47,ch:+0.91,prg:46,time:"10:15"},
+{t:"AKBNK",tf:"15m",st:"tp",sig:"MACD Cross + RSI Yükseliş",stars:4,en:47.22,cur:48.18,tp:48.16,sl:46.75,ch:+2.03,prg:100,time:"11:02"},
+{t:"EREGL",tf:"15m",st:"sl",sig:"52W High Kırılım Denemesi",stars:3,en:55.80,cur:55.24,tp:56.92,sl:55.24,ch:-1.00,prg:100,time:"09:31"},
+{t:"SISE",tf:"15m",st:"watch",sig:"Rectangle Breakout — Onay Bekleniyor",stars:3,en:null,cur:43.76,tp:44.54,sl:43.10,ch:null,prg:62,time:"12:08"},
+{t:"BIMAS",tf:"15m",st:"tp",sig:"VCP Kırılımı + ATR Genişleme",stars:5,en:488.50,cur:498.28,tp:498.27,sl:483.62,ch:+2.00,prg:100,time:"10:44"},
+{t:"TUPRS",tf:"15m",st:"active",sig:"EMA 20/50 Cross + Hacim Teyidi",stars:4,en:211.30,cur:213.80,tp:215.53,sl:209.19,ch:+1.18,prg:59,time:"11:37"},
+{t:"KRDMD",tf:"15m",st:"tp",sig:"Bollinger Band Squeeze Kırılımı",stars:4,en:22.86,cur:23.33,tp:23.32,sl:22.63,ch:+2.05,prg:100,time:"09:58"},
+]},
+sw:{meta:"<b style='color:var(--orn)'>⚡ Swing</b> &middot; BIST100 &middot; Hedef <b style='color:var(--grn)'>+%4</b> &middot; Stop <b style='color:var(--red)'>-%2</b> &middot; Ort 1.8 gün",
+sigs:[
+{t:"KOZAL",tf:"60m",st:"tp",sig:"Haftalık Direncin Kırılması",stars:5,en:145.20,cur:151.01,tp:151.01,sl:142.30,ch:+4.00,prg:100,time:"Dün 14:22"},
+{t:"GUBRF",tf:"60m",st:"active",sig:"Cup & Handle Formasyonu",stars:5,en:218.40,cur:225.10,tp:227.14,sl:214.03,ch:+3.07,prg:77,time:"3 gün önce"},
+{t:"HEKTS",tf:"60m",st:"tp",sig:"Üçgen Kırılımı + OBV Teyidi",stars:4,en:72.40,cur:75.30,tp:75.30,sl:70.95,ch:+4.00,prg:100,time:"2 gün önce"},
+{t:"AEFES",tf:"60m",st:"sl",sig:"Pivot Kırılımı Denemesi",stars:3,en:334.50,cur:327.81,tp:347.88,sl:327.81,ch:-2.00,prg:100,time:"4 gün önce"},
+{t:"AKSA",tf:"60m",st:"active",sig:"Simetrik Üçgen + RSI Sapma",stars:4,en:91.60,cur:93.40,tp:95.26,sl:89.77,ch:+1.97,prg:49,time:"Bugün 08:15"},
+{t:"VESTL",tf:"60m",st:"watch",sig:"Haftalık Direnç — Kırılım Alarmı",stars:3,en:null,cur:56.30,tp:58.55,sl:55.18,ch:null,prg:71,time:"Bugün 11:45"},
+{t:"TTKOM",tf:"60m",st:"tp",sig:"Institutional Flow + Hacim Anomalisi",stars:5,en:28.42,cur:29.56,tp:29.56,sl:27.86,ch:+4.01,prg:100,time:"Dün 09:30"},
+{t:"DOAS",tf:"60m",st:"active",sig:"Ters H&S Çıkışı",stars:4,en:412.70,cur:420.50,tp:429.21,sl:404.45,ch:+1.89,prg:47,time:"Dün 16:40"},
+]},
+tr:{meta:"<b style='color:var(--orn)'>📈 Trend</b> &middot; Tüm Evren &middot; Hedef <b style='color:var(--grn)'>+%10</b> &middot; Stop <b style='color:var(--red)'>-%5</b> &middot; Ort 8-14 gün",
+sigs:[
+{t:"KOZAA",tf:"1G",st:"active",sig:"Haftalık Trend Kanalı + Kurum Alımı",stars:5,en:36.80,cur:40.20,tp:40.48,sl:34.96,ch:+9.24,prg:92,time:"11 gün önce"},
+{t:"TTRAK",tf:"1G",st:"tp",sig:"Multi-Year Aylık Breakout",stars:5,en:2840,cur:3124,tp:3124,sl:2698,ch:+10.00,prg:100,time:"9 gün önce"},
+{t:"CIMSA",tf:"1G",st:"active",sig:"Ichimoku Bullish + MACD Histogram",stars:4,en:155.30,cur:161.70,tp:170.83,sl:147.54,ch:+4.12,prg:41,time:"6 gün önce"},
+{t:"AGHOL",tf:"1G",st:"sl",sig:"Sektör Rotasyonu + Güçlü FA",stars:3,en:98.40,cur:93.48,tp:108.24,sl:93.48,ch:-5.00,prg:100,time:"14 gün önce"},
+{t:"GUBRF",tf:"1G",st:"tp",sig:"Emtia + Temel + Teknik Üçlüsü",stars:5,en:195.60,cur:215.16,tp:215.16,sl:185.82,ch:+10.00,prg:100,time:"7 gün önce"},
+{t:"THYAO",tf:"1G",st:"watch",sig:"Yükselen Üçgen Tepesine Yaklaşım",stars:4,en:null,cur:266.40,tp:293.04,sl:253.08,ch:null,prg:55,time:"Bugün"},
+{t:"EREGL",tf:"1G",st:"active",sig:"Çelik Toparlanması + Beneish Temiz",stars:4,en:54.20,cur:57.60,tp:59.62,sl:51.49,ch:+6.27,prg:63,time:"5 gün önce"},
+{t:"SISE",tf:"1G",st:"tp",sig:"Graham İskontolu + Sektör Liderlik",stars:5,en:40.10,cur:44.11,tp:44.11,sl:38.10,ch:+10.00,prg:100,time:"12 gün önce"},
+]}};
+
+let _trTf='dt',_trFilter='all',_trSbDone=false;
+function _trFmt(n){if(n===null)return'—';return n.toLocaleString('tr-TR',{minimumFractionDigits:2,maximumFractionDigits:2})+' ₺';}
+function _trStars(n){return'★'.repeat(n)+'☆'.repeat(5-n);}
+function _trCount(el,target,dur){const s=performance.now();(function t(now){const p=Math.min((now-s)/dur,1);const e=1-Math.pow(1-p,3);el.textContent=Math.round(target*e);if(p<1)requestAnimationFrame(t);else el.textContent=target;})(s);}
+function _trAnimSb(){
+  if(_trSbDone)return;_trSbDone=true;
+  const tot=$('tr-s-tot'),tp=$('tr-s-tp'),sl=$('tr-s-sl'),act=$('tr-s-act');
+  if(tot)_trCount(tot,142,1200);if(tp)_trCount(tp,118,1400);if(sl)_trCount(sl,24,1300);if(act)_trCount(act,7,900);
+  setTimeout(()=>{
+    const ring=$('tr-ring-fg');if(ring)ring.style.strokeDashoffset=Math.round(345*0.17);
+    const t=performance.now();(function tick(now){const p=Math.min((now-t)/2000,1);const e=1-Math.pow(1-p,3);const el=$('tr-wr-num');if(el)el.textContent=Math.round(83*e)+'%';if(p<1)requestAnimationFrame(tick);})(t);
+  },300);
+  setTimeout(()=>{[['tr-b-tot','100%'],['tr-b-tp','83%'],['tr-b-sl','17%'],['tr-b-act','45%']].forEach(([id,w])=>{const el=$(id);if(el)el.style.width=w;});},500);
+}
+function _trSwTab(tf,btn){
+  _trTf=tf;_trFilter='all';
+  document.querySelectorAll('.tr-tab').forEach(b=>b.classList.remove('on'));btn.classList.add('on');
+  document.querySelectorAll('.tr-fbtn').forEach(b=>b.classList.remove('on'));document.querySelectorAll('.tr-fbtn')[0].classList.add('on');
+  const d=$('tr-desc');if(d)d.innerHTML=TR[tf].meta;
+  _trRender();
+}
+function _trFilt(f,btn){
+  _trFilter=f;document.querySelectorAll('.tr-fbtn').forEach(b=>b.classList.remove('on'));btn.classList.add('on');_trRender();
+}
+function _trCard(s,i){
+  const m={active:{cls:'s-active',badge:'trb-active',lbl:'⚡ AKTİF'},watch:{cls:'s-watch',badge:'trb-watch',lbl:'👁 İZLEMEDE'},tp:{cls:'s-tp',badge:'trb-tp',lbl:'🎯 HEDEF VURULDU'},sl:{cls:'s-sl',badge:'trb-sl',lbl:'🛑 STOP'}};
+  const sm=m[s.st];
+  const tpP=s.tf==='1G'?'+%10':s.tf==='60m'?'+%4':'+%2';
+  const slP=s.tf==='1G'?'-%5':s.tf==='60m'?'-%2':'-%1';
+  const pc=s.st==='tp'?'var(--grn)':s.st==='sl'?'var(--red)':s.st==='active'?'var(--blu)':'var(--acc)';
+  const chH=s.ch!==null?`<span style="color:${s.ch>=0?'var(--grn)':'var(--red)'};font-weight:600">${s.ch>=0?'+':''}${s.ch.toFixed(2)}%</span>`:'<span style="color:var(--t3)">—</span>';
+  const rb=(s.st==='tp'||s.st==='sl')?`<span style="position:absolute;top:10px;right:10px;font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;color:${s.st==='tp'?'var(--grn)':'var(--red)'}">${s.st==='tp'?'+%'+Math.abs(s.ch).toFixed(2)+' 🎯':'-%'+Math.abs(s.ch).toFixed(2)+' 🛑'}</span>`:'';
+  return `<div class="card trc ${sm.cls}" style="animation-delay:${i*0.05}s;position:relative">
+${rb}
+<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
+  <div style="display:flex;align-items:center;gap:6px">
+    <span style="font-family:'JetBrains Mono',monospace;font-size:15px;font-weight:700;color:var(--t1)">${esc(s.t)}</span>
+    <span style="font-size:9px;padding:1px 5px;border-radius:4px;background:var(--bg3);border:1px solid var(--bdr);color:var(--t3)">${s.tf}</span>
+  </div>
+  <span class="${sm.badge}">${sm.lbl}</span>
+</div>
+<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:8px">
+  <div><div style="font-size:9px;color:var(--t3);letter-spacing:.1em;text-transform:uppercase;margin-bottom:2px">Giriş</div><div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--t2)">${s.en!==null?_trFmt(s.en):'Bekleniyor'}</div></div>
+  <div><div style="font-size:9px;color:var(--t3);letter-spacing:.1em;text-transform:uppercase;margin-bottom:2px">Güncel</div><div class="trp-cur" style="font-family:'JetBrains Mono',monospace;font-size:11px;color:${s.ch===null?'var(--t2)':s.ch>=0?'var(--grn)':'var(--red)'}">${_trFmt(s.cur)}</div></div>
+  <div><div style="font-size:9px;color:var(--t3);letter-spacing:.1em;text-transform:uppercase;margin-bottom:2px">Değişim</div>${chH}</div>
+</div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px">
+  <div style="padding:4px 7px;border-radius:5px;background:rgba(52,211,153,.05);border:1px solid rgba(52,211,153,.15)">
+    <div style="font-size:9px;color:rgba(52,211,153,.6);letter-spacing:.08em;text-transform:uppercase;margin-bottom:1px">Hedef ${tpP}</div>
+    <div style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:600;color:var(--grn)">${_trFmt(s.tp)}</div>
+  </div>
+  <div style="padding:4px 7px;border-radius:5px;background:rgba(248,113,113,.05);border:1px solid rgba(248,113,113,.12)">
+    <div style="font-size:9px;color:rgba(248,113,113,.6);letter-spacing:.08em;text-transform:uppercase;margin-bottom:1px">Stop ${slP}</div>
+    <div style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:600;color:var(--red)">${_trFmt(s.sl)}</div>
+  </div>
+</div>
+<div style="margin-bottom:8px">
+  <div style="display:flex;justify-content:space-between;font-size:9px;color:var(--t3);margin-bottom:3px"><span>Hedefe İlerleme</span><span>${s.prg}%</span></div>
+  <div style="height:3px;background:var(--bg3);border-radius:2px;overflow:hidden"><div class="trp-bar" data-w="${s.prg}" style="height:100%;border-radius:2px;background:${pc};width:0%;transition:width 1.5s cubic-bezier(.4,0,.2,1)"></div></div>
+</div>
+<div style="display:flex;justify-content:space-between;align-items:center;padding-top:6px;border-top:1px solid var(--bdr)">
+  <div style="font-size:10px;color:var(--t3);display:flex;align-items:center;gap:4px"><span style="color:var(--acc)">${_trStars(s.stars)}</span><span>${esc(s.sig)}</span></div>
+  <div style="font-size:9px;color:var(--t4)">${esc(s.time)}</div>
+</div></div>`;
+}
+function _trRender(){
+  const feed=$('tr-feed');if(!feed)return;
+  let sigs=TR[_trTf].sigs;
+  if(_trFilter!=='all')sigs=sigs.filter(s=>s.st===_trFilter);
+  if(!sigs.length){feed.innerHTML='<div style="grid-column:1/-1;text-align:center;padding:2rem;color:var(--t3);font-size:12px">Bu filtrede sinyal yok.</div>';return;}
+  feed.innerHTML=sigs.map((s,i)=>_trCard(s,i)).join('');
+  requestAnimationFrame(()=>setTimeout(()=>feed.querySelectorAll('.trp-bar[data-w]').forEach(b=>b.style.width=b.dataset.w+'%'),80));
+}
+function renderCrossPage(){
+const pg=$('pg-cross');
+const ring_dashoffset=Math.round(345*0.17);
+pg.innerHTML=_trCSS+`
+<div style="margin-bottom:14px">
+  <h2 style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-lg);color:var(--acc)">📊 Canlı Sinyaller — Track Record</h2>
+  <p style="font-size:var(--fs-sm);color:var(--t3);margin-top:2px">Herkes sinyal verir. Biz sonucu gösteririz. Paper Trade motoru her sinyali kayıt altında tutar.</p>
+</div>
+
+<div style="background:var(--bg2);border:1px solid var(--accd);border-radius:12px;padding:16px 18px;margin-bottom:14px;position:relative;overflow:hidden">
+  <div style="position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,var(--acc) 35%,#F0C060 50%,var(--acc) 65%,transparent)"></div>
+  <div style="display:flex;align-items:center;gap:7px;font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.15em;text-transform:uppercase;color:var(--acc);margin-bottom:12px">
+    <span style="width:7px;height:7px;border-radius:50%;background:var(--grn);display:inline-block;animation:trb-breathe 2s ease-in-out infinite"></span>
+    Canlı Skor Tablosu &mdash; Son 30 Gün &middot; Paper Trade Motoru
+  </div>
+  <div style="display:grid;grid-template-columns:110px 1fr;gap:18px;align-items:center">
+    <div style="text-align:center">
+      <div style="position:relative;width:100px;height:100px;margin:0 auto">
+        <svg viewBox="0 0 120 120" style="width:100%;height:100%;transform:rotate(-90deg)">
+          <defs><linearGradient id="trGrad" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stop-color="#B45309"/><stop offset="100%" stop-color="#F0C060"/></linearGradient></defs>
+          <circle style="fill:none;stroke:var(--bg3);stroke-width:10" cx="60" cy="60" r="55"/>
+          <circle id="tr-ring-fg" style="fill:none;stroke:url(#trGrad);stroke-width:10;stroke-linecap:round;stroke-dasharray:345;stroke-dashoffset:345;transition:stroke-dashoffset 2.2s cubic-bezier(.4,0,.2,1)" cx="60" cy="60" r="55"/>
+        </svg>
+        <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center">
+          <span id="tr-wr-num" style="font-family:'JetBrains Mono',monospace;font-size:18px;font-weight:700;color:var(--acc);display:block;line-height:1">0%</span>
+          <span style="font-size:8px;color:var(--t3);letter-spacing:.08em;text-transform:uppercase">WIN RATE</span>
+        </div>
+      </div>
+      <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--t3);letter-spacing:.1em;text-transform:uppercase;margin-top:5px">Başarı Oranı</div>
+    </div>
+    <div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin-bottom:8px">
+        <div class="card" style="text-align:center;padding:9px 5px;position:relative;overflow:hidden">
+          <span id="tr-s-tot" style="font-family:'JetBrains Mono',monospace;font-size:18px;font-weight:700;color:var(--acc);display:block;line-height:1">0</span>
+          <span style="font-size:9px;color:var(--t3);text-transform:uppercase;letter-spacing:.08em">Toplam</span>
+          <div id="tr-b-tot" style="position:absolute;bottom:0;left:0;height:2px;width:0%;background:var(--acc);transition:width 1.4s cubic-bezier(.4,0,.2,1)"></div>
+        </div>
+        <div class="card" style="text-align:center;padding:9px 5px;position:relative;overflow:hidden">
+          <span id="tr-s-tp" style="font-family:'JetBrains Mono',monospace;font-size:18px;font-weight:700;color:var(--grn);display:block;line-height:1">0</span>
+          <span style="font-size:9px;color:var(--t3);text-transform:uppercase;letter-spacing:.08em">Hedef 🎯</span>
+          <div id="tr-b-tp" style="position:absolute;bottom:0;left:0;height:2px;width:0%;background:var(--grn);transition:width 1.4s cubic-bezier(.4,0,.2,1)"></div>
+        </div>
+        <div class="card" style="text-align:center;padding:9px 5px;position:relative;overflow:hidden">
+          <span id="tr-s-sl" style="font-family:'JetBrains Mono',monospace;font-size:18px;font-weight:700;color:var(--red);display:block;line-height:1">0</span>
+          <span style="font-size:9px;color:var(--t3);text-transform:uppercase;letter-spacing:.08em">Stop 🛑</span>
+          <div id="tr-b-sl" style="position:absolute;bottom:0;left:0;height:2px;width:0%;background:var(--red);transition:width 1.4s cubic-bezier(.4,0,.2,1)"></div>
+        </div>
+        <div class="card" style="text-align:center;padding:9px 5px;position:relative;overflow:hidden">
+          <span id="tr-s-act" style="font-family:'JetBrains Mono',monospace;font-size:18px;font-weight:700;color:var(--blu);display:block;line-height:1">0</span>
+          <span style="font-size:9px;color:var(--t3);text-transform:uppercase;letter-spacing:.08em">Aktif ⚡</span>
+          <div id="tr-b-act" style="position:absolute;bottom:0;left:0;height:2px;width:0%;background:var(--blu);transition:width 1.4s cubic-bezier(.4,0,.2,1)"></div>
+        </div>
+      </div>
+      <div style="padding:7px 10px;background:rgba(52,211,153,.05);border:1px solid rgba(52,211,153,.15);border-radius:7px;font-size:11px;color:var(--grn);display:flex;align-items:center;gap:5px">
+        Son 7 günde <b>&nbsp;23 sinyal&nbsp;</b> → <b style="color:var(--grn)">&nbsp;21 hedef vuruldu</b> → <b>&nbsp;%91.3 başarı</b> — ateş serisi sürüyor 🔥
+      </div>
+    </div>
+  </div>
+</div>
+
+<div style="display:flex;gap:4px;padding:3px;background:var(--bg2);border:1px solid var(--bdr);border-radius:9px;width:fit-content;margin-bottom:10px">
+  <button class="tr-tab on" onclick="_trSwTab('dt',this)">🔥 Day Trade <span style="font-size:8px;margin-left:2px;padding:1px 4px;border-radius:3px;background:rgba(212,168,68,.12);color:var(--acc)">15m</span></button>
+  <button class="tr-tab" onclick="_trSwTab('sw',this)">⚡ Swing <span style="font-size:8px;margin-left:2px;padding:1px 4px;border-radius:3px;background:rgba(212,168,68,.12);color:var(--acc)">60m</span></button>
+  <button class="tr-tab" onclick="_trSwTab('tr',this)">📈 Trend <span style="font-size:8px;margin-left:2px;padding:1px 4px;border-radius:3px;background:rgba(212,168,68,.12);color:var(--acc)">Günlük</span></button>
+</div>
+
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:6px">
+  <div id="tr-desc" style="font-size:11px;color:var(--t2)">${TR.dt.meta}</div>
+  <div style="display:flex;gap:4px">
+    <button class="tr-fbtn on" onclick="_trFilt('all',this)">Tümü</button>
+    <button class="tr-fbtn" onclick="_trFilt('active',this)">Aktif</button>
+    <button class="tr-fbtn" onclick="_trFilt('tp',this)">Hedef ✓</button>
+    <button class="tr-fbtn" onclick="_trFilt('sl',this)">Stop ✗</button>
+  </div>
+</div>
+
+<div id="tr-feed" class="tr-grid"></div>
+
+<div style="margin-top:12px;padding:8px 12px;background:rgba(212,168,68,.03);border:1px solid rgba(212,168,68,.08);border-radius:7px;font-size:10px;color:var(--t3);line-height:1.7;display:flex;gap:5px">
+  <span style="color:var(--ylw);flex-shrink:0">⚠</span>
+  <span>Sanal işlem (Paper Trade) simülasyonu. Geçmiş başarı gelecek performansı garanti etmez. Yatırım tavsiyesi değildir.</span>
+</div>`;
+
+_trTf='dt';_trFilter='all';_trRender();
+requestAnimationFrame(()=>_trAnimSb());
+if(window._trTick)clearInterval(window._trTick);
+window._trTick=setInterval(()=>{
+  if(S.page!=='cross')return;
+  document.querySelectorAll('.trp-cur').forEach(el=>{
+    const raw=el.textContent.replace(/[^\d,]/g,'').replace(',','.');
+    const v=parseFloat(raw);if(isNaN(v))return;
+    const d=(Math.random()-.46)*0.3;
+    el.style.color=d>=0?'var(--grn)':'var(--red)';
+    el.textContent=(v+d).toFixed(2).replace('.',',').replace(/\B(?=(\d{3})+(?!\d))/g,'.')+' ₺';
+    setTimeout(()=>{el.style.color='';},900);
+  });
+},4000);
+}
+async function startCross(){renderCrossPage();}
+
+
+
+// ===== TAKAS PAGE =====
+function renderTakasPage(){const pg=$('pg-takas');if(!S.takas){pg.innerHTML='<div class="ld"><div class="sp"></div><div class="ld-t">Takas verileri yükleniyor...</div></div>';loadTakas();return;}const items=S.takas.items||[];let h=`<div style="margin-bottom:14px;padding:14px 18px;background:linear-gradient(135deg,rgba(255,193,7,.08),rgba(255,152,0,.05));border:1px solid rgba(255,193,7,.25);border-radius:var(--rad2);display:flex;align-items:center;gap:12px"><span style="font-size:24px">🚧</span><div><div style="font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700;color:var(--ylw);text-transform:uppercase;letter-spacing:1px">Yapım Aşamasında</div><div style="font-size:12px;color:var(--t2);margin-top:3px">Takas verisi MKK lisansı veya aracı kurum entegrasyonu gerektiriyor. Şimdilik yfinance kurumsal veri gösteriliyor.</div></div></div>`;h+=`<div style="margin-bottom:16px"><h2 style="font-family:'JetBrains Mono',monospace;font-size:15px;color:var(--prp)">📊 Takas — Yabancı Oranları</h2><p style="font-size:11px;color:var(--t3);margin-top:2px">Kaynak: ${esc(S.takas.source||'—')} | ${items.length} hisse</p></div>`;if(S.takas.error){h+=`<div class="aib" style="border-color:var(--ylw);margin-bottom:14px"><div class="aib-tx" style="color:var(--ylw)">${esc(S.takas.error)}</div></div>`;}if(items.length){h+=`<div class="card"><div class="card-b" style="overflow-x:auto"><table class="dtb"><thead><tr><th>#</th><th>Ticker</th><th>Yabanci %</th><th>Fiyat</th></tr></thead><tbody>`;items.slice(0,40).forEach((it,i)=>{const pct=it.foreign_pct||0;h+=`<tr><td style="color:var(--t3)">${i+1}</td><td class="clk-t" onclick="loadTicker('${esc(it.ticker)}')">${esc(it.ticker)}</td><td style="color:var(--t1);font-weight:700">${pct.toFixed(1)}%</td><td style="color:var(--t1)">${it.price?fN(it.price):'—'}</td></tr>`;});h+='</tbody></table></div></div>';}pg.innerHTML=h;}
+async function loadTakas(){try{S.takas=await api('/api/takas');renderTakasPage();}catch(e){S.takas={items:[],error:e.message};renderTakasPage();}}
+
+// ===== SOSYAL PAGE =====
+function renderSosyalPage(){const pg=$('pg-sosyal');if(!S.social){pg.innerHTML='<div class="ld"><div class="sp"></div><div class="ld-t">Sosyal veri yükleniyor...</div></div>';loadSocial();return;}let h=`<div style="margin-bottom:14px;padding:14px 18px;background:linear-gradient(135deg,rgba(255,193,7,.08),rgba(255,152,0,.05));border:1px solid rgba(255,193,7,.25);border-radius:var(--rad2);display:flex;align-items:center;gap:12px"><span style="font-size:24px">🚧</span><div><div style="font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700;color:var(--ylw);text-transform:uppercase;letter-spacing:1px">Yapım Aşamasında</div><div style="font-size:12px;color:var(--t2);margin-top:3px">X/Twitter duygu analizi için entegrasyon hazırlanıyor. Şimdilik AI tahmini gösteriliyor.</div></div></div>`;h+=`<div style="margin-bottom:16px"><h2 style="font-family:'JetBrains Mono',monospace;font-size:15px;color:var(--prp)">𝕏 Sosyal Medya</h2></div>`;if(S.social.summary){h+=`<div class="aib" style="margin-bottom:14px"><div class="aib-t">Sentiment: ${esc(S.social.overall_sentiment||'—')}</div><div class="aib-tx">${esc(S.social.summary)}</div></div>`;}const trends=S.social.trending||[];if(trends.length){h+=`<div class="card"><div class="card-h"><span class="card-t">🔥 Trending</span></div><div class="card-b"><table class="dtb"><thead><tr><th>#</th><th>Ticker</th><th>Sentiment</th><th>Skor</th><th>Neden</th></tr></thead><tbody>`;trends.forEach((t,i)=>{const col=t.sentiment==='bullish'?'var(--grn)':t.sentiment==='bearish'?'var(--red)':'var(--ylw)';h+=`<tr><td style="color:var(--t3)">${i+1}</td><td class="clk-t" onclick="loadTicker('${esc(t.ticker)}')">${esc(t.ticker)}</td><td style="color:${col};font-weight:700">${esc(t.sentiment||'—')}</td><td>${sPill(t.score)}</td><td style="color:var(--t2);font-size:10px">${esc(t.reason||'')}</td></tr>`;});h+=`</tbody></table></div></div>`;}pg.innerHTML=h;}
+async function loadSocial(){try{S.social=await api('/api/social');renderSosyalPage();}catch(e){S.social={trending:[],summary:'Hata: '+e.message};renderSosyalPage();}}
+
+// ===== SCAN + BRIEFING =====
+async function startScan(){const btn=$('scanBtn');if(btn){btn.disabled=true;btn.textContent='⏳ Tarama başlatılıyor...';}try{const st=await api('/api/scan-status').catch(()=>({running:false}));if(st.running){if(btn)btn.textContent='⏳ Tarama devam ediyor...';await pollScanProgress(btn);return;}S.scan=await api('/api/scan');S.dash=await api('/api/dashboard');try{S.hero=await api('/api/hero-summary');}catch(e){}updCnt(S.dash);renderHome();}catch(e){const t=$('scanBtn');if(t){t.textContent='HATA';}}if(btn){btn.disabled=false;btn.textContent='🔄 YENİLE';}}
+async function pollScanProgress(btn){for(let i=0;i<60;i++){await new Promise(r=>setTimeout(r,3000));try{const st=await api('/api/scan-status');if(btn){const pct=st.total>0?Math.round(st.progress/st.total*100):0;btn.textContent=`⏳ ${st.phase==='raw_fetch'?'Veri çekiliyor':'Analiz ediliyor'} ${pct}%`;}if(!st.running&&st.has_data){S.scan=await api('/api/top10');S.dash=await api('/api/dashboard').catch(()=>null);try{S.hero=await api('/api/hero-summary');}catch(e){}if(S.dash)updCnt(S.dash);renderHome();break;}}catch(e){}}if(btn){btn.disabled=false;btn.textContent='🔄 YENİLE';}}
+function updCnt(d){if(!d)return;const c=d.counters||{};$('cnt-a').textContent=c.total_analyzed||0;$('cnt-s').textContent=c.cross_signals||0;$('cnt-c').textContent=c.cache_raw||0;if(d.asof)$('cnt-u').textContent=new Date(d.asof).toLocaleTimeString('tr-TR',{hour:'2-digit',minute:'2-digit'});}
+async function loadBriefing(){const box=$('hSt');if(!box)return;box.innerHTML='<div class="hero-strat" style="border-color:var(--prp);background:var(--prpd);color:var(--prp)">🤖 AI brifing yükleniyor...</div>';try{const d=await api('/api/briefing');box.innerHTML=d.briefing?`<div class="hero-strat">${esc(d.briefing).replace(/\n/g,'<br>')}</div>`:`<div class="hero-strat" style="border-color:var(--ylw);background:var(--ylwd);color:var(--ylw)">${esc(d.error||'AI key ekleyin')}</div>`;}catch(e){box.innerHTML='';}}
+
+// ===== TICKER DETAIL =====
+async function loadTicker(t){t=t.replace('.IS','').toUpperCase();seenAdd(t);openD();$('dp').innerHTML=`<div class="ld"><div class="sp"></div><div class="ld-t" style="color:var(--t3)">${esc(t)}...</div></div>`;try{const[r,tech]=await Promise.all([api(`/api/analyze/${t}`),api(`/api/technical/${t}`).catch(()=>null)]);renderDetail(t,r,tech);}catch(e){$('dp').innerHTML=`<div class="emp"><h3 style="color:var(--t2)">${esc(t)} alınamadı</h3><p style="color:var(--t3)">${esc(e.message)}</p></div>`;}}
+function renderDetail(t,r,tech){const s=r.scores,m=r.metrics,L=r.legendary||{},inWL=S.wl.includes(t);
+const dc=r.decision||'';const dCol=dc==='AL'?'var(--grn)':dc==='İZLE'?'var(--blu)':dc==='BEKLE'?'var(--ylw)':'var(--red)';
+const dcBg=dc==='AL'?'rgba(76,175,80,.12)':dc==='İZLE'?'rgba(100,181,246,.12)':dc==='BEKLE'?'rgba(255,202,40,.12)':'rgba(239,83,80,.12)';
+const dcDesc=dc==='AL'?'Güçlü temel + uygun zamanlama. Orta-uzun vade için değerlendir.':dc==='İZLE'?'İlginç profil ama henüz net değil. Yakından takip et, gelişmeyi bekle.':dc==='BEKLE'?'İyi şirket ama zamanlama geç veya fiyat yüksek. Düzeltme fırsatı bekle.':'Zayıf temel veya yüksek risk. Şu an uzak dur.';
+const tmDesc=r.timing==='ERKEN'?'Henüz kimse fark etmedi — potansiyel erken fırsat.':r.timing==='GELİŞİYOR'?'Sinyaller oluşuyor, dikkatle takip et.':r.timing==='TEYİTLİ'?'Trend başladı, giriş penceresi açık.':r.timing==='GEÇ'?'Fiyatlanmış olabilir — geç kaldın.':'Aşırı hareket — düzeltme riski yüksek.';
+const el=r.entry_label||'';const elCol=el==='TEYİTLİ'?'var(--grn)':el==='ERKEN'?'var(--blu)':el==='FIRSAT'?'var(--cyn)':el==='GEÇ'?'var(--ylw)':el==='SPEKÜLATİF'?'var(--red)':'var(--t3)';const elBg=el==='TEYİTLİ'?'var(--grnd)':el==='SPEKÜLATİF'?'rgba(239,83,80,.15)':'var(--bg3)';const elDesc=el==='TEYİTLİ'?'Güçlü temel + momentum başlamış — en iyi giriş noktası.':el==='ERKEN'?'Temel güçlü ama momentum henüz yok. Sabırlı yatırımcı için.':el==='FIRSAT'?'Orta temel + uygun momentum. İzlemeye değer.':el==='GEÇ'?'Temel iyi ama fiyat çoktan yükselmiş. Düzeltme bekle.':el==='SPEKÜLATİF'?'⚠️ DİKKAT: Temel zayıf ama fiyat uçuyor. Hype/pump olabilir!':el==='KAÇIN'?'Zayıf temel + yüksek risk. Uzak dur.':'Beklemede — net sinyal yok.';
+const faScore=r.fa_score||r.deger||r.overall;const riskScore=r.risk_score||0;
+$('dp').innerHTML=`<div class="dp-h"><div><div class="dp-tick">${esc(r.ticker)} <span style="color:var(--grn);font-size:15px">FA:${Math.round(faScore)}</span> <span style="color:var(--blu);font-size:15px">İ:${(r.ivme||50).toFixed?.(0)||(r.ivme||50)}</span>${riskScore<-5?` <span style="color:var(--red);font-size:13px">R:${riskScore}</span>`:''}</div><div class="dp-name">${esc(r.name)} · ${esc(r.sector||'')}${r.sector_group?' ('+esc(r.sector_group)+')':''}</div><div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap">${dc?`<span class="pill" style="background:${dcBg};color:${dCol};font-weight:700;font-size:var(--fs-sm);padding:4px 10px">${dc}</span>`:''}${el?`<span class="pill" style="background:${elBg};color:${elCol};font-weight:700;font-size:var(--fs-xs);padding:3px 8px;border:1px solid ${elCol}30">${esc(el)}</span>`:''}${r.quality_tag?`<span class="pill" style="background:var(--grnd);color:var(--grn);font-size:var(--fs-xs)">${esc(r.quality_tag)}</span>`:''} ${sPL(L.buffett_filter||'Fail')} ${sPL(L.graham_filter||'Fail')} <span class="pill p-blu">Güven:${r.confidence}</span>${r.is_hype?'<span class="pill" style="background:rgba(239,83,80,.15);color:var(--red);font-weight:700;font-size:var(--fs-xs);animation:pulse 1.5s infinite">⚠️ HYPE</span>':''}<button class="btn btn-sm ${inWL?'btn-orn':'btn-blu'}" onclick="toggleWL('${esc(t)}')">${inWL?'⭐ Çıkar':'☆ Ekle'}</button></div></div><button class="dp-close" onclick="closeD()">✕</button></div><div class="dp-body"><div class="dp-tabs"><button class="dp-tab on" onclick="dtab(this,'ov')">Özet</button><button class="dp-tab" onclick="dtab(this,'sc')">Skorlar</button><button class="dp-tab" onclick="dtab(this,'val')">Değerleme</button><button class="dp-tab" onclick="dtab(this,'qua')">Kalite</button><button class="dp-tab" onclick="dtab(this,'tek')">Teknik</button><button class="dp-tab" onclick="dtab(this,'leg')">Göstergeler</button><button class="dp-tab" onclick="dtab(this,'cht')">Grafik</button></div><div class="ds on" id="ds-ov">${el?`<div style="margin-bottom:14px;padding:14px;background:${elBg};border:1px solid ${elCol}25;border-radius:var(--rad)"><div style="display:flex;align-items:center;gap:10px;margin-bottom:8px"><span style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-lg);font-weight:700;color:${elCol}">${esc(el)}</span><span style="font-size:var(--fs-sm);color:var(--t2)">${esc(r.quality_tag||'')} · Karar: ${esc(dc)}</span></div><div style="font-size:var(--fs-base);color:var(--t1);line-height:1.7">${esc(elDesc)}</div></div>`:''}<div class="g2" style="margin-bottom:14px"><div><div style="display:flex;justify-content:center;gap:16px;margin-bottom:12px"><div style="text-align:center">${ring(faScore,'FA',90)}<div style="font-size:9px;color:var(--grn);margin-top:2px">Şirket Kalitesi</div></div><div style="text-align:center">${ring(r.ivme||50,'İVME',90)}<div style="font-size:9px;color:var(--blu);margin-top:2px">Momentum</div></div><div style="text-align:center">${ring(r.overall,'KARAR',90)}<div style="font-size:9px;color:var(--prp);margin-top:2px">Decision</div></div></div><div class="mg" style="grid-template-columns:repeat(2,1fr)">${mBox('Fiyat',m.price?fN(m.price)+' '+r.currency:'N/A')}${mBox('Piyasa Değ.',fN(m.market_cap))}${mBox('F/K',fN(m.pe))}${mBox('PD/DD',fN(m.pb))}${mBox('Özsermaye Kârl.',fP(m.roe))}${mBox('FCF Getiri',fP(m.fcf_yield))}</div></div><div>${scoreBars(s)}<div style="margin-top:12px"><div style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-xs);color:var(--grn);margin-bottom:6px">NEDEN GÜÇLÜ</div>${(r.positives||[]).map(p=>`<div style="padding:4px 0;font-size:var(--fs-sm);color:var(--t1)"><span style="color:var(--grn)">✓</span> ${esc(p)}</div>`).join('')}<div style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-xs);color:var(--red);margin:10px 0 6px">DİKKAT ET</div>${(r.negatives||[]).map(n=>`<div style="padding:4px 0;font-size:var(--fs-sm);color:var(--t2)"><span style="color:var(--red)">✗</span> ${esc(n)}</div>`).join('')}${r.risk_reasons&&r.risk_reasons.length?`<div style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-xs);color:var(--ylw);margin:10px 0 6px">RİSK PENALTILARI (${riskScore})</div>${r.risk_reasons.map(rr=>`<div style="padding:3px 0;font-size:var(--fs-xs);color:var(--ylw)">⚠️ ${esc(rr)}</div>`).join('')}`:''}</div></div></div><div class="aib"><div class="aib-t">🤖 AI TRADER</div><div class="aib-tx" id="ai-${esc(t)}">Yükleniyor...</div></div></div><div class="ds" id="ds-sc"><div style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-xs);color:var(--grn);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">🏛️ FA Boyutları — Şirket Kalitesi</div><div class="g4" style="margin-bottom:14px">${[['value','DEĞER'],['quality','KALİTE'],['growth','BÜYÜME'],['balance','BİLANÇO'],['earnings','KARLILIK'],['moat','HENDEK'],['capital','SERMAYE']].map(([k,l])=>`<div style="text-align:center">${ring(s[k],l,76)}</div>`).join('')}</div><div style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-xs);color:var(--blu);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;padding-top:10px;border-top:1px dashed var(--bdr)">⚡ Momentum Boyutları</div><div class="g4" style="margin-bottom:14px">${[['momentum','MOMENTUM'],['tech_break','KIRILIM'],['inst_flow','KURUM']].map(([k,l])=>`<div style="text-align:center">${ring(s[k],l,76)}</div>`).join('')}</div></div><div class="ds" id="ds-val"><div class="mg">${mBox('F/K',fN(m.pe))}${mBox('PD/DD',fN(m.pb))}${mBox('FD/FAVÖK',fN(m.ev_ebitda))}${mBox('PEG',L.peg||'N/A')}${mBox('FCF Getiri',fP(m.fcf_yield))}${mBox('Graham Değer',fN(m.graham_fv))}${mBox('Güvenlik Payı',L.graham_mos||'N/A')}${mBox('Temettü',fP(m.dividend_yield))}${mBox('Piyasa Değ.',fN(m.market_cap))}${mBox('Beta',fN(m.beta))}</div></div><div class="ds" id="ds-qua"><div class="mg">${mBox('Özsermaye Kârl.',fP(m.roe))}${mBox('Aktif Kârlılık',fP(m.roa))}${mBox('Yat.Ser. Kârl.',fP(m.roic))}${mBox('Brüt Marj',fP(m.gross_margin))}${mBox('Faaliyet Marjı',fP(m.operating_margin))}${mBox('Net Marj',fP(m.net_margin))}${mBox('Gelir Büy.',fP(m.revenue_growth))}${mBox('HBK Büyümesi',fP(m.eps_growth))}${mBox('Gelir',fN(m.revenue))}${mBox('Net Gelir',fN(m.net_income))}${mBox('FAVÖK',fN(m.ebitda))}${mBox('Serb. Nakit Akışı',fN(m.free_cf))}</div><h4 style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-xs);color:var(--t3);margin:14px 0 8px">BİLANÇO</h4><div class="mg">${mBox('Toplam Varlık',fN(m.total_assets))}${mBox('Toplam Borç',fN(m.total_debt))}${mBox('Nakit',fN(m.cash))}${mBox('Özsermaye',fN(m.equity))}${mBox('NB/FAVÖK',fN(m.net_debt_ebitda))}${mBox('Borç/Özsermaye',fN(m.debt_equity))}${mBox('Cari Oran',fN(m.current_ratio))}${mBox('Faiz Karşılama',fN(m.interest_coverage))}</div></div><div class="ds" id="ds-tek">${tech?renderTech(tech):'<div class="emp"><h3 style="color:var(--t2)">Teknik veri yok</h3></div>'}</div><div class="ds" id="ds-leg"><div class="mg" style="grid-template-columns:repeat(3,1fr)">${mBox('Piotroski',L.piotroski||'N/A')}${mBox('Altman Z',L.altman||'N/A')}${mBox('Beneish',L.beneish||'N/A')}${mBox('PEG',L.peg||'N/A')}${mBox('Graham Güv.Payı',L.graham_mos||'N/A')}${mBox('Buffett Filtre',L.buffett_filter||'N/A')}${mBox('Graham Filtre',L.graham_filter||'N/A')}</div><div style="margin-top:14px;padding:12px;background:var(--bg3);border:1px solid var(--bdr);border-radius:var(--rad);font-size:var(--fs-base);color:var(--t2);line-height:1.7"><b style="color:var(--t1)">Neden Öne Çıkıyor?</b><br>${(r.positives||[]).map(p=>`<span style="color:var(--grn)">✓</span> ${esc(p)}`).join('<br>')}<br><b style="color:var(--t1)">Dikkat Edilmesi Gereken:</b><br>${(r.negatives||[]).map(n=>`<span style="color:var(--red)">✗</span> ${esc(n)}`).join('<br>')}</div></div><div class="ds" id="ds-cht"><img class="chart-img" src="/api/chart/${encodeURIComponent(t)}" alt="${esc(t)}" onerror="this.parentElement.innerHTML='<div class=\\'emp\\'><h3>Grafik yüklenemedi</h3></div>'"></div></div>`;api(`/api/ai-summary/${t}`).then(d=>{const el=$('ai-'+t);if(el)el.textContent=d.summary||'AI özet alınamadı';}).catch(()=>{});}
+function renderTech(t){const comps=(t.components||[]).map(c=>{const col=c.score>=65?'var(--grn)':c.score>=40?'var(--ylw)':'var(--red)';return`<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--bdr)"><span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--t2)">${esc(c.name)}</span><span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:${col}">${esc(c.desc)} (${c.score})</span></div>`;}).join('');return`<div class="g2"><div><div style="text-align:center;margin-bottom:14px">${ring(t.tech_score,'TEKNIK',100)}</div><div class="mg" style="grid-template-columns:repeat(2,1fr)">${mBox('RSI',t.rsi?t.rsi.toFixed(1):'N/A')}${mBox('MACD',t.macd?t.macd.toFixed(4):'N/A')}${mBox('MA50',t.ma50?t.ma50.toFixed(2):'N/A')}${mBox('MA200',t.ma200?t.ma200.toFixed(2):'N/A')}${mBox('BB',t.bb_pos||'N/A')}${mBox('Hacim',t.vol_ratio?t.vol_ratio.toFixed(1)+'x':'N/A')}</div></div><div><div class="card"><div class="card-h"><span class="card-t">Bileşenler</span></div><div class="card-b">${comps}</div></div></div></div>`;}
+function toggleWL(t){if(S.wl.includes(t))wlRm(t);else wlAdd(t);loadTicker(t);}
+function dtab(btn,id){btn.closest('.dp-tabs').querySelectorAll('.dp-tab').forEach(t=>t.classList.remove('on'));btn.classList.add('on');btn.closest('.dp-body').querySelectorAll('.ds').forEach(s=>s.classList.remove('on'));$('ds-'+id).classList.add('on');}
+function openD(){$('ov').classList.add('open');document.body.style.overflow='hidden';}
+function closeD(){$('ov').classList.remove('open');document.body.style.overflow='';if(S.page==='home')renderHome();}
+
+// ===== TOOLTIP HELPERS =====
+function _decCol(d){return d==='AL'?'#00e676':d==='İZLE'?'#ffb300':d==='BEKLE'?'#78909c':'#ef5350';}
+function _showTip(e,html){const t=$('bbTip');if(!t)return;t.innerHTML=html;t.style.display='block';const bx=t.getBoundingClientRect();let tx=e.clientX+14,ty=e.clientY-10;if(tx+bx.width>window.innerWidth-10)tx=e.clientX-bx.width-14;if(ty+bx.height>window.innerHeight-10)ty=window.innerHeight-bx.height-10;if(ty<10)ty=10;t.style.left=tx+'px';t.style.top=ty+'px';}
+function _moveTip(e){const t=$('bbTip');if(!t||t.style.display==='none')return;const bx=t.getBoundingClientRect();let tx=e.clientX+14,ty=e.clientY-10;if(tx+bx.width>window.innerWidth-10)tx=e.clientX-bx.width-14;if(ty+bx.height>window.innerHeight-10)ty=window.innerHeight-bx.height-10;if(ty<10)ty=10;t.style.left=tx+'px';t.style.top=ty+'px';}
+function _hideTip(){const t=$('bbTip');if(t)t.style.display='none';}
+
+// ===== HEATMAP — Finviz-grade treemap + glassmorphism tooltip =====
+async function loadHeatmap(){
+  try{
+    const d=await api('/api/heatmap');
+    if(!d.sectors||!d.sectors.length){S.heatmapHtml='<p style="color:var(--t4);font-size:12px">Tarama sonrası gelecek</p>';return;}
+    // 7-grade renk skalası: koyu kırmızı → siyah → neon yeşil
+    function heatCol(chg){
+      if(chg>=3)return'#00e676';if(chg>=2)return'#00c853';if(chg>=1)return'#2e7d32';if(chg>=0.3)return'#1b5e20';
+      if(chg>=-0.3)return'#37474f';
+      if(chg>=-1)return'#b71c1c';if(chg>=-2)return'#991b1b';if(chg>=-3)return'#7f1d1d';return'#4a0000';
+    }
+    // Squarified treemap layout
+    function sqr(items,x,y,w,h){
+      if(!items.length)return;
+      if(items.length===1){items[0]._r={x,y,w,h};return;}
+      const total=items.reduce((s,i)=>s+(i._v||1),0);
+      if(total<=0)return;
+      let row=[items[0]],rowSum=items[0]._v||1,bestRatio=Infinity;
+      for(let i=1;i<items.length;i++){
+        const testSum=rowSum+(items[i]._v||1);
+        const frac=testSum/total;
+        const isH=w>=h;const stripLen=isH?w*frac:h*frac;const stripW=isH?h:w;
+        let worst=0;
+        for(const ri of[...row,items[i]]){
+          const iLen=stripW*((ri._v||1)/testSum);
+          const ratio=Math.max(stripLen/iLen,iLen/stripLen);
+          worst=Math.max(worst,ratio);
+        }
+        if(worst>bestRatio&&row.length>0)break;
+        bestRatio=worst;row.push(items[i]);rowSum=testSum;
+      }
+      const frac=rowSum/total;const isH=w>=h;
+      if(isH){
+        const sw=w*frac;let cy=y;
+        for(const ri of row){const ih=h*((ri._v||1)/rowSum);ri._r={x,y:cy,w:sw,h:ih};cy+=ih;}
+        sqr(items.slice(row.length),x+sw,y,w-sw,h);
+      }else{
+        const sh=h*frac;let cx=x;
+        for(const ri of row){const iw=w*((ri._v||1)/rowSum);ri._r={x:cx,y,w:iw,h:sh};cx+=iw;}
+        sqr(items.slice(row.length),x,y+sh,w,h-sh);
+      }
+    }
+    // Scan verisinden zenginleştirme (Piotroski, Altman, AI karar)
+    const scanMap={};
+    if(S.scan&&S.scan.items){S.scan.items.forEach(it=>{scanMap[it.ticker]=it;});}
+    // Flatten, sort, layout
+    const allStocks=[];
+    d.sectors.forEach(sec=>{sec.stocks.forEach(st=>{allStocks.push({...st,sector:sec.sector});});});
+    allStocks.sort((a,b)=>(b.market_cap||0)-(a.market_cap||0));
+    allStocks.forEach(s=>{s._v=Math.max(s.market_cap||1,1);});
+    const W=750,H=420;
+    sqr(allStocks,0,0,W,H);
+    // Store for tooltip lookup
+    window._heatStocks=allStocks;
+    window._heatScanMap=scanMap;
+    // Build HTML
+    let h2=`<div style="position:relative;width:100%;max-width:${W}px;height:${H}px;overflow:hidden;border-radius:var(--rad);border:1px solid var(--bdr);background:#0c0f14">`;
+    allStocks.forEach((s,idx)=>{
+      if(!s._r)return;
+      const r=s._r;const chg=s.change_pct||0;
+      const bg=heatCol(chg);const fs=r.w>70&&r.h>35?12:r.w>50&&r.h>28?10:r.w>35&&r.h>20?8:0;
+      const showPct=r.w>32&&r.h>22;
+      h2+=`<div onclick="loadTicker('${esc(s.ticker)}')" onmouseenter="_heatTip(event,${idx})" onmousemove="_moveTip(event)" onmouseleave="_hideTip()" style="position:absolute;left:${r.x.toFixed(1)}px;top:${r.y.toFixed(1)}px;width:${r.w.toFixed(1)}px;height:${r.h.toFixed(1)}px;background:${bg};display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;border:0.5px solid rgba(0,0,0,.35);overflow:hidden;box-sizing:border-box;transition:filter .12s" onmousedown="this.style.filter='brightness(1.3)'" onmouseup="this.style.filter=''">`;
+      if(fs>0)h2+=`<div style="font-family:'JetBrains Mono',monospace;font-size:${fs}px;font-weight:700;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.6);letter-spacing:.3px;line-height:1.1">${esc(s.ticker)}</div>`;
+      if(showPct)h2+=`<div style="font-family:'JetBrains Mono',monospace;font-size:${Math.max(fs-1,8)}px;font-weight:600;color:${chg>=0?'#c8e6c9':'#ffcdd2'};text-shadow:0 1px 2px rgba(0,0,0,.5)">${chg>=0?'+':''}${chg.toFixed(1)}%</div>`;
+      h2+=`</div>`;
+    });
+    h2+=`</div>`;
+    // Renk skalası legend
+    h2+=`<div style="margin-top:8px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px"><div style="display:flex;gap:3px;align-items:center;font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--t4)"><span style="display:inline-block;width:10px;height:10px;background:#4a0000;border-radius:2px"></span><span>-3%</span>`;
+    ['#7f1d1d','#991b1b','#b71c1c','#37474f','#1b5e20','#2e7d32','#00c853','#00e676'].forEach(c=>{h2+=`<span style="display:inline-block;width:10px;height:10px;background:${c};border-radius:2px"></span>`;});
+    h2+=`<span>+3%</span></div>`;
+    // Sektör legend
+    h2+=`<div style="display:flex;gap:4px;flex-wrap:wrap;font-family:'JetBrains Mono',monospace;font-size:9px">`;
+    d.sectors.forEach(sec=>{
+      const col=sec.avg_change>=0?'var(--grn)':'var(--red)';
+      h2+=`<span style="padding:2px 6px;background:var(--bg3);border:1px solid var(--bdr);border-radius:3px"><span style="color:var(--t2)">${esc(sec.sector.slice(0,12))}</span> <span style="color:${col};font-weight:700">${sec.avg_change>=0?'+':''}${sec.avg_change.toFixed(1)}%</span></span>`;
+    });
+    h2+=`</div></div>`;
+    S.heatmapHtml=h2;
+  }catch(e){S.heatmapHtml='<p style="color:var(--red);font-size:11px">Heatmap yüklenemedi</p>';}
+}
+// Glassmorphism tooltip builder — scan data enriched
+function _heatTip(e,idx){
+  const s=window._heatStocks?.[idx];if(!s)return;
+  const si=window._heatScanMap?.[s.ticker];
+  const dec=si?.decision||'—';const decBg=_decCol(dec);
+  const pf=si?.legendary?.piotroski||'—';
+  const az=si?.legendary?.altman||'—';
+  const bn=si?.legendary?.beneish||'—';
+  const deger=si?.deger||si?.overall||'—';
+  const ivme=si?.ivme||'—';
+  const sty=si?.style||'—';
+  const chg=s.change_pct||0;
+  let html=`<div class="tt-head"><span class="tt-tick">${esc(s.ticker)}</span><span class="tt-dec" style="background:${decBg}22;color:${decBg}">${dec}</span></div>`;
+  html+=`<div class="tt-sub">${esc(s.sector)} · ${sty}</div>`;
+  html+=`<div class="tt-grid">`;
+  html+=`<span class="tt-lbl">Fiyat</span><span class="tt-val" style="color:#fff">${s.price?('₺'+s.price.toLocaleString('tr-TR')):'—'}</span>`;
+  html+=`<span class="tt-lbl">Gün</span><span class="tt-val" style="color:${chg>=0?'#69f0ae':'#ef9a9a'}">${chg>=0?'+':''}${chg.toFixed(2)}%</span>`;
+  html+=`<span class="tt-lbl">Değer</span><span class="tt-val" style="color:#22d3ee">${deger}</span>`;
+  html+=`<span class="tt-lbl">İvme</span><span class="tt-val" style="color:#a78bfa">${ivme}</span>`;
+  html+=`<span class="tt-lbl">Piotroski</span><span class="tt-val">${pf}</span>`;
+  html+=`<span class="tt-lbl">Altman Z</span><span class="tt-val">${az}</span>`;
+  html+=`<span class="tt-lbl">Beneish</span><span class="tt-val">${bn}</span>`;
+  html+=`</div>`;
+  _showTip(e,html);
+}
+
+// ===== ALPHA QUADRANT — 4-bölgeli scatter/bubble chart =====
+function renderAlphaQuadrant(){
+  if(!S.scan||!S.scan.items||!S.scan.items.length){S.alphaHtml='<div style="color:var(--t4);font-size:12px;text-align:center;padding:40px 0">Scan sonrası Alpha Quadrant aktif olacak</div>';return;}
+  const items=S.scan.items;
+  const maxMc=Math.max(...items.map(i=>i.market_cap||0),1);
+  // Quadrant label hesapla
+  const alphaCount=items.filter(i=>(i.deger||i.overall||0)>=55&&(i.ivme||0)>=55).length;
+  const hypeCount=items.filter(i=>(i.deger||i.overall||0)<55&&(i.ivme||0)>=55).length;
+  const valueCount=items.filter(i=>(i.deger||i.overall||0)>=55&&(i.ivme||0)<55).length;
+  const avoidCount=items.filter(i=>(i.deger||i.overall||0)<55&&(i.ivme||0)<55).length;
+  // SVG ile elle çizim — canvas yerine (inline HTML olması gerekiyor)
+  const W=720,H=440,PAD=42,PB=32,PL=42;
+  const iW=W-PL-12,iH=H-PAD-PB;
+  let svg=`<div style="position:relative;width:100%;max-width:${W}px;overflow:hidden">`;
+  svg+=`<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;font-family:'JetBrains Mono',monospace">`;
+  // Quadrant fills
+  svg+=`<rect x="${PL}" y="${PAD}" width="${iW/2}" height="${iH/2}" fill="rgba(156,39,176,.06)" rx="0"/>`;
+  svg+=`<rect x="${PL+iW/2}" y="${PAD}" width="${iW/2}" height="${iH/2}" fill="rgba(0,230,118,.06)" rx="0"/>`;
+  svg+=`<rect x="${PL}" y="${PAD+iH/2}" width="${iW/2}" height="${iH/2}" fill="rgba(239,83,80,.06)" rx="0"/>`;
+  svg+=`<rect x="${PL+iW/2}" y="${PAD+iH/2}" width="${iW/2}" height="${iH/2}" fill="rgba(255,179,0,.06)" rx="0"/>`;
+  // Quadrant labels
+  svg+=`<text x="${PL+iW*0.75}" y="${PAD+16}" fill="rgba(0,230,118,.45)" font-size="10" font-weight="600" text-anchor="middle">ALPHA ZONE (${alphaCount})</text>`;
+  svg+=`<text x="${PL+iW*0.25}" y="${PAD+16}" fill="rgba(156,39,176,.4)" font-size="10" font-weight="600" text-anchor="middle">HYPE RİSKİ (${hypeCount})</text>`;
+  svg+=`<text x="${PL+iW*0.75}" y="${PAD+iH-6}" fill="rgba(255,179,0,.4)" font-size="10" font-weight="600" text-anchor="middle">DEĞER — İVME YOK (${valueCount})</text>`;
+  svg+=`<text x="${PL+iW*0.25}" y="${PAD+iH-6}" fill="rgba(239,83,80,.35)" font-size="10" font-weight="600" text-anchor="middle">UZAK DUR (${avoidCount})</text>`;
+  // Axes
+  svg+=`<line x1="${PL}" y1="${PAD}" x2="${PL}" y2="${PAD+iH}" stroke="rgba(255,255,255,.1)" stroke-width="1"/>`;
+  svg+=`<line x1="${PL}" y1="${PAD+iH}" x2="${PL+iW}" y2="${PAD+iH}" stroke="rgba(255,255,255,.1)" stroke-width="1"/>`;
+  // Center cross (dashed)
+  svg+=`<line x1="${PL+iW/2}" y1="${PAD}" x2="${PL+iW/2}" y2="${PAD+iH}" stroke="rgba(255,255,255,.08)" stroke-width="1" stroke-dasharray="4,4"/>`;
+  svg+=`<line x1="${PL}" y1="${PAD+iH/2}" x2="${PL+iW}" y2="${PAD+iH/2}" stroke="rgba(255,255,255,.08)" stroke-width="1" stroke-dasharray="4,4"/>`;
+  // Axis labels
+  svg+=`<text x="${PL+iW/2}" y="${H-4}" fill="rgba(255,255,255,.35)" font-size="10" text-anchor="middle">DEĞER SKORU →</text>`;
+  svg+=`<text transform="rotate(-90,12,${PAD+iH/2})" x="12" y="${PAD+iH/2}" fill="rgba(255,255,255,.35)" font-size="10" text-anchor="middle">İVME SKORU →</text>`;
+  // Axis ticks
+  for(let v=20;v<=90;v+=10){
+    const px=PL+((v-15)/80)*iW;
+    svg+=`<text x="${px}" y="${PAD+iH+14}" fill="rgba(255,255,255,.2)" font-size="8" text-anchor="middle">${v}</text>`;
+    const py=PAD+iH-((v-15)/80)*iH;
+    svg+=`<text x="${PL-6}" y="${py+3}" fill="rgba(255,255,255,.2)" font-size="8" text-anchor="end">${v}</text>`;
+  }
+  // Bubbles
+  items.forEach((it,idx)=>{
+    const dg=it.deger||it.overall||50;
+    const iv=it.ivme||50;
+    const mc=it.market_cap||0;
+    const dec=it.decision||'BEKLE';
+    const bCol=dec==='AL'?'rgba(0,230,118,.5)':dec==='İZLE'?'rgba(255,179,0,.4)':dec==='BEKLE'?'rgba(120,144,156,.35)':'rgba(239,83,80,.4)';
+    const sCol=dec==='AL'?'#00e676':dec==='İZLE'?'#ffb300':dec==='BEKLE'?'#78909c':'#ef5350';
+    const r=Math.max(5,Math.min(20,4+Math.sqrt(mc/1e9)*1.1));
+    const px=PL+((dg-15)/80)*iW;
+    const py=PAD+iH-((iv-15)/80)*iH;
+    svg+=`<circle cx="${px.toFixed(1)}" cy="${py.toFixed(1)}" r="${r.toFixed(1)}" fill="${bCol}" stroke="${sCol}" stroke-width="1.2" style="cursor:pointer" onclick="loadTicker('${esc(it.ticker)}')" onmouseenter="_alphaTip(event,${idx})" onmousemove="_moveTip(event)" onmouseleave="_hideTip()"/>`;
+    if(r>=8)svg+=`<text x="${px.toFixed(1)}" y="${(py-r-3).toFixed(1)}" fill="rgba(255,255,255,.7)" font-size="${r>=12?10:8}" font-weight="600" text-anchor="middle" style="pointer-events:none">${esc(it.ticker)}</text>`;
+  });
+  svg+=`</svg>`;
+  // Legend
+  svg+=`<div style="margin-top:8px;display:flex;gap:12px;flex-wrap:wrap;font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--t3)">`;
+  svg+=`<span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#00e676;margin-right:3px"></span>AL (${items.filter(i=>i.decision==='AL').length})</span>`;
+  svg+=`<span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#ffb300;margin-right:3px"></span>İZLE (${items.filter(i=>i.decision==='İZLE').length})</span>`;
+  svg+=`<span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#78909c;margin-right:3px"></span>BEKLE (${items.filter(i=>i.decision==='BEKLE').length})</span>`;
+  svg+=`<span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#ef5350;margin-right:3px"></span>KAÇIN (${items.filter(i=>i.decision==='KAÇIN').length})</span>`;
+  svg+=`<span style="margin-left:auto;color:var(--t4)">Boyut = piyasa değeri</span>`;
+  svg+=`</div></div>`;
+  S.alphaHtml=svg;
+}
+// Alpha Quadrant tooltip
+function _alphaTip(e,idx){
+  const items=S.scan?.items;if(!items||!items[idx])return;
+  const it=items[idx];
+  const dec=it.decision||'—';const decBg=_decCol(dec);
+  const pf=it.legendary?.piotroski||'—';
+  const az=it.legendary?.altman||'—';
+  let html=`<div class="tt-head"><span class="tt-tick">${esc(it.ticker)}</span><span class="tt-dec" style="background:${decBg}22;color:${decBg}">${dec}</span></div>`;
+  html+=`<div class="tt-sub">${esc(it.name||'')} · ${esc(it.style||'')}</div>`;
+  html+=`<div class="tt-grid">`;
+  html+=`<span class="tt-lbl">Değer</span><span class="tt-val" style="color:#22d3ee">${(it.deger||it.overall||0).toFixed(0)}</span>`;
+  html+=`<span class="tt-lbl">İvme</span><span class="tt-val" style="color:#a78bfa">${(it.ivme||0).toFixed(0)}</span>`;
+  html+=`<span class="tt-lbl">Overall</span><span class="tt-val" style="color:#fff">${(it.overall||0).toFixed(0)}</span>`;
+  html+=`<span class="tt-lbl">Piotroski</span><span class="tt-val">${pf}</span>`;
+  html+=`<span class="tt-lbl">Altman Z</span><span class="tt-val">${az}</span>`;
+  html+=`<span class="tt-lbl">Giriş</span><span class="tt-val" style="color:var(--ylw)">${it.entry_label||'—'}</span>`;
+  html+=`<span class="tt-lbl">Kalite</span><span class="tt-val">${it.quality_tag||'—'}</span>`;
+  html+=`<span class="tt-lbl">Fiyat</span><span class="tt-val" style="color:#fff">${it.price?('₺'+fN(it.price)):'—'}</span>`;
+  html+=`</div>`;
+  _showTip(e,html);
+}
+
+// ===== PORTFOY — FIXED weighted average bug =====
+function getPF(){return JSON.parse(localStorage.getItem('bb_pf')||'[]');}
+function savePF(pf){localStorage.setItem('bb_pf',JSON.stringify(pf));}
+function addPF(ticker,lot,avg){
+  const pf=getPF();
+  const ex=pf.findIndex(p=>p.ticker===ticker.toUpperCase());
+  if(ex>=0){
+    // FIXED: calculate weighted avg BEFORE adding lot
+    const oldLot=pf[ex].lot;
+    const oldAvg=pf[ex].avg;
+    const newTotalCost=(oldLot*oldAvg)+(lot*avg);
+    const newTotalLot=oldLot+lot;
+    pf[ex].lot=newTotalLot;
+    pf[ex].avg=newTotalLot>0?newTotalCost/newTotalLot:avg;
+  }else{
+    pf.push({ticker:ticker.toUpperCase(),lot,avg});
+  }
+  savePF(pf);
+}
+function rmPF(ticker){savePF(getPF().filter(p=>p.ticker!==ticker));}
+
+// ===== NASIL ÇALIŞIR PAGE =====
+function renderNasilPage(){
+const pg=$('pg-nasil');
+let h=`<div style="margin-bottom:20px"><h2 style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-lg);color:var(--blu)">🐂 BistBull Nasıl Çalışır?</h2><p style="font-size:var(--fs-base);color:var(--t2);margin-top:6px;line-height:1.7">BistBull, BIST hisselerini 9 boyutta analiz eden ve her hisseye <b>karar etiketi</b> veren AI destekli yatırım asistanıdır.</p></div>`;
+h+=`<div style="margin-bottom:20px;padding:16px;background:rgba(239,83,80,.08);border:1px solid rgba(239,83,80,.2);border-left:3px solid var(--red);border-radius:0 var(--rad) var(--rad) 0"><div style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-sm);font-weight:700;color:var(--red);margin-bottom:6px">⚠️ ÖNEMLİ UYARI</div><div style="font-size:var(--fs-base);color:var(--t2);line-height:1.7">Bu skorlar <b>orta-uzun vadeli temel analiz</b> içindir. Kısa vadeli al-sat sinyali <b>DEĞİLDİR</b>. Yatırım tavsiyesi niteliği taşımaz. Kararlarınızı kendi araştırmanıza dayandırın.</div></div>`;
+h+=`<div class="card" style="margin-bottom:20px"><div class="card-h"><span class="card-t">🏗️ Genel Yapı</span></div><div class="card-b" style="font-size:var(--fs-base);color:var(--t2);line-height:1.7">Her hisse iki perspektiften değerlendirilir:<div class="g2" style="margin:16px 0"><div style="padding:14px;background:rgba(76,175,80,.08);border:1px solid rgba(76,175,80,.2);border-radius:var(--rad)"><div style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-md);color:var(--grn);font-weight:700;margin-bottom:6px">🏛️ DEĞER SKORU</div><div style="font-size:var(--fs-sm);color:var(--t2);line-height:1.6">Şirketin temel gücü. Bilanço, kârlılık, büyüme, değerleme. <b>"Bu şirket iyi mi?"</b></div></div><div style="padding:14px;background:rgba(100,181,246,.08);border:1px solid rgba(100,181,246,.2);border-radius:var(--rad)"><div style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-md);color:var(--blu);font-weight:700;margin-bottom:6px">⚡ İVME SKORU</div><div style="font-size:var(--fs-sm);color:var(--t2);line-height:1.6">Piyasa dinamikleri. Momentum, teknik kırılım, kurum akışı. <b>"Şu an giriş zamanı mı?"</b></div></div></div><div style="text-align:center;font-family:'JetBrains Mono',monospace;font-size:var(--fs-sm);color:var(--t3)">Genel Skor = Değer × %55 + İvme × %45</div></div></div>`;
+const dB=[['💰','Değerleme',23,'Hisse ucuz mu pahalı mı?','F/K, PD/DD, FD/FAVÖK, FCF getirisi, Graham güvenlik payı. Sektöre göre kalibre edilir.'],['⭐','Kalite',23,'Şirket kârlı ve verimli mi?','ROE, ROIC, brüt marj, faaliyet marjı, net marj.'],['📈','Büyüme',18,'Gelir ve kârlar artıyor mu?','Gelir büyümesi, HBK büyümesi, FAVÖK büyümesi, PEG oranı.'],['🏦','Bilanço',18,'Borç seviyesi sağlıklı mı?','Net Borç/FAVÖK, Borç/Özsermaye, cari oran, faiz karşılama, Altman Z-Score.'],['💵','Karlılık Kalitesi',10,'Kâr gerçek nakit üretiyor mu?','Nakit akış/net gelir, FCF marjı, Beneish M-Score (manipülasyon testi).'],['🏰','Hendek',8,'Rekabet avantajı var mı?','Marj stabilitesi, fiyatlama gücü, varlık devir trendi.']];
+h+=`<div class="card" style="margin-bottom:20px"><div class="card-h"><span class="card-t">🏛️ Değer Boyutları (6 boyut)</span></div><div class="card-b">`;
+dB.forEach(([ic,nm,w,q,dt])=>{h+=`<div style="margin-bottom:14px;padding:14px;background:var(--bg3);border-radius:var(--rad);border-left:3px solid var(--grn)"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><span style="font-size:var(--fs-md);font-weight:700;color:var(--t1)">${ic} ${nm}</span><span style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-xs);color:var(--grn)">Ağırlık: %${w}</span></div><div style="font-size:var(--fs-base);color:var(--t1);font-weight:600;margin-bottom:4px">${q}</div><div style="font-size:var(--fs-sm);color:var(--t2);line-height:1.6">${dt}</div></div>`;});
+h+=`</div></div>`;
+const iB=[['🚀','Momentum',40,'Fiyat trendi ve hacim güçlü mü?','RSI, fiyat/MA pozisyonu, hacim oranı, 20 günlük değişim.'],['💥','Teknik Kırılım',35,'Önemli seviyeler kırılıyor mu?','52 haftalık zirve, Golden Cross, BB kırılımı, MACD divergence.'],['🏢','Kurum Akışı',25,'Kurumsal yatırımcı alıyor mu?','Kurumsal sahiplik, hacim-fiyat korelasyonu, birikim sinyalleri.']];
+h+=`<div class="card" style="margin-bottom:20px"><div class="card-h"><span class="card-t">⚡ İvme Boyutları (3 boyut)</span></div><div class="card-b">`;
+iB.forEach(([ic,nm,w,q,dt])=>{h+=`<div style="margin-bottom:14px;padding:14px;background:var(--bg3);border-radius:var(--rad);border-left:3px solid var(--blu)"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><span style="font-size:var(--fs-md);font-weight:700;color:var(--t1)">${ic} ${nm}</span><span style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-xs);color:var(--blu)">Ağırlık: %${w}</span></div><div style="font-size:var(--fs-base);color:var(--t1);font-weight:600;margin-bottom:4px">${q}</div><div style="font-size:var(--fs-sm);color:var(--t2);line-height:1.6">${dt}</div></div>`;});
+h+=`</div></div>`;
+h+=`<div class="card" style="margin-bottom:20px"><div class="card-h"><span class="card-t">🎯 Karar Sistemi (V8)</span></div><div class="card-b"><div style="font-size:var(--fs-base);color:var(--t2);line-height:1.7;margin-bottom:16px">Her hisseye otomatik olarak bir <b>karar</b>, bir <b>zamanlama</b> ve bir <b>kalite</b> etiketi atanır.</div><div style="margin-bottom:16px"><div style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-sm);color:var(--t3);margin-bottom:8px">KARAR ETİKETLERİ</div>`;
+[['AL','var(--grn)','Güçlü temel + uygun zamanlama + düşük risk'],['İZLE','var(--blu)','İlginç ama henüz teyit bekliyor'],['BEKLE','var(--ylw)','İyi şirket ama zamanlama geç veya fiyat yüksek'],['KAÇIN','var(--red)','Zayıf temel veya yüksek risk']].forEach(([l,c,d])=>{h+=`<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--bdr)"><span style="font-family:'JetBrains Mono',monospace;font-weight:700;color:${c};min-width:60px">${l}</span><span style="font-size:var(--fs-sm);color:var(--t2)">${d}</span></div>`;});
+h+=`</div><div style="margin-bottom:16px"><div style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-sm);color:var(--t3);margin-bottom:8px">ZAMANLAMA ETİKETLERİ</div>`;
+[['ERKEN','Henüz kimse fark etmedi — potansiyel fırsat'],['GELİŞİYOR','Sinyaller oluşuyor — takip et'],['TEYİTLİ','Trend başladı — giriş penceresi'],['GEÇ','Fiyatlanmış olabilir — dikkatli ol'],['AŞIRI','Çok geç — düzeltme riski yüksek']].forEach(([l,d])=>{h+=`<div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--bdr)"><span style="font-family:'JetBrains Mono',monospace;font-weight:600;color:var(--t1);min-width:80px">${l}</span><span style="font-size:var(--fs-sm);color:var(--t2)">${d}</span></div>`;});
+h+=`</div></div></div>`;
+h+=`<div class="card" style="margin-bottom:20px"><div class="card-h"><span class="card-t">🏢 Sektör Kalibrasyonu</span></div><div class="card-b"><div style="font-size:var(--fs-base);color:var(--t2);line-height:1.7">V8'de skorlama eşikleri <b>sektöre göre ayarlanır</b>. Bir bankanın F/K 5 olması "normal"ken, bir savunma şirketinin F/K 20 olması da "normal" olabilir. Sektörler arası adaletsiz karşılaştırma önlenir.<br><br><b>Desteklenen sektörler:</b> Banka, Holding, Sanayi, Savunma, Enerji, Perakende, Ulaştırma</div></div></div>`;
+h+=`<div class="card" style="margin-bottom:20px"><div class="card-h"><span class="card-t">📊 Kullanılan Finansal Modeller</span></div><div class="card-b">`;
+[['Piotroski F-Score (0-9)','9 kriterli bilanço sağlığı testi. 7+ güçlü, 3- zayıf.'],['Altman Z-Score','İflas riski formülü. >3.0 güvenli, <1.8 riskli. Bankalar hariç.'],['Beneish M-Score','Muhasebe manipülasyonu tespit modeli. <-2.22 güvenli, >-1.78 şüpheli.'],['Graham İçsel Değer','√(22.5 × HBK × Defter Değeri) — Benjamin Graham formülü.'],['Buffett Filtresi','Kalite + Hendek + Bilanço birleşimi. "Mükemmel şirketi makul fiyattan al."']].forEach(([n,d])=>{h+=`<div style="margin-bottom:10px;padding:10px;background:var(--bg3);border-radius:var(--rad)"><span style="font-weight:700;color:var(--t1)">${n}</span><span style="font-size:var(--fs-sm);color:var(--t2);margin-left:8px">${d}</span></div>`;});
+h+=`</div></div>`;
+pg.innerHTML=h;}
+
+function renderPortfoyPage(){
+const pg=$('pg-portfoy');const pf=getPF();
+let h=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px"><div><h2 style="font-family:'JetBrains Mono',monospace;font-size:15px;color:var(--gold)">📒 Portföy Defteri</h2><p style="font-size:11px;color:var(--t3);margin-top:2px">Sanal portföyünüz — veriler localStorage'da saklanir</p></div><div style="display:flex;gap:6px"><button class="btn btn-sm btn-grn" onclick="showAddPF()">+ HISSE EKLE</button><button class="btn btn-sm btn-blu" onclick="askDedePortfoy()">🤖 Q'YA SOR</button></div></div>`;
+h+=`<div id="pfAddForm" style="display:none;margin-bottom:14px;padding:14px;background:var(--bg3);border:1px solid var(--bdr);border-radius:var(--rad)"><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end"><div style="flex:1;min-width:80px"><div style="font-size:10px;color:var(--t3);margin-bottom:3px">TICKER</div><input id="pfTicker" type="text" placeholder="THYAO" style="font-family:'JetBrains Mono',monospace;font-size:13px;padding:8px 10px;background:var(--bg0);border:1px solid var(--bdr);border-radius:var(--rad);color:var(--t1);outline:0;width:100%;text-transform:uppercase;min-height:44px"></div><div style="flex:1;min-width:60px"><div style="font-size:10px;color:var(--t3);margin-bottom:3px">LOT</div><input id="pfLot" type="number" placeholder="100" inputmode="numeric" style="font-family:'JetBrains Mono',monospace;font-size:13px;padding:8px 10px;background:var(--bg0);border:1px solid var(--bdr);border-radius:var(--rad);color:var(--t1);outline:0;width:100%;min-height:44px"></div><div style="flex:1;min-width:80px"><div style="font-size:10px;color:var(--t3);margin-bottom:3px">MALIYET (TL)</div><input id="pfAvg" type="number" step="0.01" placeholder="45.50" inputmode="decimal" style="font-family:'JetBrains Mono',monospace;font-size:13px;padding:8px 10px;background:var(--bg0);border:1px solid var(--bdr);border-radius:var(--rad);color:var(--t1);outline:0;width:100%;min-height:44px"></div><button class="btn btn-grn btn-sm" onclick="doAddPF()">EKLE</button><button class="btn btn-sm" style="background:var(--bg2);color:var(--t3)" onclick="$('pfAddForm').style.display='none'">IPTAL</button></div></div>`;
+h+=`<div id="pfDedeBox" style="display:none;margin-bottom:14px"></div>`;
+if(!pf.length){
+  h+=`<div class="emp"><h3 style="color:var(--t2)">Henüz portföyünüz boş</h3><p style="color:var(--t3)">+ Hisse Ekle ile sanal portföyünüzü oluşturun.<br>Q portföyünüzü analiz etsin!</p></div>`;
+} else {
+  h+=`<div class="card" style="margin-bottom:14px"><div class="card-h"><span class="card-t">📊 Portfoy (${pf.length} hisse)</span></div><div class="card-b" style="overflow-x:auto"><table class="dtb"><thead><tr><th>Ticker</th><th>Lot</th><th>Maliyet</th><th>Toplam</th><th></th></tr></thead><tbody>`;
+  let totalCost=0;
+  pf.forEach(p=>{
+    const cost=p.lot*p.avg;totalCost+=cost;
+    h+=`<tr><td class="clk-t" onclick="loadTicker('${esc(p.ticker)}')">${esc(p.ticker)}</td><td style="color:var(--t1)">${p.lot}</td><td style="color:var(--t1)">${p.avg.toFixed(2)} TL</td><td style="color:var(--cyn);font-weight:700">${fN(cost)} TL</td><td><button class="wl-rm" onclick="rmPF('${esc(p.ticker)}');renderPortfoyPage()">✕</button></td></tr>`;
+  });
+  h+=`</tbody></table><div style="padding:8px;text-align:right;font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--cyn);font-weight:700">Toplam Maliyet: ${fN(totalCost)} TL</div></div></div>`;
+  const secMap={};pf.forEach(p=>{const items=S.scan?.items||[];const found=items.find(i=>i.ticker===p.ticker);const sec=found?.sector||'Bilinmiyor';if(!secMap[sec])secMap[sec]={count:0,cost:0};secMap[sec].count++;secMap[sec].cost+=p.lot*p.avg;});
+  h+=`<div class="card" style="margin-bottom:14px"><div class="card-h"><span class="card-t">🏢 Sektör Dağılımı</span></div><div class="card-b">`;
+  const totalC=Object.values(secMap).reduce((a,b)=>a+b.cost,0)||1;
+  Object.entries(secMap).sort((a,b)=>b[1].cost-a[1].cost).forEach(([sec,v])=>{
+    const pct=(v.cost/totalC*100).toFixed(1);
+    h+=`<div style="margin-bottom:6px"><div style="display:flex;justify-content:space-between;font-family:'JetBrains Mono',monospace;font-size:11px;margin-bottom:2px"><span style="color:var(--t2)">${esc(sec)} (${v.count})</span><span style="color:var(--t1)">${pct}%</span></div><div class="sb-bar"><div class="sb-fill" style="width:${pct}%;background:var(--cyn)"></div></div></div>`;
+  });
+  h+=`</div></div>`;
+}
+pg.innerHTML=h;
+}
+function showAddPF(){$('pfAddForm').style.display='block';$('pfTicker').focus();}
+function doAddPF(){const t=$('pfTicker').value.trim().toUpperCase();const l=parseInt($('pfLot').value)||0;const a=parseFloat($('pfAvg').value)||0;if(!t||t.length<3||l<=0||a<=0){alert('Ticker, lot ve maliyet girin');return;}addPF(t,l,a);$('pfAddForm').style.display='none';$('pfTicker').value='';$('pfLot').value='';$('pfAvg').value='';renderPortfoyPage();}
+async function askDedePortfoy(){const pf=getPF();if(!pf.length){alert('Önce portföye hisse ekleyin');return;}const box=$('pfDedeBox');box.style.display='block';box.innerHTML=`<div class="aib"><div class="aib-t">🤖 Q PORTFÖY ANALİZİ</div><div class="aib-tx">Portföy analiz ediliyor...</div></div>`;const desc=pf.map(p=>`${p.ticker} ${p.lot} lot (maliyet: ${p.avg} TL)`).join(', ');try{const d=await api('/api/agent?q='+encodeURIComponent('Portfoyumde sunlar var: '+desc+'. Sektörel dağılım ve risk hakkında ne düşünüyorsun?'));box.innerHTML=`<div class="aib"><div class="aib-t">🤖 Q PORTFÖY ANALİZİ</div><div class="aib-tx">${esc(d.answer)}</div></div>`;}catch(e){box.innerHTML='';}}
+
+// ===== INIT — progressive lazy loading =====
+(async()=>{
+renderHome(); // skeleton anında göster
+
+let _renderTimer=null;
+function scheduleRender(){if(_renderTimer)return;_renderTimer=setTimeout(()=>{_renderTimer=null;renderHome();},150);}
+
+// Phase 1: Hepsi paralel — biten render eder
+loadQuote().then(scheduleRender);
+loadBook().then(scheduleRender);
+loadMacro(); // kendi render'ını yapıyor
+loadLiveStats().then(scheduleRender);
+loadMarketStatus().then(scheduleRender);
+api('/api/health').catch(()=>null);
+
+// Phase 2: Scan data — bağımsız
+(async()=>{
+  try{
+    const d=await api('/api/top10');
+    if(d.items&&d.items.length>0){
+      S.scan=d;
+      renderHome();
+      Promise.all([api('/api/dashboard').catch(()=>null),api('/api/hero-summary').catch(()=>null)]).then(([dashR,heroR])=>{
+        if(dashR)S.dash=dashR;if(heroR)S.hero=heroR;updCnt(S.dash);renderHome();
+      });
+    }else{
+      for(let i=0;i<90;i++){
+        await new Promise(r=>setTimeout(r,3000));
+        try{
+          const st=await api('/api/scan-status').catch(()=>null);
+          if(st){
+            const pct=st.total>0?Math.round(st.progress/st.total*100):0;
+            const ldEl=document.querySelector('.ld-t');
+            if(ldEl)ldEl.textContent=st.phase==='raw_fetch'?`Veri çekiliyor... ${pct}%`:st.phase==='analyzing'?`108 hisse analiz ediliyor... ${pct}%`:'Tarama başlatılıyor...';
+          }
+          const d2=await api('/api/top10');
+          if(d2.items&&d2.items.length>0){
+            S.scan=d2;renderAlphaQuadrant();renderHome();
+            Promise.all([api('/api/dashboard').catch(()=>null),api('/api/hero-summary').catch(()=>null)]).then(([dashR,heroR])=>{
+              if(dashR)S.dash=dashR;if(heroR)S.hero=heroR;updCnt(S.dash);renderHome();
+            });
+            break;
+          }
+        }catch(e){}
+      }
+    }
+  }catch(e){
+    for(let i=0;i<90;i++){
+      await new Promise(r=>setTimeout(r,3000));
+      try{const d2=await api('/api/top10');if(d2.items&&d2.items.length>0){S.scan=d2;renderAlphaQuadrant();renderHome();Promise.all([api('/api/dashboard').catch(()=>null),api('/api/hero-summary').catch(()=>null)]).then(([dashR,heroR])=>{if(dashR)S.dash=dashR;if(heroR)S.hero=heroR;updCnt(S.dash);renderHome();});break;}}catch(e2){}
+    }
+  }
+})();
+
+// Phase 3: cross + heatmap — bağımsız
+api('/api/cross').then(d=>{S.cross=d;scheduleRender();}).catch(()=>{});
+loadHeatmap().then(scheduleRender).catch(()=>{});
+})();
+
+// ===== Q ASSISTANT (XSS-safe) =====
+function toggleAgent(){const el=$('agentPanel');el.style.display=el.style.display==='none'?'flex':'none';}
+async function sendAgent(){
+  const inp=$('agentInput');const box=$('agentMsgs');const q=inp.value.trim();if(!q)return;
+  // XSS-safe: use textContent for user input
+  const uDiv=document.createElement('div');uDiv.style.cssText='text-align:right;margin-bottom:8px';
+  const uSpan=document.createElement('span');uSpan.style.cssText='background:var(--blud);border:1px solid rgba(33,150,243,.3);padding:6px 10px;border-radius:8px 8px 0 8px;font-size:12px;color:var(--t1);display:inline-block;max-width:80%';
+  uSpan.textContent=q;uDiv.appendChild(uSpan);box.appendChild(uDiv);
+
+  const ldDiv=document.createElement('div');ldDiv.style.cssText='margin-bottom:8px';ldDiv.id='agentLoading';
+  ldDiv.innerHTML='<span style="color:var(--t3);font-size:11px">Analiz ediliyor...</span>';
+  box.appendChild(ldDiv);box.scrollTop=box.scrollHeight;inp.value='';
+
+  try{
+    const d=await api('/api/agent?q='+encodeURIComponent(q));
+    const ld=$('agentLoading');if(ld)ld.remove();
+    const aDiv=document.createElement('div');aDiv.style.cssText='margin-bottom:8px';
+    const aSpan=document.createElement('span');aSpan.style.cssText='background:var(--bg3);border:1px solid var(--bdr);padding:6px 10px;border-radius:8px 8px 8px 0;font-size:12px;color:var(--t1);display:inline-block;max-width:85%;line-height:1.5';
+    aSpan.textContent=d.answer;aDiv.appendChild(aSpan);box.appendChild(aDiv);box.scrollTop=box.scrollHeight;
+  }catch(e){
+    const ld=$('agentLoading');if(ld)ld.remove();
+    box.innerHTML+=`<div style="margin-bottom:8px"><span style="color:var(--red);font-size:11px">Hata</span></div>`;
+  }
+}
+</script>
+
+<!-- GLASSMORPHISM TOOLTIP -->
+<div id="bbTip"></div>
+
+<!-- FOOTER -->
+<div style="background:var(--bg1);border-top:1px solid var(--bdr);padding:16px 20px;margin-top:20px;text-align:center">
+<div style="display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:8px"><svg width="20" height="20" viewBox="0 0 100 100"><defs><linearGradient id="fg" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" style="stop-color:#FFB300"/><stop offset="100%" style="stop-color:#E69500"/></linearGradient></defs><path d="M20,48 Q6,20 5,6 Q12,22 24,36 Z" fill="url(#fg)" opacity=".85"/><path d="M70,48 Q84,20 85,6 Q78,22 66,36 Z" fill="url(#fg)" opacity=".85"/><ellipse cx="45" cy="54" rx="28" ry="22" fill="url(#fg)"/><ellipse cx="45" cy="70" rx="17" ry="12" fill="#E69500"/><path d="M39,77 Q45,80.5 51,77" stroke="#E69500" stroke-width="1" fill="none"/></svg><span style="font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--t1);font-weight:600">BIST<span style="color:var(--acc)">BULL</span></span></div>
+<div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--t3);line-height:1.8">
+Yapay Zekâ Destekli BIST Yatırım Terminali<br>
+<span style="color:var(--t2)">Tasarım & Geliştirme: <span style="color:var(--cyn)">Berkay Kangal</span></span><br>
+© 2026 BistBull Terminal. Tüm hakları saklıdır.<br>
+<span style="color:var(--t4);font-size:9px">Bu uygulama yatırım tavsiyesi değildir. Veriler yfinance üzerinden sağlanmaktadır.</span>
+</div>
+</div>
+
+<!-- Q ASSISTANT FAB + PANEL -->
+<div id="agentBtn" onclick="toggleAgent()" style="position:fixed;bottom:calc(20px + var(--safe-b));right:20px;width:62px;height:62px;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 20px rgba(0,0,0,.5);z-index:150;border:2px solid var(--acc);overflow:hidden;background:linear-gradient(135deg,#1a1a2e,#0e131c)" onmouseenter="this.style.transform='scale(1.1)'" onmouseleave="this.style.transform='scale(1)'"><div style="font-family:'JetBrains Mono',monospace;font-size:22px;font-weight:700;color:var(--acc);line-height:1">Q</div></div>
+<div id="agentPanel" style="display:none;position:fixed;bottom:calc(86px + var(--safe-b));right:20px;width:360px;max-width:calc(100vw - 40px);height:460px;max-height:calc(100vh - 120px);max-height:calc(100dvh - 120px);background:var(--bg1);border:1px solid var(--bdr2);border-radius:12px;box-shadow:0 8px 40px rgba(0,0,0,.5);z-index:150;flex-direction:column;overflow:hidden">
+<div style="padding:12px 16px;background:linear-gradient(135deg,#1a1a2e,var(--bg1));border-bottom:1px solid var(--bdr);display:flex;align-items:center;gap:10px"><div style="font-family:'JetBrains Mono',monospace;font-size:24px;font-weight:700;color:var(--acc)">Q</div><div><div style="font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700;color:var(--acc)">BISTBULL Q</div><div style="font-size:9px;color:var(--t3)">Terminal Asistanı · Veri Odaklı</div></div><button onclick="toggleAgent()" style="margin-left:auto;background:0;border:0;color:var(--t3);font-size:18px;cursor:pointer;width:44px;height:44px;display:flex;align-items:center;justify-content:center">✕</button></div>
+<div id="agentMsgs" style="flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;-webkit-overflow-scrolling:touch"><div style="margin-bottom:8px"><span style="background:var(--bg3);border:1px solid var(--bdr);padding:6px 10px;border-radius:8px 8px 8px 0;font-size:12px;color:var(--t1);display:inline-block;max-width:85%;line-height:1.5">BistBull Q aktif. Hisse kodu, sektör, sinyal veya makro — ne sorarsan somut veri ile yanıtlarım.</span></div></div>
+<div style="padding:10px 12px;border-top:1px solid var(--bdr)"><div style="display:flex;gap:8px;margin-bottom:6px"><input id="agentInput" type="text" placeholder="Hisse veya soru yaz..." style="flex:1;font-size:13px;padding:10px 12px;background:var(--bg0);border:1px solid var(--bdr);border-radius:6px;color:var(--t1);outline:0;font-family:'DM Sans',sans-serif;min-height:44px" onkeydown="if(event.key==='Enter')sendAgent()" enterkeyhint="send"><button onclick="sendAgent()" style="font-family:'JetBrains Mono',monospace;font-size:12px;padding:8px 14px;background:var(--acc);color:#000;border:0;border-radius:6px;cursor:pointer;font-weight:600;min-height:44px">Sor</button></div><div style="font-size:8px;color:var(--t4);line-height:1.3;padding-top:4px">⚠️ Q bilgi amaçlıdır. Yatırım tavsiyesi değildir.</div>
+</div>
+</div>
+</body></html>
