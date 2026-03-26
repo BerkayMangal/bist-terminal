@@ -1,29 +1,27 @@
 # ================================================================
-# BISTBULL TERMINAL V10.1 — FastAPI APP
+# BISTBULL TERMINAL V10.2 — FastAPI APP
 # Slim router + lifespan + background scanner + WebSocket.
 # Tüm iş mantığı modüllerden import edilir.
 #
-# FIXES IN THIS REVISION (V10.1):
+# FIXES IN THIS REVISION (V10.2 — CRASH FIX):
 #
-# FIX-1 [BUG-PERF-03] _fetch_takas_yfinance() serial bomb eliminated.
-#   OLD: for ticker in UNIVERSE[:20]: yf.Ticker(...).get_info()
-#        → 20 sequential HTTP calls, 40-100 seconds per cache miss
-#   NEW: _fetch_takas_data() uses asyncio.gather() + asyncio.Semaphore(5)
-#        → max 5 concurrent coroutines, total time ≈ 8-15 seconds
-#   Also: source label "yfinance_institutional" renamed to "kurumsal_oran"
-#        to honestly distinguish it from real MKK foreign ownership data.
+# ROOT CAUSE OF V10.1 OOM CRASH:
+#   After the scan completed (108 symbols in RAM), the heatmap block
+#   immediately triggered a second yf.download() for 108 symbols.
+#   Peak RAM doubled → Railway container OOM killed.
 #
-# FIX-2 [BUG-PERF-04] Heatmap pre-computation wired into background scanner.
-#   OLD: _fetch_heatmap_data() only called on cache miss (O(N) on 25% requests)
-#   NEW: background scanner proactively refreshes heatmap cache after every scan.
-#        /api/heatmap now ALWAYS hits the cache (O(1) lookup).
+# FIX-1 [OOM CRASH] Heatmap moved to dedicated background_tasks module.
+#   engine/background_tasks.py: heatmap_refresh_loop() runs every 10 min
+#   with a 15-min startup delay so scan RAM is fully freed first.
+#   /api/heatmap is now a pure O(1) cache read. If cache is empty
+#   (first 15 min after boot), returns "Hesaplanıyor..." status.
 #
-# FIX-3 [BUG-DATA-03] STATIC_RATES FX staleness patched.
-#   OLD: /api/macro returned hardcoded STATIC_RATES with no freshness mechanism.
-#   NEW: _try_refresh_fx_rates() fetches USDTRY, EURTRY, BRENT, GOLD live
-#        from yfinance and merges into the macro result. STATIC_RATES are used
-#        as fallback when yfinance is unavailable. A rates_live_updated flag
-#        signals to the UI whether rates are live or static.
+# FIX-2 [OOM CRASH] Paper trade loop moved to background_tasks module.
+#   Removed from app.py, imported and launched from engine/background_tasks.
+#
+# FIX-3 [V10.1 retained] Takas async parallel via asyncio.gather() + Semaphore(5).
+# FIX-4 [V10.1 retained] Live FX rates via _try_refresh_fx_rates().
+# FIX-5 [V10.1 retained] Honest "kurumsal_oran" label for yfinance takas data.
 # ================================================================
 
 import os
@@ -76,6 +74,12 @@ from engine.technical import (
 )
 from data.macro import fetch_all_macro, is_yfinance_available
 from engine.signal_tracker import signal_tracker
+from engine.background_tasks import (
+    heatmap_refresh_loop,
+    paper_trade_loop,
+    _fetch_heatmap_data,
+    _build_heatmap_result,
+)
 
 try:
     import yfinance as yf
@@ -162,40 +166,7 @@ async def _background_scanner():
                     except Exception:
                         pass
 
-                # FIX-2 [BUG-PERF-04]: Proactive heatmap pre-computation.
-                # After every scan, refresh the heatmap cache in the background
-                # so /api/heatmap always serves from cache (O(1) lookup).
-                # Previously the heatmap was computed on-demand on cache miss,
-                # which triggered a yf.download() batch taking 15-40s.
-                try:
-                    log.info("Heatmap ön hesaplama başladı...")
-                    heatmap_data = await asyncio.to_thread(_fetch_heatmap_data)
-                    if heatmap_data:
-                        _sectors: dict = defaultdict(list)
-                        for _d in heatmap_data:
-                            _sectors[_d["sector"]].append(_d)
-                        _sector_list = sorted(
-                            [
-                                {
-                                    "sector":     sec,
-                                    "avg_change": round(sum(i["change_pct"] for i in si) / len(si), 2) if si else 0,
-                                    "total_mcap": sum(i["market_cap"] or 0 for i in si),
-                                    "count":      len(si),
-                                    "stocks":     sorted(si, key=lambda x: abs(x["change_pct"]), reverse=True),
-                                }
-                                for sec, si in _sectors.items()
-                            ],
-                            key=lambda x: x["avg_change"],
-                            reverse=True,
-                        )
-                        heatmap_cache.set("heatmap", {
-                            "timestamp": now_iso(),
-                            "sectors":   clean_for_json(_sector_list),
-                            "total":     len(heatmap_data),
-                        })
-                        log.info(f"Heatmap önbelleğe alındı: {len(heatmap_data)} hisse, {len(_sector_list)} sektör")
-                except Exception as _he:
-                    log.warning(f"Heatmap ön hesaplama hatası: {_he}")
+                # Heatmap refresh is handled by heatmap_refresh_loop() in background_tasks.py
             else:
                 ms = get_market_status()
                 log.info(f"Scan atlanıyor — {ms['reason']} ({ms['ist_time']} IST)")
@@ -209,116 +180,8 @@ async def _background_scanner():
 # ================================================================
 # LIFESPAN
 # ================================================================
-# ================================================================
-# PAPER TRADE CHECKER — Background price tracker
-# ================================================================
-async def _paper_trade_checker() -> None:
-    """
-    Her 5 dakikada bir aktif sinyallerin anlık fiyatlarını çeker,
-    TP ve SL kontrolü yapar, SignalTracker'ı günceller.
-
-    Fiyat kaynağı önceliği:
-      1. yfinance batch download (hızlı, düşük bant genişliği)
-      2. compute_technical() bireysel çağrı (yavaş, fallback)
-      3. tech_cache'den son bilinen fiyat (statik ama hiç yoktan iyi)
-    """
-    await asyncio.sleep(90)  # İlk başlangıçta 90sn bekle (yfinance soğuma süresi)
-
-    while True:
-        try:
-            active = signal_tracker.get_all_active()
-
-            if not active:
-                log.debug("PaperTrade: Aktif sinyal yok, kontrol atlanıyor")
-                await asyncio.sleep(300)
-                continue
-
-            tickers = list({s["ticker"] for s in active})
-            log.info(f"PaperTrade: {len(tickers)} ticker fiyat kontrolü başladı")
-            price_map: dict[str, float] = {}
-
-            # ── 1. yfinance batch download (tercih edilen) ──────────────
-            if YF_AVAILABLE and tickers:
-                try:
-                    symbols = [normalize_symbol(t) for t in tickers]
-                    # Sadece son 2 günü çek — minimum bant genişliği
-                    raw_df = await asyncio.to_thread(
-                        yf.download,
-                        symbols if len(symbols) > 1 else symbols[0],
-                        period="2d",
-                        progress=False,
-                        threads=True,
-                    )
-                    if raw_df is not None and not raw_df.empty:
-                        for t in tickers:
-                            sym = normalize_symbol(t)
-                            try:
-                                if len(tickers) == 1:
-                                    price_val = float(raw_df["Close"].iloc[-1])
-                                else:
-                                    # MultiIndex DataFrame
-                                    col_key = ("Close", sym)
-                                    if col_key in raw_df.columns:
-                                        price_val = float(raw_df[col_key].iloc[-1])
-                                    elif sym in raw_df.get("Close", {}):
-                                        price_val = float(raw_df["Close"][sym].iloc[-1])
-                                    else:
-                                        continue
-                                if price_val > 0:
-                                    price_map[t] = round(price_val, 4)
-                            except Exception as e:
-                                log.debug(f"PaperTrade fiyat parse [{t}]: {e}")
-                    log.debug(f"PaperTrade yfinance: {len(price_map)}/{len(tickers)} fiyat alındı")
-                except Exception as e:
-                    log.warning(f"PaperTrade yfinance batch hatası: {e}")
-
-            # ── 2. Eksik kalanlar için tech_cache fallback ──────────────
-            missing = [t for t in tickers if t not in price_map]
-            if missing:
-                for t in missing:
-                    try:
-                        sym = normalize_symbol(t)
-                        cached_tech = tech_cache.get(sym)
-                        if cached_tech and cached_tech.get("price") and cached_tech["price"] > 0:
-                            price_map[t] = round(float(cached_tech["price"]), 4)
-                    except Exception:
-                        pass
-
-            # ── 3. Hâlâ eksik olanlar için bireysel compute_technical ──
-            still_missing = [t for t in tickers if t not in price_map]
-            if still_missing and YF_AVAILABLE:
-                for t in still_missing[:5]:  # Max 5 bireysel çağrı
-                    try:
-                        tech = await asyncio.to_thread(
-                            compute_technical, normalize_symbol(t)
-                        )
-                        if tech and tech.get("price") and float(tech["price"]) > 0:
-                            price_map[t] = round(float(tech["price"]), 4)
-                        await asyncio.sleep(0.5)  # Rate limit koruması
-                    except Exception as e:
-                        log.debug(f"PaperTrade compute_technical [{t}]: {e}")
-
-            # ── TP/SL kontrolü ──────────────────────────────────────────
-            if price_map:
-                counts = await asyncio.to_thread(signal_tracker.update_prices, price_map)
-                log.info(
-                    f"PaperTrade tamamlandı: "
-                    f"TP={counts['tp']} SL={counts['sl']} "
-                    f"Aktif={counts['still_active']} "
-                    f"FiyatYok={counts['no_price']}"
-                )
-            else:
-                log.warning(f"PaperTrade: Hiç fiyat alınamadı, {len(active)} sinyal güncellenemedi")
-
-            # Günlük temizlik (01:00-02:00 arasında)
-            current_hour = dt.datetime.now().hour
-            if current_hour == 1:
-                await asyncio.to_thread(signal_tracker.purge_old)
-
-        except Exception as e:
-            log.error(f"PaperTrade checker genel hata: {e}", exc_info=True)
-
-        await asyncio.sleep(300)  # 5 dakika
+# NOTE: _paper_trade_checker() has been moved to engine/background_tasks.py
+# (paper_trade_loop). It is launched via asyncio.create_task() in lifespan().
 
 
 @asynccontextmanager
@@ -331,11 +194,16 @@ async def lifespan(application: FastAPI):
         f"Redis: {'ON' if redis_client.is_available() else 'OFF'} | "
         f"Restore: {restore_results}"
     )
-    task = asyncio.create_task(_background_scanner())
-    paper_task = asyncio.create_task(_paper_trade_checker())
+    # Core scan loop
+    scan_task        = asyncio.create_task(_background_scanner())
+    # Background tasks — run independently, with startup delays to stagger RAM
+    heatmap_task     = asyncio.create_task(heatmap_refresh_loop())
+    paper_task       = asyncio.create_task(paper_trade_loop())
     log.info(f"SignalTracker: {signal_tracker} başlatıldı")
+    log.info("Background tasks başlatıldı: scan_loop | heatmap_loop | paper_trade_loop")
     yield
-    task.cancel()
+    scan_task.cancel()
+    heatmap_task.cancel()
     paper_task.cancel()
     redis_client.shutdown()
     log.info(f"{APP_NAME} shutting down")
@@ -889,68 +757,40 @@ async def api_social(request: Request):
     return success({"timestamp": now_iso(), "source": None, "trending": [], "overall_sentiment": "unavailable", "summary": "XAI_API_KEY gerekli.", "hot_topics": [], "error": "XAI_API_KEY gerekli"})
 
 # ================================================================
-# HEATMAP
+# HEATMAP — O(1) cache read endpoint
 # ================================================================
-def _fetch_heatmap_data():
-    items = get_top10_items()
-    item_map = _items_by_ticker(items)
-    results = []
-    if BORSAPY_AVAILABLE:
-        try:
-            import borsapy as bp_m
-            for t in UNIVERSE:
-                try:
-                    _tk = bp_m.Ticker(t)
-                    fi = _tk.fast_info
-                    last = getattr(fi, "last_price", None)
-                    prev = getattr(fi, "previous_close", None)
-                    mcap = getattr(fi, "market_cap", None)
-                    if last is not None and prev is not None and prev > 0:
-                        chg = (last - prev) / prev * 100
-                        si = item_map.get(t)
-                        results.append({"ticker": t, "price": round(float(last), 2), "change_pct": round(chg, 2), "market_cap": float(mcap) if mcap else None, "sector": (si.get("sector", "Diger") if si else "Diger") or "Diger", "score": si["overall"] if si else None})
-                except Exception:
-                    continue
-            if results:
-                return results
-        except Exception as e:
-            log.warning(f"heatmap borsapy: {e}")
-    if not YF_AVAILABLE:
-        return results
-    symbols = [normalize_symbol(t) for t in UNIVERSE]
-    try:
-        df = yf.download(symbols, period="2d", group_by="ticker", progress=False, threads=True)
-        for t in UNIVERSE:
-            sym = normalize_symbol(t)
-            try:
-                ticker_df = df if len(UNIVERSE) == 1 else (df[sym] if sym in df.columns.get_level_values(0) else None)
-                if ticker_df is None or ticker_df.empty or len(ticker_df) < 2:
-                    continue
-                prev_close = float(ticker_df["Close"].iloc[-2])
-                last_close = float(ticker_df["Close"].iloc[-1])
-                if prev_close == 0:
-                    continue
-                si = item_map.get(t)
-                results.append({"ticker": t, "price": round(last_close, 2), "change_pct": round(((last_close - prev_close) / prev_close) * 100, 2), "market_cap": si["metrics"].get("market_cap") if si else None, "sector": (si.get("sector", "Diger") if si else "Diger") or "Diger", "score": si["overall"] if si else None})
-            except Exception:
-                continue
-    except Exception as e:
-        log.warning(f"heatmap yfinance: {e}")
-    return results
+# _fetch_heatmap_data() and _build_heatmap_result() live in
+# engine/background_tasks.py and are imported at the top of this file.
+# heatmap_refresh_loop() refreshes the cache every 10 minutes from
+# that module. This endpoint ONLY reads — it never blocks on I/O.
 
 @app.get("/api/heatmap")
 async def api_heatmap():
+    """
+    O(1) heatmap endpoint — pure cache read.
+
+    Cache is pre-populated by heatmap_refresh_loop() in background_tasks.py
+    (runs every 10 minutes, 15-min startup delay after boot).
+
+    On first boot (before the loop has run), returns a computing status
+    so the frontend can show a loading indicator rather than hanging.
+    """
     cached = heatmap_cache.get("heatmap")
     if cached is not None:
         return success(cached, cache_status="hit")
-    data = await asyncio.to_thread(_fetch_heatmap_data)
-    sectors = defaultdict(list)
-    for d in data:
-        sectors[d["sector"]].append(d)
-    sector_list = sorted([{"sector": sec, "avg_change": round(sum(i["change_pct"] for i in si) / len(si), 2) if si else 0, "total_mcap": sum(i["market_cap"] or 0 for i in si), "count": len(si), "stocks": sorted(si, key=lambda x: abs(x["change_pct"]), reverse=True)} for sec, si in sectors.items()], key=lambda x: x["avg_change"], reverse=True)
-    result = {"timestamp": now_iso(), "sectors": clean_for_json(sector_list), "total": len(data)}
-    heatmap_cache.set("heatmap", result)
-    return success(result)
+
+    # Cache miss — background loop hasn't run yet (first 15 min after boot).
+    # Return a graceful "computing" response. Do NOT block here.
+    return success(
+        {
+            "sectors":   [],
+            "total":     0,
+            "computing": True,
+            "message":   "Heatmap hesaplanıyor, lütfen bekleyin...",
+            "timestamp": now_iso(),
+        },
+        cache_status="computing",
+    )
 
 # ================================================================
 # QUOTE + BOOK
