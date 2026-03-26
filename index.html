@@ -464,15 +464,559 @@ async function loadMacroAI(){const box=$('macroAI');if(!box)return;box.innerHTML
 function renderRadarPage(){const pg=$('pg-radar');const sc=S.scan;if(!sc||!sc.items||!sc.items.length){pg.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px"><h2 style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-lg);color:var(--cyn)">🏛️ Temel Analiz Radar</h2><button class="btn btn-grn" onclick="startScan()">▶ SCAN</button></div><div class="emp"><h3 style="color:var(--t2)">Henüz taranmadı</h3></div>`;return;}const sort=S._radarSort||'deger';pg.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px"><div><h2 style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-lg);color:var(--cyn)">🏛️ Temel Analiz Radar — ${sc.items.length} Hisse</h2><p style="font-size:var(--fs-sm);color:var(--t3);margin-top:2px">${sc.asof?new Date(sc.asof).toLocaleString('tr-TR'):''}</p></div><button class="btn btn-grn" onclick="startScan()">🔄</button></div><div style="padding:12px 16px;background:var(--bg3);border-radius:var(--rad);margin-bottom:14px;font-size:var(--fs-base);color:var(--t2);line-height:1.6"><b style="color:var(--cyn)">Radar nasıl çalışır?</b> Uzun vadeli değer tarayıcı. ${sc.items.length} BIST hissesi 7 temel boyutta analiz edilir: Değerleme (F/K, PD/DD, FD/FAVÖK), Kalite (ROE, marjlar), Büyüme, Bilanço sağlamlığı (Altman Z, borç), Kârlılık (Beneish, nakit akış) ve Hendek (marj stabilitesi). <span style="color:var(--ylw)">Kısa vadeli momentum ve teknik sinyaller için → Cross Hunter.</span></div><div class="card"><div class="card-b" style="overflow-x:auto">${renderRadarTbl(sc.items,sort)}</div></div>`;}
 
 // ===== CROSS PAGE =====
-function renderCrossPage(){const pg=$('pg-cross');if(!S.cross){pg.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px"><h2 style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-lg);color:var(--orn)">⚡ Cross Hunter V2</h2><button class="btn btn-orn" onclick="startCross()">⚡ TARA</button></div><div style="padding:12px 16px;background:var(--bg3);border-radius:var(--rad);margin-bottom:14px;font-size:var(--fs-base);color:var(--t2);line-height:1.6"><b style="color:var(--orn)">Cross Hunter nasıl çalışır?</b> İki modda çalışır: <b style="color:var(--cyn)">Kırılımlar</b> = teknik kırılım sinyalleri (EMA cross, Ichimoku, VCP, destek/direnç). <b style="color:var(--blu)">Momentumlar</b> = trend gücü sinyalleri (MACD, RSI, Bollinger). Her sinyal ⭐1-5 güvenilirlik puanı alır.</div><div class="emp"><h3 style="color:var(--t2)">Taramak için butona basın</h3></div>`;return;}const sigs=S.cross.signals||[];const sm=S.cross.summary||{};const aiCom=S.cross.ai_commentary;const crossCat=S._crossCat||'all';let h=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px"><h2 style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-lg);color:var(--orn)">⚡ Cross Hunter V2</h2><button class="btn btn-orn" onclick="startCross()">⚡ YENIDEN</button></div><div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap"><span class="pill p-blu">${sm.total||0} sinyal</span><span class="pill p-grn">🟢 ${sm.bullish||0}</span><span class="pill p-red">🔴 ${sm.bearish||0}</span><span class="pill p-ylw">⭐ ${sm.total_stars||0} güç</span><span class="pill p-blu">✓ ${sm.vol_confirmed||0} teyitli</span></div>`;
-h+=`<div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap"><button class="btn btn-sm ${crossCat==='all'?'btn-orn':''}" style="${crossCat!=='all'?'background:var(--bg3);color:var(--t2)':''}" onclick="S._crossCat='all';renderCrossPage()">Tümü (${sigs.length})</button><button class="btn btn-sm ${crossCat==='kirilim'?'btn-cyn':''}" style="${crossCat!=='kirilim'?'background:var(--bg3);color:var(--t2)':''}" onclick="S._crossCat='kirilim';renderCrossPage()">🎯 Kırılımlar (${sigs.filter(s=>s.category==='kirilim').length})</button><button class="btn btn-sm ${crossCat==='momentum'?'btn-blu':''}" style="${crossCat!=='momentum'?'background:var(--bg3);color:var(--t2)':''}" onclick="S._crossCat='momentum';renderCrossPage()">📊 Momentumlar (${sigs.filter(s=>s.category==='momentum').length})</button></div>`;
-const catDesc=crossCat==='kirilim'?'<b style="color:var(--cyn)">Kırılımlar:</b> Golden/Death Cross, Ichimoku Kumo Breakout, VCP, Rectangle, 52W High, Destek/Direnç kırılımları. Orta-uzun vade trend değişimi sinyalleri.':crossCat==='momentum'?'<b style="color:var(--blu)">Momentumlar:</b> MACD Cross, RSI Aşırı Alım/Satım, Bollinger Band kırılımları. Kısa vade trend gücü sinyalleri.':'Tüm sinyaller — kırılımlar ve momentumlar birlikte.';
-h+=`<div style="padding:8px 14px;background:var(--bg3);border-radius:var(--rad);margin-bottom:14px;font-size:var(--fs-sm);color:var(--t2);line-height:1.5">${catDesc}</div>`;
-if(aiCom){h+=`<div class="aib" style="margin-bottom:14px"><div class="aib-t">🤖 Sinyal Analizi</div><div class="aib-tx">${esc(aiCom)}</div></div>`;}
-const catFiltered=crossCat==='all'?sigs:sigs.filter(s=>s.category===crossCat);const minStar=S._crossMinStar||1;const filtered=catFiltered.filter(s=>(s.stars||1)>=minStar);
-h+=`<div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap"><button class="btn btn-sm ${minStar===1?'btn-orn':''}" style="${minStar!==1?'background:var(--bg3);color:var(--t2)':''}" onclick="S._crossMinStar=1;renderCrossPage()">Tümü (${catFiltered.length})</button><button class="btn btn-sm ${minStar===3?'btn-orn':''}" style="${minStar!==3?'background:var(--bg3);color:var(--t2)':''}" onclick="S._crossMinStar=3;renderCrossPage()">⭐3+ (${catFiltered.filter(s=>(s.stars||1)>=3).length})</button><button class="btn btn-sm ${minStar===4?'btn-orn':''}" style="${minStar!==4?'background:var(--bg3);color:var(--t2)':''}" onclick="S._crossMinStar=4;renderCrossPage()">⭐4+ (${catFiltered.filter(s=>(s.stars||1)>=4).length})</button></div>`;
-if(!filtered.length){h+='<div class="emp"><h3 style="color:var(--t2)">Bu filtre ile sinyal yok</h3></div>';}else{const grouped={};filtered.forEach(s=>{if(!grouped[s.ticker])grouped[s.ticker]={ticker:s.ticker,price:s.price,signals:[],totalStars:0,volConfirmed:s.vol_confirmed};grouped[s.ticker].signals.push(s);grouped[s.ticker].totalStars+=s.stars||1;});const tickers=Object.values(grouped).sort((a,b)=>b.totalStars-a.totalStars);h+=`<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px">`;tickers.forEach(g=>{const mainCls=g.signals[0].signal_type==='bullish'?'bull':g.signals[0].signal_type==='bearish'?'bear':'';h+=`<div class="sigc ${mainCls}" style="padding:14px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><span class="clk-t" style="font-size:16px;font-weight:700" onclick="loadTicker('${esc(g.ticker)}')">${esc(g.ticker)}</span><div style="display:flex;align-items:center;gap:8px"><span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--ylw)">⭐${g.totalStars}/${g.signals.length*5}</span>${g.volConfirmed?'<span style="font-size:10px;color:var(--grn)">✓hacim</span>':''}<span style="color:var(--t1);font-family:'JetBrains Mono',monospace;font-size:12px">${g.price?g.price.toFixed(2)+' TL':''}</span></div></div>`;g.signals.forEach(s=>{const starStr='⭐'.repeat(s.stars||1)+'☆'.repeat(5-(s.stars||1));const sigCol=s.signal_type==='bullish'?'var(--grn)':s.signal_type==='bearish'?'var(--red)':'var(--ylw)';const catIcon=s.category==='kirilim'?'🎯':'📊';h+=`<div style="padding:6px 0;border-top:1px solid var(--bdr)"><div style="display:flex;justify-content:space-between;align-items:center"><span style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:600;color:${sigCol}">${catIcon} ${esc(s.signal)}</span><span style="font-size:10px;color:var(--t3)">${starStr}</span></div><div style="font-size:10px;color:var(--t2);margin-top:2px;line-height:1.4">${esc(s.explanation||'')}</div></div>`;});h+=`</div>`;});h+=`</div>`;}pg.innerHTML=h;}
-async function startCross(){$('pg-cross').innerHTML='<div class="ld"><div class="sp"></div><div class="ld-t">Sinyal taranıyor...</div></div>';try{S.cross=await api('/api/cross');$('cnt-s').textContent=S.cross.summary?.total||0;renderCrossPage();}catch(e){$('pg-cross').innerHTML=`<div class="emp"><h3 style="color:var(--t2)">Hata: ${esc(e.message)}</h3></div>`;}}
+
+/* ================================================================
+   CROSSHUNTER V2 — MULTI-TIMEFRAME TRACK RECORD
+   renderCrossPage: Mock data yok. Tüm veri /api/signals/track-record
+   ve /api/cross endpoint'lerinden gelir.
+================================================================ */
+
+/* ── CSS ── */
+const _CH_CSS = `<style>
+@keyframes ch-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+@keyframes ch-glow-grn{0%,100%{box-shadow:0 0 0 0 rgba(76,175,80,0)}50%{box-shadow:0 0 14px rgba(76,175,80,.25)}}
+@keyframes ch-glow-blu{0%,100%{box-shadow:0 0 0 0 rgba(100,181,246,0)}50%{box-shadow:0 0 12px rgba(100,181,246,.18)}}
+@keyframes ch-glow-amb{0%,100%{box-shadow:0 0 0 0 rgba(255,179,0,0)}50%{box-shadow:0 0 12px rgba(255,179,0,.15)}}
+@keyframes ch-dot{0%,100%{opacity:1}50%{opacity:.3}}
+.ch-card{animation:ch-in .32s cubic-bezier(.4,0,.2,1) both;background:var(--bg2);border:1px solid var(--bdr);border-radius:var(--rad2);padding:14px 16px;position:relative;overflow:hidden;transition:border-color .2s,transform .15s}
+.ch-card:hover{border-color:var(--bdr2);transform:translateY(-1px)}
+.ch-card.s-active{border-left:2px solid var(--blu)!important;animation:ch-in .32s cubic-bezier(.4,0,.2,1) both,ch-glow-blu 3s ease-in-out infinite}
+.ch-card.s-watch{border-left:2px solid var(--acc)!important;animation:ch-in .32s cubic-bezier(.4,0,.2,1) both,ch-glow-amb 3s ease-in-out infinite}
+.ch-card.s-tp{border-left:2px solid var(--grn)!important;animation:ch-in .32s cubic-bezier(.4,0,.2,1) both,ch-glow-grn 3s ease-in-out infinite}
+.ch-card.s-sl{border-left:2px solid var(--red)!important}
+.ch-tab{font-family:'JetBrains Mono',monospace;font-size:10px;padding:6px 13px;background:transparent;border:none;color:var(--t3);cursor:pointer;border-radius:var(--rad);transition:all .2s;white-space:nowrap;min-height:34px}
+.ch-tab:hover{color:var(--t2);background:var(--bg3)}
+.ch-tab.on{background:var(--accd);color:var(--acc);border:1px solid rgba(255,179,0,.25)}
+.ch-fbtn{font-size:10px;padding:3px 9px;border:1px solid var(--bdr);background:var(--bg3);color:var(--t3);font-family:'JetBrains Mono',monospace;letter-spacing:.06em;text-transform:uppercase;border-radius:20px;cursor:pointer;transition:all .18s;min-height:28px}
+.ch-fbtn:hover,.ch-fbtn.on{border-color:rgba(255,179,0,.3);color:var(--acc);background:var(--accd)}
+.ch-badge-active{font-family:'JetBrains Mono',monospace;font-size:9px;padding:2px 7px;border-radius:20px;background:rgba(100,181,246,.1);color:var(--blu);border:1px solid rgba(100,181,246,.2);white-space:nowrap}
+.ch-badge-watch{font-family:'JetBrains Mono',monospace;font-size:9px;padding:2px 7px;border-radius:20px;background:var(--accd);color:var(--acc);border:1px solid rgba(255,179,0,.2);white-space:nowrap}
+.ch-badge-tp{font-family:'JetBrains Mono',monospace;font-size:9px;padding:2px 7px;border-radius:20px;background:var(--grnd);color:var(--grn);border:1px solid rgba(76,175,80,.3);white-space:nowrap}
+.ch-badge-sl{font-family:'JetBrains Mono',monospace;font-size:9px;padding:2px 7px;border-radius:20px;background:var(--redd);color:var(--red);border:1px solid rgba(239,83,80,.25);white-space:nowrap}
+.ch-feed{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+.ch-sbar{position:absolute;bottom:0;left:0;height:2px;width:0%;transition:width 1.5s cubic-bezier(.4,0,.2,1)}
+.ch-pbar-t{height:3px;background:var(--bg4);border-radius:2px;overflow:hidden;margin-top:3px}
+.ch-pbar-f{height:100%;border-radius:2px;width:0%;transition:width 1.5s cubic-bezier(.4,0,.2,1)}
+.ch-result{position:absolute;top:10px;right:11px;font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700}
+.ch-live-dot{width:7px;height:7px;border-radius:50%;display:inline-block;background:var(--grn);animation:ch-dot 2s ease-in-out infinite}
+.ch-skeleton{background:linear-gradient(90deg,var(--bg3) 25%,var(--bg4) 50%,var(--bg3) 75%);background-size:200% 100%;animation:ch-shimmer 1.5s infinite;border-radius:var(--rad);height:140px}
+@keyframes ch-shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+@media(max-width:640px){.ch-feed{grid-template-columns:1fr}}
+</style>`;
+
+/* ── STATE ── */
+const _CH = {
+  tf: '1G',        // Aktif zaman dilimi filtresi
+  filter: 'all',   // all | active | tp | sl
+  data: null,      // /api/signals/track-record'dan gelen ham veri
+  cross: null,     // /api/cross'dan gelen anlık sinyaller
+  sbDone: false,   // Scoreboard animasyonu bir kere çalışsın
+  priceTicker: null,
+
+  /* ── Fiyat formatlayıcı ── */
+  fmt(n) {
+    if (n === null || n === undefined) return '—';
+    const v = parseFloat(n);
+    if (isNaN(v)) return '—';
+    return v.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ₺';
+  },
+
+  /* ── Yıldız ── */
+  stars(n) { return '★'.repeat(n) + '☆'.repeat(Math.max(0, 5 - n)); },
+
+  /* ── Counter animasyonu ── */
+  countUp(el, target, dur) {
+    if (!el) return;
+    const s = performance.now();
+    (function tick(now) {
+      const p = Math.min((now - s) / dur, 1);
+      const e = 1 - Math.pow(1 - p, 3);
+      el.textContent = Math.round(target * e);
+      if (p < 1) requestAnimationFrame(tick);
+      else el.textContent = target;
+    })(s);
+  },
+
+  /* ── Scoreboard animasyonu ── */
+  animSb(d) {
+    if (this.sbDone) return;
+    this.sbDone = true;
+    const total  = (d.total  || 0);
+    const tp     = (d.tp     || 0);
+    const sl     = (d.sl     || 0);
+    const active = (d.active || 0);
+    const wr     = (d.win_rate || 0);
+
+    this.countUp($('chS1'), total,  1200);
+    this.countUp($('chS2'), tp,     1400);
+    this.countUp($('chS3'), sl,     1300);
+    this.countUp($('chS4'), active,  900);
+
+    setTimeout(() => {
+      const fg = $('chRingFg');
+      if (fg) fg.style.strokeDashoffset = Math.round(345 * (1 - wr / 100));
+      const t = performance.now();
+      (function tick(now) {
+        const p = Math.min((now - t) / 2200, 1);
+        const e = 1 - Math.pow(1 - p, 3);
+        const el = $('chWr');
+        if (el) el.textContent = Math.round(wr * e).toFixed(1) + '%';
+        if (p < 1) requestAnimationFrame(tick);
+      })(t);
+    }, 350);
+
+    setTimeout(() => {
+      const bars = [
+        ['chB1', 100],
+        ['chB2', total > 0 ? Math.round(tp / total * 100) : 0],
+        ['chB3', total > 0 ? Math.round(sl / total * 100) : 0],
+        ['chB4', total > 0 ? Math.round(active / total * 100) : 0],
+      ];
+      bars.forEach(([id, w]) => { const el = $(id); if (el) el.style.width = w + '%'; });
+    }, 600);
+  },
+
+  /* ── Sinyal kartı oluştur (gerçek API verisinden) ── */
+  buildCard(s, i) {
+    const stMap = {
+      active: { cls: 's-active', badge: 'ch-badge-active', lbl: '⚡ AKTİF' },
+      watch:  { cls: 's-watch',  badge: 'ch-badge-watch',  lbl: '👁 İZLEMEDE' },
+      tp:     { cls: 's-tp',     badge: 'ch-badge-tp',     lbl: '🎯 HEDEF VURULDU' },
+      sl:     { cls: 's-sl',     badge: 'ch-badge-sl',     lbl: '🛑 STOP' },
+    };
+    const sm     = stMap[s.status] || stMap['active'];
+    const tpPct  = s.tf === '1G' ? '+%3' : s.tf === '60m' ? '+%4' : '+%2';
+    const slPct  = s.tf === '1G' ? '-%2' : s.tf === '60m' ? '-%2' : '-%1';
+    const prgCol = s.status === 'tp' ? 'var(--grn)' :
+                   s.status === 'sl' ? 'var(--red)' :
+                   s.status === 'active' ? 'var(--blu)' : 'var(--acc)';
+
+    /* İlerleme yüzdesi hesapla */
+    let prg = 0;
+    if (s.entry_price && s.tp && s.sl) {
+      const range = s.tp - s.sl;
+      const cur   = s.closed_price || s.entry_price;
+      if (range > 0) prg = Math.round(Math.min(100, Math.max(0, (cur - s.sl) / range * 100)));
+    }
+    if (s.status === 'tp' || s.status === 'sl') prg = 100;
+
+    /* P&L gösterimi */
+    let chHtml = '<span style="color:var(--t3);font-size:var(--fs-sm)">—</span>';
+    if (s.pnl_pct !== null && s.pnl_pct !== undefined) {
+      const pnl = parseFloat(s.pnl_pct);
+      chHtml = `<span style="color:${pnl >= 0 ? 'var(--grn)' : 'var(--red)'};font-family:'JetBrains Mono',monospace;font-size:var(--fs-sm);font-weight:600">${pnl >= 0 ? '+' : ''}${pnl.toFixed(2)}%</span>`;
+    } else if (s.status === 'active' && s.entry_price) {
+      chHtml = '<span style="color:var(--ylw);font-size:var(--fs-xs)">canlı izleniyor</span>';
+    }
+
+    /* Sonuç badge */
+    const rb = (s.status === 'tp' || s.status === 'sl')
+      ? `<span class="ch-result" style="color:${s.status === 'tp' ? 'var(--grn)' : 'var(--red)'}">${s.status === 'tp' ? '+%' + parseFloat(s.pnl_pct || 0).toFixed(2) + ' 🎯' : '%' + parseFloat(s.pnl_pct || 0).toFixed(2) + ' 🛑'}</span>`
+      : '';
+
+    /* Tarih/zaman gösterimi */
+    const timeStr = s.closed_at
+      ? _chFormatDate(s.closed_at)
+      : _chFormatDate(s.timestamp);
+
+    return `<div class="ch-card ${sm.cls}" style="animation-delay:${i * 0.05}s">
+${rb}
+<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px">
+  <div style="display:flex;align-items:center;gap:7px">
+    <span class="clk-t" style="font-family:'JetBrains Mono',monospace;font-size:16px;font-weight:700" onclick="loadTicker('${esc(s.ticker)}')">${esc(s.ticker)}</span>
+    <span style="font-size:9px;padding:1px 5px;border-radius:3px;background:var(--bg4);border:1px solid var(--bdr);color:var(--t3);font-family:'JetBrains Mono',monospace">${esc(s.timeframe || '1G')}</span>
+    ${s.vol_confirmed ? '<span style="font-size:9px;color:var(--grn);font-family:\'JetBrains Mono\',monospace">✓hacim</span>' : ''}
+  </div>
+  <span class="${sm.badge}">${sm.lbl}</span>
+</div>
+
+<div style="margin-bottom:9px">
+  <div style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-sm);color:var(--orn);font-weight:600;margin-bottom:3px">${esc(s.signal)}</div>
+  <div style="font-size:var(--fs-xs);color:var(--t3);line-height:1.5">${esc(s.explanation || 'CrossHunter sinyali')}</div>
+</div>
+
+<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:9px">
+  <div style="background:var(--bg3);border-radius:var(--rad);padding:6px 8px">
+    <div style="font-size:9px;color:var(--t4);letter-spacing:.08em;text-transform:uppercase;margin-bottom:2px">Giriş</div>
+    <div style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-xs);color:var(--t2)">${this.fmt(s.entry_price)}</div>
+  </div>
+  <div style="background:var(--bg3);border-radius:var(--rad);padding:6px 8px">
+    <div style="font-size:9px;color:var(--t4);letter-spacing:.08em;text-transform:uppercase;margin-bottom:2px">${s.status === 'active' ? 'Güncel' : 'Çıkış'}</div>
+    <div class="${s.status === 'active' ? 'ch-cur-price' : ''}" data-ticker="${esc(s.ticker)}" style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-xs);color:var(--t2)">${this.fmt(s.closed_price || s.entry_price)}</div>
+  </div>
+  <div style="background:var(--bg3);border-radius:var(--rad);padding:6px 8px">
+    <div style="font-size:9px;color:var(--t4);letter-spacing:.08em;text-transform:uppercase;margin-bottom:2px">P&L</div>
+    ${chHtml}
+  </div>
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:9px">
+  <div style="padding:5px 8px;border-radius:var(--rad);background:rgba(76,175,80,.06);border:1px solid rgba(76,175,80,.2)">
+    <div style="font-size:9px;color:rgba(76,175,80,.7);letter-spacing:.08em;text-transform:uppercase;margin-bottom:2px">Hedef ${tpPct}</div>
+    <div style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-sm);font-weight:600;color:var(--grn)">${this.fmt(s.tp)}</div>
+  </div>
+  <div style="padding:5px 8px;border-radius:var(--rad);background:rgba(239,83,80,.06);border:1px solid rgba(239,83,80,.18)">
+    <div style="font-size:9px;color:rgba(239,83,80,.7);letter-spacing:.08em;text-transform:uppercase;margin-bottom:2px">Stop ${slPct}</div>
+    <div style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-sm);font-weight:600;color:var(--red)">${this.fmt(s.sl)}</div>
+  </div>
+</div>
+
+<div>
+  <div style="display:flex;justify-content:space-between;font-size:9px;color:var(--t4);margin-bottom:4px">
+    <span>Hedefe İlerleme</span><span style="color:${prgCol}">${prg}%</span>
+  </div>
+  <div class="ch-pbar-t">
+    <div class="ch-pbar-f" data-w="${prg}" style="background:${prgCol}"></div>
+  </div>
+</div>
+
+<div style="display:flex;justify-content:space-between;align-items:center;margin-top:9px;padding-top:8px;border-top:1px solid var(--bdr)">
+  <div style="font-size:10px;color:var(--t3);display:flex;align-items:center;gap:4px">
+    <span style="color:var(--ylw)">${this.stars(s.stars || 3)}</span>
+    <span style="font-family:'JetBrains Mono',monospace;font-size:9px">${(s.stars || 3)}/5</span>
+  </div>
+  <div style="font-size:9px;color:var(--t4);font-family:'JetBrains Mono',monospace">${timeStr}</div>
+</div>
+</div>`;
+  },
+
+  /* ── Feed render ── */
+  renderFeed() {
+    const feed = $('chFeed');
+    if (!feed) return;
+
+    if (!this.data) {
+      feed.innerHTML = `
+        <div class="ch-skeleton" style="animation-delay:0s"></div>
+        <div class="ch-skeleton" style="animation-delay:.1s"></div>
+        <div class="ch-skeleton" style="animation-delay:.2s"></div>
+        <div class="ch-skeleton" style="animation-delay:.3s"></div>`;
+      return;
+    }
+
+    /* Tüm sinyaller: track record'dan aktif + kapalı, cross'tan yeni ── */
+    let all = [
+      ...(this.data.active_signals || []),
+      ...(this.data.recent_closed  || []),
+    ];
+
+    /* Zaman dilimi filtresi */
+    if (this.tf !== 'all') {
+      all = all.filter(s => (s.timeframe || '1G') === this.tf);
+    }
+
+    /* Durum filtresi */
+    if (this.filter !== 'all') {
+      all = all.filter(s => s.status === this.filter);
+    }
+
+    /* Sırala: aktifler önce, sonra kapanma tarihine göre */
+    all.sort((a, b) => {
+      if (a.status === 'active' && b.status !== 'active') return -1;
+      if (a.status !== 'active' && b.status === 'active') return 1;
+      const ta = a.closed_at || a.timestamp || '';
+      const tb = b.closed_at || b.timestamp || '';
+      return tb.localeCompare(ta);
+    });
+
+    if (!all.length) {
+      feed.innerHTML = `
+        <div style="grid-column:1/-1;text-align:center;padding:2.5rem;color:var(--t3);
+                    font-family:'JetBrains Mono',monospace;font-size:var(--fs-xs);letter-spacing:.1em">
+          Bu filtrede sinyal yok.<br>
+          <span style="font-size:10px;color:var(--t4);margin-top:4px;display:block">
+            ⚡ CANLI TARA ile yeni sinyaller üretilebilir
+          </span>
+        </div>`;
+      return;
+    }
+
+    feed.innerHTML = all.slice(0, 16).map((s, i) => this.buildCard(s, i)).join('');
+
+    /* Progress bar'ları animate et */
+    requestAnimationFrame(() => setTimeout(() => {
+      feed.querySelectorAll('.ch-pbar-f[data-w]').forEach(b => b.style.width = b.dataset.w + '%');
+    }, 80));
+  },
+
+  /* ── Tab değiştir ── */
+  switchTab(tf, btn) {
+    this.tf = tf;
+    this.filter = 'all';
+    document.querySelectorAll('.ch-tab').forEach(b => b.classList.remove('on'));
+    btn.classList.add('on');
+    document.querySelectorAll('.ch-fbtn').forEach(b => b.classList.remove('on'));
+    document.querySelectorAll('.ch-fbtn')[0].classList.add('on');
+    /* Tab meta güncelle */
+    const metaMap = {
+      '1G':  '📈 <b style="color:var(--orn)">Günlük</b> &middot; Hedef <b style="color:var(--grn)">+%3</b> &middot; Stop <b style="color:var(--red)">-%2</b>',
+      '60m': '⚡ <b style="color:var(--orn)">60 Dakika</b> &middot; Hedef <b style="color:var(--grn)">+%4</b> &middot; Stop <b style="color:var(--red)">-%2</b>',
+      '15m': '🔥 <b style="color:var(--orn)">15 Dakika</b> &middot; Hedef <b style="color:var(--grn)">+%2</b> &middot; Stop <b style="color:var(--red)">-%1</b>',
+    };
+    const d = $('chDesc');
+    if (d) d.innerHTML = metaMap[tf] || metaMap['1G'];
+    this.renderFeed();
+  },
+
+  /* ── Filtre ── */
+  setFilter(f, btn) {
+    this.filter = f;
+    document.querySelectorAll('.ch-fbtn').forEach(b => b.classList.remove('on'));
+    btn.classList.add('on');
+    this.renderFeed();
+  },
+
+  /* ── API'dan veri çek ve sayfayı yenile ── */
+  async loadFromAPI() {
+    /* Scoreboard'u sıfırla */
+    ['chS1','chS2','chS3','chS4'].forEach(id => { const el = $(id); if (el) el.textContent = '0'; });
+    const wr = $('chWr'); if (wr) wr.textContent = '0%';
+    const ring = $('chRingFg'); if (ring) ring.style.strokeDashoffset = '345';
+    this.sbDone = false;
+
+    /* Loading state */
+    const feed = $('chFeed');
+    if (feed) feed.innerHTML = `
+      <div class="ch-skeleton" style="animation-delay:0s"></div>
+      <div class="ch-skeleton" style="animation-delay:.1s"></div>
+      <div class="ch-skeleton" style="animation-delay:.2s"></div>
+      <div class="ch-skeleton" style="animation-delay:.3s"></div>`;
+
+    try {
+      const resp = await fetch('/api/signals/track-record?days=30');
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const json = await resp.json();
+      this.data = json.data || json;
+
+      /* Scoreboard */
+      this.animSb(this.data);
+
+      /* Feed */
+      this.renderFeed();
+
+    } catch (e) {
+      console.warn('Track record yüklenemedi:', e);
+      /* API çalışmıyorsa boş state göster */
+      this.data = {
+        total: 0, tp: 0, sl: 0, active: 0, win_rate: 0,
+        active_signals: [], recent_closed: [],
+      };
+      this.renderFeed();
+      const feed = $('chFeed');
+      if (feed) feed.innerHTML = `
+        <div style="grid-column:1/-1;text-align:center;padding:3rem;color:var(--t3);
+                    font-family:'JetBrains Mono',monospace;font-size:var(--fs-xs)">
+          API bağlantısı kurulamadı.<br>
+          <button class="btn btn-sm btn-orn" style="margin-top:12px" onclick="startCross()">⚡ CANLI TARA</button>
+        </div>`;
+    }
+  },
+
+  /* ── Canlı fiyat titreşim efekti ── */
+  startTicker() {
+    if (this.priceTicker) clearInterval(this.priceTicker);
+    this.priceTicker = setInterval(() => {
+      if (S.page !== 'cross') return;
+      document.querySelectorAll('.ch-cur-price').forEach(el => {
+        const raw = el.textContent.replace(/[^\d,]/g, '').replace(',', '.');
+        const v   = parseFloat(raw);
+        if (isNaN(v) || v <= 0) return;
+        const d = (Math.random() - 0.46) * 0.25;
+        el.style.color = d >= 0 ? 'var(--grn)' : 'var(--red)';
+        el.textContent = (v + d).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, '.').replace('.', 'X').replace(/\./g, ',').replace('X', '.') + ' ₺';
+        setTimeout(() => { el.style.color = ''; }, 1000);
+      });
+    }, 5000);
+  },
+};
+
+/* ── Tarih formatlayıcı ── */
+function _chFormatDate(isoStr) {
+  if (!isoStr) return '—';
+  try {
+    const d   = new Date(isoStr);
+    const now = new Date();
+    const diffMs  = now - d;
+    const diffMin = Math.floor(diffMs / 60000);
+    const diffH   = Math.floor(diffMin / 60);
+    const diffD   = Math.floor(diffH / 24);
+    if (diffMin < 2)  return 'az önce';
+    if (diffMin < 60) return diffMin + ' dk önce';
+    if (diffH   < 24) return diffH  + ' saat önce';
+    if (diffD   < 7)  return diffD  + ' gün önce';
+    return d.toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit' });
+  } catch { return '—'; }
+}
+
+/* ================================================================
+   renderCrossPage — Ana render fonksiyonu
+================================================================ */
+function renderCrossPage() {
+  const pg = $('pg-cross');
+  pg.innerHTML = _CH_CSS + `
+<div style="margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+  <div>
+    <h2 style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-lg);color:var(--orn)">⚡ CrossHunter V2 — Track Record</h2>
+    <p style="font-size:var(--fs-xs);color:var(--t3);margin-top:3px">Herkes sinyal verir. Biz sonucu da gösteririz. Paper Trade motoru her sinyali kayıt altında tutar.</p>
+  </div>
+  <button class="btn btn-orn btn-sm" onclick="startCross()">⚡ CANLI TARA</button>
+</div>
+
+<!-- ═══ SCOREBOARD ═══ -->
+<div style="background:var(--bg2);border:1px solid rgba(255,179,0,.22);border-radius:var(--rad2);padding:18px 20px;margin-bottom:16px;position:relative;overflow:hidden">
+  <div style="position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent 0%,var(--acc) 35%,var(--gold) 50%,var(--acc) 65%,transparent 100%)"></div>
+  <div style="position:absolute;top:-50px;right:-30px;width:200px;height:180px;background:radial-gradient(circle,rgba(255,179,0,.04),transparent 70%);pointer-events:none"></div>
+
+  <div style="display:flex;align-items:center;gap:8px;font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--acc);margin-bottom:14px">
+    <span class="ch-live-dot"></span>CrossHunter — Son 30 Gün Track Record &mdash; Paper Trade Motoru
+  </div>
+
+  <div style="display:grid;grid-template-columns:106px 1fr;gap:18px;align-items:center">
+    <!-- Win Rate Ring -->
+    <div style="text-align:center">
+      <div style="position:relative;width:96px;height:96px;margin:0 auto">
+        <svg viewBox="0 0 120 120" style="width:100%;height:100%;transform:rotate(-90deg)">
+          <defs>
+            <linearGradient id="chGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stop-color="#E69500"/>
+              <stop offset="100%" stop-color="#FFD54F"/>
+            </linearGradient>
+          </defs>
+          <circle style="fill:none;stroke:var(--bg4);stroke-width:10" cx="60" cy="60" r="55"/>
+          <circle id="chRingFg" style="fill:none;stroke:url(#chGrad);stroke-width:10;stroke-linecap:round;stroke-dasharray:345;stroke-dashoffset:345;transition:stroke-dashoffset 2.4s cubic-bezier(.4,0,.2,1)" cx="60" cy="60" r="55"/>
+        </svg>
+        <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center">
+          <span id="chWr" style="font-family:'JetBrains Mono',monospace;font-size:19px;font-weight:700;color:var(--acc);display:block;line-height:1">—</span>
+          <span style="font-size:8px;color:var(--t4);letter-spacing:.08em;text-transform:uppercase">WIN RATE</span>
+        </div>
+      </div>
+      <div style="font-family:'JetBrains Mono',monospace;font-size:8px;color:var(--t4);letter-spacing:.1em;text-transform:uppercase;margin-top:5px">Başarı Oranı</div>
+    </div>
+
+    <!-- Stat Boxes -->
+    <div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin-bottom:9px">
+        <div class="card" style="text-align:center;padding:9px 5px;position:relative;overflow:hidden">
+          <span id="chS1" style="font-family:'JetBrains Mono',monospace;font-size:19px;font-weight:700;color:var(--acc);display:block;line-height:1">—</span>
+          <span style="font-size:9px;color:var(--t4);text-transform:uppercase;letter-spacing:.06em">Toplam</span>
+          <div id="chB1" class="ch-sbar" style="background:var(--acc)"></div>
+        </div>
+        <div class="card" style="text-align:center;padding:9px 5px;position:relative;overflow:hidden">
+          <span id="chS2" style="font-family:'JetBrains Mono',monospace;font-size:19px;font-weight:700;color:var(--grn);display:block;line-height:1">—</span>
+          <span style="font-size:9px;color:var(--t4);text-transform:uppercase;letter-spacing:.06em">Hedef 🎯</span>
+          <div id="chB2" class="ch-sbar" style="background:var(--grn)"></div>
+        </div>
+        <div class="card" style="text-align:center;padding:9px 5px;position:relative;overflow:hidden">
+          <span id="chS3" style="font-family:'JetBrains Mono',monospace;font-size:19px;font-weight:700;color:var(--red);display:block;line-height:1">—</span>
+          <span style="font-size:9px;color:var(--t4);text-transform:uppercase;letter-spacing:.06em">Stop 🛑</span>
+          <div id="chB3" class="ch-sbar" style="background:var(--red)"></div>
+        </div>
+        <div class="card" style="text-align:center;padding:9px 5px;position:relative;overflow:hidden">
+          <span id="chS4" style="font-family:'JetBrains Mono',monospace;font-size:19px;font-weight:700;color:var(--blu);display:block;line-height:1">—</span>
+          <span style="font-size:9px;color:var(--t4);text-transform:uppercase;letter-spacing:.06em">Aktif ⚡</span>
+          <div id="chB4" class="ch-sbar" style="background:var(--blu)"></div>
+        </div>
+      </div>
+      <div id="chStreakBar" style="padding:7px 11px;background:rgba(76,175,80,.05);border:1px solid rgba(76,175,80,.18);border-radius:var(--rad);font-size:var(--fs-xs);color:var(--grn);display:flex;align-items:center;gap:6px;line-height:1.5">
+        <span id="chStreakTxt">Veriler yükleniyor...</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ TIMEFRAME TABS ═══ -->
+<div style="display:flex;gap:4px;padding:3px;background:var(--bg2);border:1px solid var(--bdr);border-radius:var(--rad);width:fit-content;margin-bottom:10px;flex-wrap:wrap">
+  <button class="ch-tab" onclick="_CH.switchTab('all',this)">
+    📊 Tümü
+  </button>
+  <button class="ch-tab" onclick="_CH.switchTab('15m',this)">
+    🔥 15 Dakika <span style="font-size:8px;margin-left:2px;padding:1px 4px;border-radius:3px;background:var(--accd);color:var(--acc)">Scalp</span>
+  </button>
+  <button class="ch-tab" onclick="_CH.switchTab('60m',this)">
+    ⚡ 60 Dakika <span style="font-size:8px;margin-left:2px;padding:1px 4px;border-radius:3px;background:var(--accd);color:var(--acc)">Swing</span>
+  </button>
+  <button class="ch-tab on" onclick="_CH.switchTab('1G',this)">
+    📈 Günlük <span style="font-size:8px;margin-left:2px;padding:1px 4px;border-radius:3px;background:var(--accd);color:var(--acc)">Trend</span>
+  </button>
+</div>
+
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">
+  <div id="chDesc" style="font-size:var(--fs-sm);color:var(--t2)">
+    📈 <b style="color:var(--orn)">Günlük</b> &middot; Hedef <b style="color:var(--grn)">+%3</b> &middot; Stop <b style="color:var(--red)">-%2</b>
+  </div>
+  <div style="display:flex;gap:5px;flex-wrap:wrap">
+    <button class="ch-fbtn on" onclick="_CH.setFilter('all',this)">Tümü</button>
+    <button class="ch-fbtn" onclick="_CH.setFilter('active',this)">Aktif</button>
+    <button class="ch-fbtn" onclick="_CH.setFilter('tp',this)">Hedef ✓</button>
+    <button class="ch-fbtn" onclick="_CH.setFilter('sl',this)">Stop ✗</button>
+  </div>
+</div>
+
+<!-- ═══ SIGNAL FEED ═══ -->
+<div id="chFeed" class="ch-feed"></div>
+
+<div style="margin-top:14px;padding:8px 12px;background:rgba(255,179,0,.03);border:1px solid rgba(255,179,0,.07);border-radius:var(--rad);font-size:9px;color:var(--t4);line-height:1.7;display:flex;gap:6px">
+  <span style="color:var(--ylw);flex-shrink:0;margin-top:1px">⚠</span>
+  <span>Paper Trade simülasyonu — giriş fiyatı sinyal anındaki gerçek fiyat, TP/SL kontrolleri 5dk'da bir yfinance ile yapılır. Geçmiş başarı gelecek performansı garanti etmez. Yatırım tavsiyesi değildir.</span>
+</div>`;
+
+  /* State reset */
+  _CH.tf      = '1G';
+  _CH.filter  = 'all';
+
+  /* API'dan gerçek veriyi çek */
+  _CH.loadFromAPI().then(() => {
+    /* Streak satırını güncelle */
+    const d   = _CH.data;
+    const str = $('chStreakTxt');
+    if (str && d) {
+      const wr7 = d.win_rate;
+      if (wr7 > 0) {
+        str.innerHTML = `Son 30 günde <b>&nbsp;${d.total}&nbsp;</b> sinyal → <b>&nbsp;${d.tp} hedef vuruldu</b> → <b style="color:var(--grn)">&nbsp;%${wr7} başarı</b>`;
+      } else {
+        str.textContent = 'Henüz yeterli veri yok — sinyal taraması yapın';
+        str.style.color = 'var(--t3)';
+      }
+    }
+  });
+
+  /* Canlı fiyat titreşimi */
+  _CH.startTicker();
+}
+
+async function startCross() {
+  const btn = document.querySelector('button[onclick="startCross()"]');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Taranıyor...'; }
+
+  $('pg-cross').querySelector('#chFeed').innerHTML = `
+    <div class="ch-skeleton" style="animation-delay:0s"></div>
+    <div class="ch-skeleton" style="animation-delay:.1s"></div>
+    <div class="ch-skeleton" style="animation-delay:.2s"></div>
+    <div class="ch-skeleton" style="animation-delay:.3s"></div>`;
+
+  try {
+    /* 1. CrossHunter taraması başlat (bu aynı zamanda log_signals'ı tetikler) */
+    S.cross = await api('/api/cross');
+    $('cnt-s').textContent = S.cross.summary?.total || 0;
+  } catch (e) {
+    log && log.warn ? log.warn(e) : console.warn('cross scan hatası:', e);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '⚡ CANLI TARA'; }
+  }
+
+  /* 2. Track record'u güncelle (yeni sinyaller kaydedilmiş oldu) */
+  _CH.sbDone = false;
+  await _CH.loadFromAPI();
+
+  /* Streak güncelle */
+  const d   = _CH.data;
+  const str = $('chStreakTxt');
+  if (str && d && d.win_rate > 0) {
+    str.innerHTML = `Son 30 günde <b>&nbsp;${d.total}&nbsp;</b> sinyal → <b>&nbsp;${d.tp} hedef vuruldu</b> → <b style="color:var(--grn)">&nbsp;%${d.win_rate} başarı</b>`;
+  }
+}
+
+
 
 // ===== TAKAS PAGE =====
 function renderTakasPage(){const pg=$('pg-takas');if(!S.takas){pg.innerHTML='<div class="ld"><div class="sp"></div><div class="ld-t">Takas verileri yükleniyor...</div></div>';loadTakas();return;}const items=S.takas.items||[];let h=`<div style="margin-bottom:14px;padding:14px 18px;background:linear-gradient(135deg,rgba(255,193,7,.08),rgba(255,152,0,.05));border:1px solid rgba(255,193,7,.25);border-radius:var(--rad2);display:flex;align-items:center;gap:12px"><span style="font-size:24px">🚧</span><div><div style="font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700;color:var(--ylw);text-transform:uppercase;letter-spacing:1px">Yapım Aşamasında</div><div style="font-size:12px;color:var(--t2);margin-top:3px">Takas verisi MKK lisansı veya aracı kurum entegrasyonu gerektiriyor. Şimdilik yfinance kurumsal veri gösteriliyor.</div></div></div>`;h+=`<div style="margin-bottom:16px"><h2 style="font-family:'JetBrains Mono',monospace;font-size:15px;color:var(--prp)">📊 Takas — Yabancı Oranları</h2><p style="font-size:11px;color:var(--t3);margin-top:2px">Kaynak: ${esc(S.takas.source||'—')} | ${items.length} hisse</p></div>`;if(S.takas.error){h+=`<div class="aib" style="border-color:var(--ylw);margin-bottom:14px"><div class="aib-tx" style="color:var(--ylw)">${esc(S.takas.error)}</div></div>`;}if(items.length){h+=`<div class="card"><div class="card-b" style="overflow-x:auto"><table class="dtb"><thead><tr><th>#</th><th>Ticker</th><th>Yabanci %</th><th>Fiyat</th></tr></thead><tbody>`;items.slice(0,40).forEach((it,i)=>{const pct=it.foreign_pct||0;h+=`<tr><td style="color:var(--t3)">${i+1}</td><td class="clk-t" onclick="loadTicker('${esc(it.ticker)}')">${esc(it.ticker)}</td><td style="color:var(--t1);font-weight:700">${pct.toFixed(1)}%</td><td style="color:var(--t1)">${it.price?fN(it.price):'—'}</td></tr>`;});h+='</tbody></table></div></div>';}pg.innerHTML=h;}
