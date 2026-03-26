@@ -812,21 +812,48 @@ ${rb}
     }
   },
 
-  /* ── Canlı fiyat titreşim efekti ── */
+  /* ── Gerçek zamanlı fiyat güncellemesi — /api/heatmap polling ──
+     BUG-DATA-01 düzeltmesi: Math.random() ile sahte fiyat titreşimi kaldırıldı.
+     Artık 60 saniyede bir /api/heatmap'ten GERÇEK fiyatlar alınıyor.
+  ── */
   startTicker() {
     if (this.priceTicker) clearInterval(this.priceTicker);
+    this._updatePricesFromHeatmap(); // İlk çalıştırmada hemen güncelle
     this.priceTicker = setInterval(() => {
       if (S.page !== 'cross') return;
-      document.querySelectorAll('.ch-cur-price').forEach(el => {
-        const raw = el.textContent.replace(/[^\d,]/g, '').replace(',', '.');
-        const v   = parseFloat(raw);
-        if (isNaN(v) || v <= 0) return;
-        const d = (Math.random() - 0.46) * 0.25;
-        el.style.color = d >= 0 ? 'var(--grn)' : 'var(--red)';
-        el.textContent = (v + d).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, '.').replace('.', 'X').replace(/\./g, ',').replace('X', '.') + ' ₺';
-        setTimeout(() => { el.style.color = ''; }, 1000);
+      this._updatePricesFromHeatmap();
+    }, 60000); // 60 saniye — gerçek veri, sahte titreşim yok
+  },
+
+  async _updatePricesFromHeatmap() {
+    try {
+      const res  = await api('/api/heatmap');
+      const stocks = [];
+      (res.sectors || []).forEach(sec => {
+        (sec.stocks || []).forEach(s => stocks.push(s));
       });
-    }, 5000);
+      if (!stocks.length) return;
+      const priceMap = {};
+      stocks.forEach(s => { if (s.ticker && s.price) priceMap[s.ticker] = { price: s.price, change: s.change_pct }; });
+
+      document.querySelectorAll('.ch-cur-price').forEach(el => {
+        const ticker = el.dataset.ticker;
+        if (!ticker || !priceMap[ticker]) return;
+        const { price, change } = priceMap[ticker];
+        const formatted = price.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ₺';
+        if (el.textContent !== formatted) {
+          el.style.color = (change >= 0) ? 'var(--grn)' : 'var(--red)';
+          el.textContent = formatted;
+          setTimeout(() => { el.style.color = ''; }, 1200);
+        }
+      });
+
+      // Son güncelleme zamanını göster
+      const ts = document.getElementById('chPriceUpdatedAt');
+      if (ts) ts.textContent = 'Son: ' + new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    } catch (e) {
+      // Polling hatası sessizce yutulur — bir sonraki döngüde tekrar dener
+    }
   },
 };
 
@@ -858,6 +885,10 @@ function renderCrossPage() {
   <div>
     <h2 style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-lg);color:var(--orn)">⚡ CrossHunter V2 — Track Record</h2>
     <p style="font-size:var(--fs-xs);color:var(--t3);margin-top:3px">Herkes sinyal verir. Biz sonucu da gösteririz. Paper Trade motoru her sinyali kayıt altında tutar.</p>
+    <!-- BUG-DATA-01: live price update timestamp (replaces fake Math.random() ticker) -->
+    <p style="font-size:9px;color:var(--t4);margin-top:4px;font-family:'JetBrains Mono',monospace">
+      💹 Fiyatlar gerçek zamanlı · <span id="chPriceUpdatedAt">Yükleniyor...</span>
+    </p>
   </div>
   <button class="btn btn-orn btn-sm" onclick="startCross()">⚡ CANLI TARA</button>
 </div>
@@ -1019,11 +1050,42 @@ async function startCross() {
 
 
 // ===== TAKAS PAGE =====
-function renderTakasPage(){const pg=$('pg-takas');if(!S.takas){pg.innerHTML='<div class="ld"><div class="sp"></div><div class="ld-t">Takas verileri yükleniyor...</div></div>';loadTakas();return;}const items=S.takas.items||[];let h=`<div style="margin-bottom:14px;padding:14px 18px;background:linear-gradient(135deg,rgba(255,193,7,.08),rgba(255,152,0,.05));border:1px solid rgba(255,193,7,.25);border-radius:var(--rad2);display:flex;align-items:center;gap:12px"><span style="font-size:24px">🚧</span><div><div style="font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700;color:var(--ylw);text-transform:uppercase;letter-spacing:1px">Yapım Aşamasında</div><div style="font-size:12px;color:var(--t2);margin-top:3px">Takas verisi MKK lisansı veya aracı kurum entegrasyonu gerektiriyor. Şimdilik yfinance kurumsal veri gösteriliyor.</div></div></div>`;h+=`<div style="margin-bottom:16px"><h2 style="font-family:'JetBrains Mono',monospace;font-size:15px;color:var(--prp)">📊 Takas — Yabancı Oranları</h2><p style="font-size:11px;color:var(--t3);margin-top:2px">Kaynak: ${esc(S.takas.source||'—')} | ${items.length} hisse</p></div>`;if(S.takas.error){h+=`<div class="aib" style="border-color:var(--ylw);margin-bottom:14px"><div class="aib-tx" style="color:var(--ylw)">${esc(S.takas.error)}</div></div>`;}if(items.length){h+=`<div class="card"><div class="card-b" style="overflow-x:auto"><table class="dtb"><thead><tr><th>#</th><th>Ticker</th><th>Yabanci %</th><th>Fiyat</th></tr></thead><tbody>`;items.slice(0,40).forEach((it,i)=>{const pct=it.foreign_pct||0;h+=`<tr><td style="color:var(--t3)">${i+1}</td><td class="clk-t" onclick="loadTicker('${esc(it.ticker)}')">${esc(it.ticker)}</td><td style="color:var(--t1);font-weight:700">${pct.toFixed(1)}%</td><td style="color:var(--t1)">${it.price?fN(it.price):'—'}</td></tr>`;});h+='</tbody></table></div></div>';}pg.innerHTML=h;}
+function renderTakasPage(){const pg=$('pg-takas');if(!S.takas){pg.innerHTML='<div class="ld"><div class="sp"></div><div class="ld-t">Takas verileri yükleniyor...</div></div>';loadTakas();return;}const items=S.takas.items||[];let h=`<div style="margin-bottom:14px;padding:14px 18px;background:linear-gradient(135deg,rgba(255,193,7,.08),rgba(255,152,0,.05));border:1px solid rgba(255,193,7,.25);border-radius:var(--rad2);display:flex;align-items:center;gap:12px"><span style="font-size:24px">🚧</span><div><div style="font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700;color:var(--ylw);text-transform:uppercase;letter-spacing:1px">Yapım Aşamasında</div><div style="font-size:12px;color:var(--t2);margin-top:3px">Takas verisi MKK lisansı veya aracı kurum entegrasyonu gerektiriyor. Şimdilik yfinance kurumsal veri gösteriliyor.</div></div></div>`;h+=`<div style="margin-bottom:16px"><h2 style="font-family:'JetBrains Mono',monospace;font-size:15px;color:var(--prp)">📊 Takas — Yabancı Oranları</h2><p style="font-size:11px;color:var(--t3);margin-top:2px">Kaynak: ${esc(S.takas.source||'—')} | ${items.length} hisse</p></div>`;if(S.takas.error){h+=`<div class="aib" style="border-color:var(--ylw);margin-bottom:14px"><div class="aib-tx" style="color:var(--ylw)">${esc(S.takas.error)}</div></div>`;}if(items.length){h+=`<div class="card"><div class="card-b" style="overflow-x:auto"><table class="dtb"><thead><tr><th>#</th><th>Ticker</th><th>Oran</th><th>Veri Kaynağı</th><th>Fiyat</th></tr></thead><tbody>`;
+items.slice(0,40).forEach((it,i)=>{
+  const pct = it.foreign_pct||0;
+  // BUG-DATA-02: honest source badge
+  // borsapy_mkk = real MKK yabancı oranı (green)
+  // kurumsal_oran = global institutional % from yfinance (amber, NOT MKK)
+  const isMKK = it.source === 'borsapy_mkk';
+  const srcBadge = isMKK
+    ? `<span style="font-size:9px;padding:2px 6px;border-radius:3px;background:rgba(63,185,80,.15);color:var(--grn);font-family:'JetBrains Mono',monospace;font-weight:700" title="MKK — Merkezi Kayıt Kuruluşu gerçek yabancı oranı">MKK</span>`
+    : `<span style="font-size:9px;padding:2px 6px;border-radius:3px;background:rgba(255,152,0,.15);color:var(--orn);font-family:'JetBrains Mono',monospace;font-weight:700" title="yfinance kurumsal oran — MKK yabancı oranı değil, küresel kurumsal sahiplik">KURUMSAL</span>`;
+  const colLabel = isMKK ? 'Yabancı %' : 'Kurumsal %';
+  h+=`<tr>
+    <td style="color:var(--t3)">${i+1}</td>
+    <td class="clk-t" onclick="loadTicker('${esc(it.ticker)}')">${esc(it.ticker)}</td>
+    <td style="color:var(--t1);font-weight:700" title="${colLabel}">${pct.toFixed(1)}%</td>
+    <td>${srcBadge}</td>
+    <td style="color:var(--t1)">${it.price?fN(it.price):'—'}</td>
+  </tr>`;
+});
+h+='</tbody></table></div></div>';}pg.innerHTML=h;}
 async function loadTakas(){try{S.takas=await api('/api/takas');renderTakasPage();}catch(e){S.takas={items:[],error:e.message};renderTakasPage();}}
 
 // ===== SOSYAL PAGE =====
-function renderSosyalPage(){const pg=$('pg-sosyal');if(!S.social){pg.innerHTML='<div class="ld"><div class="sp"></div><div class="ld-t">Sosyal veri yükleniyor...</div></div>';loadSocial();return;}let h=`<div style="margin-bottom:14px;padding:14px 18px;background:linear-gradient(135deg,rgba(255,193,7,.08),rgba(255,152,0,.05));border:1px solid rgba(255,193,7,.25);border-radius:var(--rad2);display:flex;align-items:center;gap:12px"><span style="font-size:24px">🚧</span><div><div style="font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700;color:var(--ylw);text-transform:uppercase;letter-spacing:1px">Yapım Aşamasında</div><div style="font-size:12px;color:var(--t2);margin-top:3px">X/Twitter duygu analizi için entegrasyon hazırlanıyor. Şimdilik AI tahmini gösteriliyor.</div></div></div>`;h+=`<div style="margin-bottom:16px"><h2 style="font-family:'JetBrains Mono',monospace;font-size:15px;color:var(--prp)">𝕏 Sosyal Medya</h2></div>`;if(S.social.summary){h+=`<div class="aib" style="margin-bottom:14px"><div class="aib-t">Sentiment: ${esc(S.social.overall_sentiment||'—')}</div><div class="aib-tx">${esc(S.social.summary)}</div></div>`;}const trends=S.social.trending||[];if(trends.length){h+=`<div class="card"><div class="card-h"><span class="card-t">🔥 Trending</span></div><div class="card-b"><table class="dtb"><thead><tr><th>#</th><th>Ticker</th><th>Sentiment</th><th>Skor</th><th>Neden</th></tr></thead><tbody>`;trends.forEach((t,i)=>{const col=t.sentiment==='bullish'?'var(--grn)':t.sentiment==='bearish'?'var(--red)':'var(--ylw)';h+=`<tr><td style="color:var(--t3)">${i+1}</td><td class="clk-t" onclick="loadTicker('${esc(t.ticker)}')">${esc(t.ticker)}</td><td style="color:${col};font-weight:700">${esc(t.sentiment||'—')}</td><td>${sPill(t.score)}</td><td style="color:var(--t2);font-size:10px">${esc(t.reason||'')}</td></tr>`;});h+=`</tbody></table></div></div>`;}pg.innerHTML=h;}
+function renderSosyalPage(){const pg=$('pg-sosyal');if(!S.social){pg.innerHTML='<div class="ld"><div class="sp"></div><div class="ld-t">Sosyal veri yükleniyor...</div></div>';loadSocial();return;}let h=`<div style="margin-bottom:14px;padding:14px 18px;background:linear-gradient(135deg,rgba(255,193,7,.08),rgba(255,152,0,.05));border:1px solid rgba(255,193,7,.25);border-radius:var(--rad2);display:flex;align-items:center;gap:12px"><span style="font-size:24px">🚧</span><div><div style="font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700;color:var(--ylw);text-transform:uppercase;letter-spacing:1px">Yapım Aşamasında</div><div style="font-size:12px;color:var(--t2);margin-top:3px">X/Twitter duygu analizi için entegrasyon hazırlanıyor. Şimdilik AI tahmini gösteriliyor.</div></div></div>`;h+=`<div style="margin-bottom:16px">
+  <h2 style="font-family:'JetBrains Mono',monospace;font-size:15px;color:var(--prp)">𝕏 Sosyal Medya</h2>
+  <!-- BUG-DATA-04: AI disclaimer — social data is AI-generated, NOT live X feed -->
+  <div style="margin-top:8px;padding:8px 12px;background:rgba(255,152,0,.08);border:1px solid rgba(255,152,0,.3);border-radius:var(--rad);display:flex;align-items:center;gap:8px">
+    <span style="font-size:16px">⚠️</span>
+    <span style="font-size:11px;color:var(--orn);font-family:'JetBrains Mono',monospace;font-weight:600">
+      AI TAHMİNİ — GERÇEK ZAMANLI X VERİSİ DEĞİL
+    </span>
+    <span style="font-size:10px;color:var(--t3);margin-left:4px">
+      Bu veriler, Grok AI'ın X/Twitter hakkındaki yorumudur. Gerçek zamanlı sosyal medya verisi içermez.
+    </span>
+  </div>
+</div>`;if(S.social.summary){h+=`<div class="aib" style="margin-bottom:14px"><div class="aib-t">Sentiment: ${esc(S.social.overall_sentiment||'—')}</div><div class="aib-tx">${esc(S.social.summary)}</div></div>`;}const trends=S.social.trending||[];if(trends.length){h+=`<div class="card"><div class="card-h"><span class="card-t">🔥 Trending</span></div><div class="card-b"><table class="dtb"><thead><tr><th>#</th><th>Ticker</th><th>Sentiment</th><th>Skor</th><th>Neden</th></tr></thead><tbody>`;trends.forEach((t,i)=>{const col=t.sentiment==='bullish'?'var(--grn)':t.sentiment==='bearish'?'var(--red)':'var(--ylw)';h+=`<tr><td style="color:var(--t3)">${i+1}</td><td class="clk-t" onclick="loadTicker('${esc(t.ticker)}')">${esc(t.ticker)}</td><td style="color:${col};font-weight:700">${esc(t.sentiment||'—')}</td><td>${sPill(t.score)}</td><td style="color:var(--t2);font-size:10px">${esc(t.reason||'')}</td></tr>`;});h+=`</tbody></table></div></div>`;}pg.innerHTML=h;}
 async function loadSocial(){try{S.social=await api('/api/social');renderSosyalPage();}catch(e){S.social={trending:[],summary:'Hata: '+e.message};renderSosyalPage();}}
 
 // ===== SCAN + BRIEFING =====
