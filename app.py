@@ -113,6 +113,8 @@ def _items_by_ticker(items):
 # ================================================================
 # BACKGROUND SCANNER
 # ================================================================
+_daily_changes: dict[str, dict] = {}  # ticker → {price, prev_close, change_pct, market_cap}
+
 async def _background_scanner():
     await asyncio.sleep(BACKGROUND_SCAN_STARTUP_DELAY)
     while True:
@@ -127,6 +129,23 @@ async def _background_scanner():
                     hmap = batch_download_history(syms, "1y", "1d")
                     for sym, hdf in hmap.items():
                         history_cache.set(sym, hdf)
+                        # Compute daily change for heatmap — zero extra API calls
+                        if hdf is not None and len(hdf) >= 2:
+                            try:
+                                last_close = float(hdf["Close"].iloc[-1])
+                                prev_close = float(hdf["Close"].iloc[-2])
+                                if prev_close > 0:
+                                    chg = (last_close - prev_close) / prev_close * 100
+                                    ticker = sym.replace(".IS", "")
+                                    _daily_changes[ticker] = {
+                                        "price": round(last_close, 2),
+                                        "prev_close": round(prev_close, 2),
+                                        "change_pct": round(chg, 2),
+                                    }
+                            except Exception:
+                                pass
+                    if _daily_changes:
+                        log.info(f"Daily changes: {len(_daily_changes)} symbols cached for heatmap")
                     return hmap
 
                 def _analyze_fn(ticker):
@@ -149,6 +168,9 @@ async def _background_scanner():
                     scan_coordinator.start_scan,
                     UNIVERSE, _analyze_fn, _history_fn, _cross_fn, _ai_enrich_fn,
                 )
+
+                # Scan bitti — heatmap cache'i temizle ki fast path ile rebuild olsun
+                heatmap_cache.clear()
 
                 if AI_AVAILABLE and get_top10_items():
                     try:
@@ -579,8 +601,29 @@ async def api_social(request: Request):
 # HEATMAP
 # ================================================================
 def _fetch_heatmap_data():
+    # FAST PATH: scan verisi + daily changes varsa → 0ms, sıfır API call
     items = get_top10_items()
-    item_map = _items_by_ticker(items)
+    if items and len(items) >= 10 and _daily_changes:
+        results = []
+        for it in items:
+            ticker = it.get("ticker", "")
+            dc = _daily_changes.get(ticker, {})
+            price = dc.get("price") or it.get("price")
+            chg = dc.get("change_pct", 0)
+            mcap = it.get("market_cap")
+            if price and mcap:
+                results.append({
+                    "ticker": ticker,
+                    "price": round(float(price), 2),
+                    "change_pct": round(float(chg), 2),
+                    "market_cap": float(mcap),
+                    "sector": it.get("sector", "Diger") or "Diger",
+                    "score": it.get("overall"),
+                })
+        if results:
+            return results
+    # SLOW PATH: borsapy tek tek çekme — sadece scan yoksa
+    item_map = _items_by_ticker(items) if items else {}
     results = []
     if BORSAPY_AVAILABLE:
         try:
