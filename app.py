@@ -1,27 +1,7 @@
 # ================================================================
-# BISTBULL TERMINAL V10.2 — FastAPI APP
+# BISTBULL TERMINAL V10.0 — FastAPI APP
 # Slim router + lifespan + background scanner + WebSocket.
 # Tüm iş mantığı modüllerden import edilir.
-#
-# FIXES IN THIS REVISION (V10.2 — CRASH FIX):
-#
-# ROOT CAUSE OF V10.1 OOM CRASH:
-#   After the scan completed (108 symbols in RAM), the heatmap block
-#   immediately triggered a second yf.download() for 108 symbols.
-#   Peak RAM doubled → Railway container OOM killed.
-#
-# FIX-1 [OOM CRASH] Heatmap moved to dedicated background_tasks module.
-#   engine/background_tasks.py: heatmap_refresh_loop() runs every 10 min
-#   with a 15-min startup delay so scan RAM is fully freed first.
-#   /api/heatmap is now a pure O(1) cache read. If cache is empty
-#   (first 15 min after boot), returns "Hesaplanıyor..." status.
-#
-# FIX-2 [OOM CRASH] Paper trade loop moved to background_tasks module.
-#   Removed from app.py, imported and launched from engine/background_tasks.
-#
-# FIX-3 [V10.1 retained] Takas async parallel via asyncio.gather() + Semaphore(5).
-# FIX-4 [V10.1 retained] Live FX rates via _try_refresh_fx_rates().
-# FIX-5 [V10.1 retained] Honest "kurumsal_oran" label for yfinance takas data.
 # ================================================================
 
 import os
@@ -73,13 +53,6 @@ from engine.technical import (
     batch_download_history, cross_hunter, CHART_AVAILABLE,
 )
 from data.macro import fetch_all_macro, is_yfinance_available
-from engine.signal_tracker import signal_tracker
-from engine.background_tasks import (
-    heatmap_refresh_loop,
-    paper_trade_loop,
-    _fetch_heatmap_data,
-    _build_heatmap_result,
-)
 
 try:
     import yfinance as yf
@@ -165,8 +138,6 @@ async def _background_scanner():
                         await _generate_briefing_internal()
                     except Exception:
                         pass
-
-                # Heatmap refresh is handled by heatmap_refresh_loop() in background_tasks.py
             else:
                 ms = get_market_status()
                 log.info(f"Scan atlanıyor — {ms['reason']} ({ms['ist_time']} IST)")
@@ -180,10 +151,6 @@ async def _background_scanner():
 # ================================================================
 # LIFESPAN
 # ================================================================
-# NOTE: _paper_trade_checker() has been moved to engine/background_tasks.py
-# (paper_trade_loop). It is launched via asyncio.create_task() in lifespan().
-
-
 @asynccontextmanager
 async def lifespan(application: FastAPI):
     redis_client.startup()
@@ -194,17 +161,9 @@ async def lifespan(application: FastAPI):
         f"Redis: {'ON' if redis_client.is_available() else 'OFF'} | "
         f"Restore: {restore_results}"
     )
-    # Core scan loop
-    scan_task        = asyncio.create_task(_background_scanner())
-    # Background tasks — run independently, with startup delays to stagger RAM
-    heatmap_task     = asyncio.create_task(heatmap_refresh_loop())
-    paper_task       = asyncio.create_task(paper_trade_loop())
-    log.info(f"SignalTracker: {signal_tracker} başlatıldı")
-    log.info("Background tasks başlatıldı: scan_loop | heatmap_loop | paper_trade_loop")
+    task = asyncio.create_task(_background_scanner())
     yield
-    scan_task.cancel()
-    heatmap_task.cancel()
-    paper_task.cancel()
+    task.cancel()
     redis_client.shutdown()
     log.info(f"{APP_NAME} shutting down")
 
@@ -334,17 +293,6 @@ async def api_cross():
                 ai_commentary = await asyncio.to_thread(ai_call, prompt, 250)
             except Exception as e:
                 log.debug(f"cross AI: {e}")
-        # ── Paper Trade motoru: yeni sinyalleri kaydet ──────────────
-        if new_signals:
-            try:
-                logged = await asyncio.to_thread(
-                    signal_tracker.log_signals, new_signals, "1G"
-                )
-                if logged > 0:
-                    log.info(f"PaperTrade: {logged} yeni sinyal kaydedildi")
-            except Exception as e:
-                log.warning(f"PaperTrade log_signals hatası: {e}")
-
         return success({
             "signals": new_signals, "ai_commentary": ai_commentary,
             "summary": {"total": len(new_signals), "bullish": bullish, "bearish": bearish,
@@ -355,39 +303,6 @@ async def api_cross():
     except Exception as e:
         log.error(f"cross: {e}")
         return error("Cross Hunter hatası", status_code=500)
-
-# ================================================================
-# SIGNALS TRACK RECORD — Paper Trade sonuçları
-# ================================================================
-@app.get("/api/signals/track-record")
-async def api_signals_track_record(days: int = 30):
-    """
-    CrossHunter sinyallerinin gerçek zamanlı Track Record istatistiklerini döndürür.
-
-    Response:
-        period_days    : Kaç günlük veri
-        total          : Toplam sinyal sayısı
-        tp             : Hedef vuran sinyal sayısı
-        sl             : Stop olan sinyal sayısı
-        active         : Hâlâ açık sinyal sayısı
-        win_rate       : Başarı oranı (%) — sadece kapanan pozisyonlar
-        avg_pnl_pct    : Ortalama getiri (%)
-        best_pnl_pct   : En iyi getiri (%)
-        worst_pnl_pct  : En kötü getiri (%)
-        active_signals : Aktif pozisyonların tam listesi
-        recent_closed  : Son 30 kapanan pozisyon
-        by_timeframe   : Zaman dilimine göre breakdown
-        generated_at   : Hesaplama zamanı (UTC ISO)
-    """
-    try:
-        # days parametresini 1-365 arasında sınırla
-        days = max(1, min(365, days))
-        record = await asyncio.to_thread(signal_tracker.get_track_record, days)
-        return success(record, as_of=record["generated_at"])
-    except Exception as e:
-        log.error(f"track-record: {e}")
-        return error("Track Record alınamadı", status_code=500)
-
 
 # ================================================================
 # HEALTH & STATUS
@@ -439,66 +354,14 @@ async def api_analytics():
 # ================================================================
 # MACRO
 # ================================================================
-def _try_refresh_fx_rates() -> tuple[list, bool]:
-    """
-    Attempt to fetch live FX and commodity rates from yfinance.
-    Returns: (rates_list, was_live)
-
-    FIX-3 [BUG-DATA-03]: STATIC_RATES has no refresh mechanism.
-    This function fetches USDTRY, EURTRY, BRENT, and GOLD live and
-    merges them into the rates list. Falls back to STATIC_RATES on failure.
-    The "rates_live_updated" field in the API response signals to the UI
-    whether it's displaying live or static rates.
-    """
-    if not YF_AVAILABLE:
-        return STATIC_RATES, False
-
-    # FX symbols to fetch live — keyed by STATIC_RATES key
-    live_symbols = {
-        "USDTRY": "USDTRY=X",
-        "EURTRY": "EURTRY=X",
-    }
-    updated_map: dict[str, float] = {}
-    try:
-        for rate_key, yf_sym in live_symbols.items():
-            try:
-                tk = yf.Ticker(yf_sym)
-                h  = tk.history(period="2d", interval="1d")
-                if h is not None and not h.empty and len(h) >= 1:
-                    updated_map[rate_key] = round(float(h["Close"].iloc[-1]), 4)
-            except Exception:
-                pass
-    except Exception:
-        pass
-
-    if not updated_map:
-        return STATIC_RATES, False
-
-    # Merge live prices into STATIC_RATES structure
-    merged = []
-    for rate in STATIC_RATES:
-        if rate["key"] in updated_map:
-            merged.append({**rate, "rate": updated_map[rate["key"]], "note": "Canlı"})
-        else:
-            merged.append(rate)
-
-    return merged, True
-
-
 @app.get("/api/macro")
 async def api_macro():
     cached = macro_cache.get("macro_all")
     if cached is not None:
         return success(cached, cache_status="hit")
     try:
-        results                  = await asyncio.to_thread(fetch_all_macro)
-        rates, rates_live        = await asyncio.to_thread(_try_refresh_fx_rates)
-        result = {
-            "timestamp":           now_iso(),
-            "items":               clean_for_json(results),
-            "rates":               clean_for_json(rates),
-            "rates_live_updated":  rates_live,
-        }
+        results = await asyncio.to_thread(fetch_all_macro)
+        result = {"timestamp": now_iso(), "items": clean_for_json(results), "rates": clean_for_json(STATIC_RATES)}
         macro_cache.set("macro_all", result)
         return success(result, cache_status="miss")
     except Exception as e:
@@ -604,93 +467,44 @@ async def api_briefings_history():
 # ================================================================
 # TAKAS
 # ================================================================
-# ── Takas: max concurrent yfinance calls to prevent thread starvation ──
-_TAKAS_SEMAPHORE: asyncio.Semaphore = asyncio.Semaphore(5)
-
-async def _fetch_single_takas(ticker: str) -> dict:
-    """
-    Fetch ownership + price data for one ticker.
-
-    Source priority:
-      1. borsapy fast_info.foreign_ratio  → real MKK yabancı oranı
-      2. yfinance heldPercentInstitutions → global kurumsal oran (NOT MKK)
-         Label: "kurumsal_oran" to distinguish from real MKK data.
-
-    FIX-1: Previously called inside a serial for-loop (20 × 2-5s = 40-100s).
-    Now called concurrently via asyncio.gather() + Semaphore(5).
-    """
-    async with _TAKAS_SEMAPHORE:
-        foreign_pct = price = None
-        source = "N/A"
-
-        # ── 1. borsapy: real MKK foreign ratio ──────────────────────────
-        if BORSAPY_AVAILABLE:
-            try:
-                def _bp_fetch():
-                    import borsapy as _bp
-                    _tk = _bp.Ticker(ticker)
-                    fi  = _tk.fast_info
-                    fr  = getattr(fi, "foreign_ratio", None)
-                    lp  = getattr(fi, "last_price", None)
-                    return fr, lp
-                fr, lp = await asyncio.to_thread(_bp_fetch)
-                if fr is not None:
-                    foreign_pct = round(float(fr) * 100, 2)
-                    source = "borsapy_mkk"
-                if lp is not None:
-                    price = round(float(lp), 2)
-            except Exception:
-                pass
-
-        # ── 2. yfinance fallback: global institutional % ─────────────────
-        # NOTE: heldPercentInstitutions is global institutional ownership
-        # (Fidelity, Vanguard, etc.) — NOT the Turkish MKK foreign ratio.
-        # Label changed to "kurumsal_oran" to be factually accurate.
-        if foreign_pct is None and YF_AVAILABLE:
-            try:
-                def _yf_fetch():
-                    tk   = yf.Ticker(normalize_symbol(ticker))
+def _fetch_takas_yfinance():
+    results = []
+    for ticker in UNIVERSE[:20]:
+        try:
+            foreign_pct = price = None
+            source = "N/A"
+            if BORSAPY_AVAILABLE:
+                try:
+                    import borsapy as bp_m
+                    _tk = bp_m.Ticker(ticker)
+                    fi = _tk.fast_info
+                    fr = getattr(fi, "foreign_ratio", None)
+                    if fr is not None:
+                        foreign_pct = round(fr * 100, 2)
+                        source = "borsapy_mkk"
+                    lp = getattr(fi, "last_price", None)
+                    if lp is not None:
+                        price = round(float(lp), 2)
+                except Exception:
+                    pass
+            if foreign_pct is None and YF_AVAILABLE:
+                try:
+                    tk = yf.Ticker(normalize_symbol(ticker))
                     info = tk.get_info() or {}
-                    ip   = info.get("heldPercentInstitutions")
-                    p    = info.get("currentPrice") or info.get("regularMarketPrice")
-                    return ip, p
-                ip, p = await asyncio.to_thread(_yf_fetch)
-                if ip is not None:
-                    foreign_pct = round(float(ip) * 100, 2)
-                    source = "kurumsal_oran"   # FIX-1: honest label (not MKK)
-                if price is None and p is not None:
-                    price = round(float(p), 2)
-            except Exception:
-                pass
-
-        return {
-            "ticker":      ticker,
-            "foreign_pct": foreign_pct,
-            "price":       price,
-            "change_pct":  None,
-            "source":      source,
-        }
-
-
-async def _fetch_takas_data() -> list:
-    """
-    Fetch ownership data for UNIVERSE[:20] fully concurrently.
-
-    FIX-1 [BUG-PERF-03]: Replaces the serial for-loop that took 40-100s.
-    asyncio.gather() runs all fetches concurrently, bounded by Semaphore(5)
-    to prevent rate-limiting. Total wall-clock time: ~8-15 seconds.
-    """
-    tickers = UNIVERSE[:20]
-    tasks   = [_fetch_single_takas(t) for t in tickers]
-    results = await asyncio.gather(*tasks, return_exceptions=True)
-    valid   = []
-    for r in results:
-        if isinstance(r, Exception):
-            log.debug(f"takas fetch error: {r}")
-        elif isinstance(r, dict):
-            valid.append(r)
-    return valid or []
-
+                    ip = info.get("heldPercentInstitutions")
+                    if ip is not None:
+                        foreign_pct = round(ip * 100, 2)
+                        source = "yfinance_institutional"
+                    if price is None:
+                        p = info.get("currentPrice") or info.get("regularMarketPrice")
+                        if p is not None:
+                            price = round(float(p), 2)
+                except Exception:
+                    pass
+            results.append({"ticker": ticker, "foreign_pct": foreign_pct, "price": price, "change_pct": None, "source": source})
+        except Exception:
+            continue
+    return results or None
 
 @app.get("/api/takas")
 async def api_takas():
@@ -698,23 +512,11 @@ async def api_takas():
     if cached is not None:
         return success(cached, cache_status="hit")
     try:
-        data = await _fetch_takas_data()   # FIX-1: direct await, no to_thread
+        data = await asyncio.to_thread(_fetch_takas_yfinance)
         if not data:
             return success({"items": [], "source": None, "error": "Takas verisi alınamadı."})
-        data = sorted(
-            [d for d in data if d.get("foreign_pct") is not None],
-            key=lambda x: x["foreign_pct"],
-            reverse=True,
-        )
-        # Determine dominant source for the result metadata
-        sources = [d["source"] for d in data if d.get("source") and d["source"] != "N/A"]
-        dominant_source = max(set(sources), key=sources.count) if sources else "unknown"
-        result = {
-            "timestamp": now_iso(),
-            "items":     clean_for_json(data),
-            "source":    dominant_source,
-            "count":     len(data),
-        }
+        data = sorted([d for d in data if d.get("foreign_pct") is not None], key=lambda x: x["foreign_pct"], reverse=True)
+        result = {"timestamp": now_iso(), "items": clean_for_json(data), "source": "yfinance", "count": len(data)}
         takas_cache.set("takas_all", result)
         return success(result)
     except Exception as e:
@@ -757,40 +559,68 @@ async def api_social(request: Request):
     return success({"timestamp": now_iso(), "source": None, "trending": [], "overall_sentiment": "unavailable", "summary": "XAI_API_KEY gerekli.", "hot_topics": [], "error": "XAI_API_KEY gerekli"})
 
 # ================================================================
-# HEATMAP — O(1) cache read endpoint
+# HEATMAP
 # ================================================================
-# _fetch_heatmap_data() and _build_heatmap_result() live in
-# engine/background_tasks.py and are imported at the top of this file.
-# heatmap_refresh_loop() refreshes the cache every 10 minutes from
-# that module. This endpoint ONLY reads — it never blocks on I/O.
+def _fetch_heatmap_data():
+    items = get_top10_items()
+    item_map = _items_by_ticker(items)
+    results = []
+    if BORSAPY_AVAILABLE:
+        try:
+            import borsapy as bp_m
+            for t in UNIVERSE:
+                try:
+                    _tk = bp_m.Ticker(t)
+                    fi = _tk.fast_info
+                    last = getattr(fi, "last_price", None)
+                    prev = getattr(fi, "previous_close", None)
+                    mcap = getattr(fi, "market_cap", None)
+                    if last is not None and prev is not None and prev > 0:
+                        chg = (last - prev) / prev * 100
+                        si = item_map.get(t)
+                        results.append({"ticker": t, "price": round(float(last), 2), "change_pct": round(chg, 2), "market_cap": float(mcap) if mcap else None, "sector": (si.get("sector", "Diger") if si else "Diger") or "Diger", "score": si["overall"] if si else None})
+                except Exception:
+                    continue
+            if results:
+                return results
+        except Exception as e:
+            log.warning(f"heatmap borsapy: {e}")
+    if not YF_AVAILABLE:
+        return results
+    symbols = [normalize_symbol(t) for t in UNIVERSE]
+    try:
+        df = yf.download(symbols, period="2d", group_by="ticker", progress=False, threads=True)
+        for t in UNIVERSE:
+            sym = normalize_symbol(t)
+            try:
+                ticker_df = df if len(UNIVERSE) == 1 else (df[sym] if sym in df.columns.get_level_values(0) else None)
+                if ticker_df is None or ticker_df.empty or len(ticker_df) < 2:
+                    continue
+                prev_close = float(ticker_df["Close"].iloc[-2])
+                last_close = float(ticker_df["Close"].iloc[-1])
+                if prev_close == 0:
+                    continue
+                si = item_map.get(t)
+                results.append({"ticker": t, "price": round(last_close, 2), "change_pct": round(((last_close - prev_close) / prev_close) * 100, 2), "market_cap": si["metrics"].get("market_cap") if si else None, "sector": (si.get("sector", "Diger") if si else "Diger") or "Diger", "score": si["overall"] if si else None})
+            except Exception:
+                continue
+    except Exception as e:
+        log.warning(f"heatmap yfinance: {e}")
+    return results
 
 @app.get("/api/heatmap")
 async def api_heatmap():
-    """
-    O(1) heatmap endpoint — pure cache read.
-
-    Cache is pre-populated by heatmap_refresh_loop() in background_tasks.py
-    (runs every 10 minutes, 15-min startup delay after boot).
-
-    On first boot (before the loop has run), returns a computing status
-    so the frontend can show a loading indicator rather than hanging.
-    """
     cached = heatmap_cache.get("heatmap")
     if cached is not None:
         return success(cached, cache_status="hit")
-
-    # Cache miss — background loop hasn't run yet (first 15 min after boot).
-    # Return a graceful "computing" response. Do NOT block here.
-    return success(
-        {
-            "sectors":   [],
-            "total":     0,
-            "computing": True,
-            "message":   "Heatmap hesaplanıyor, lütfen bekleyin...",
-            "timestamp": now_iso(),
-        },
-        cache_status="computing",
-    )
+    data = await asyncio.to_thread(_fetch_heatmap_data)
+    sectors = defaultdict(list)
+    for d in data:
+        sectors[d["sector"]].append(d)
+    sector_list = sorted([{"sector": sec, "avg_change": round(sum(i["change_pct"] for i in si) / len(si), 2) if si else 0, "total_mcap": sum(i["market_cap"] or 0 for i in si), "count": len(si), "stocks": sorted(si, key=lambda x: abs(x["change_pct"]), reverse=True)} for sec, si in sectors.items()], key=lambda x: x["avg_change"], reverse=True)
+    result = {"timestamp": now_iso(), "sectors": clean_for_json(sector_list), "total": len(data)}
+    heatmap_cache.set("heatmap", result)
+    return success(result)
 
 # ================================================================
 # QUOTE + BOOK

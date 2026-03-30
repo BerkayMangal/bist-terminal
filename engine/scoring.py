@@ -1,18 +1,8 @@
 # ================================================================
-# BISTBULL TERMINAL V10.1 — SCORING ENGINE
+# BISTBULL TERMINAL V10.0 — SCORING ENGINE
 # 7-boyut FA + 3-boyut İvme + Risk + Label + Decision
 # Saf fonksiyonlar. Cache/IO SIFIR.
-#
-# FIX-1 [BUG-MATH-05] score_momentum() RSI zone redesign.
-#   OLD: RSI > 70 → +30 pts (maximum)  — overbought scored as peak quality
-#   NEW: RSI 55-65 → +30 pts (peak: confirmed trend, not overextended)
-#        RSI 65-70 → +24 pts (extended but valid)
-#        RSI 50-55 → +18 pts (early-stage momentum)
-#        RSI > 70  → +15 pts (overbought, exhaustion risk)
-#        RSI 45-50 → +8  pts (neutral/weakening)
-#        RSI < 45  → +0  pts (no momentum contribution)
-#   BIST large-cap mean-reversion at RSI 70+ makes the old scoring
-#   generate "AL" signals precisely when risk/reward was deteriorating.
+# V9.1 birebir korunmuş — sadece import path'ler güncellendi.
 # ================================================================
 
 from __future__ import annotations
@@ -294,24 +284,13 @@ def score_momentum(m: dict, tech: Optional[dict]) -> Optional[float]:
     pts = 0.0
     components = 0
 
-    # ── RSI Component [FIX-1: quality momentum zone redesign] ─────────
-    # RSI values use Wilder's RMA (fixed in technical.py V10.1).
-    # Peak score at 55-65: confirmed trend, room to run, not overextended.
-    # RSI > 70 still positive but reduced to reflect exhaustion risk.
     rsi = safe_num(tech.get("rsi"))
     if rsi is not None:
         components += 1
-        if 55.0 <= rsi <= 65.0:
-            pts += 30.0   # Quality momentum zone — peak score
-        elif 65.0 < rsi <= 70.0:
-            pts += 24.0   # Extended but valid
-        elif 50.0 <= rsi < 55.0:
-            pts += 18.0   # Early-stage momentum building
-        elif rsi > 70.0:
-            pts += 15.0   # Overbought: positive but exhaustion risk
-        elif 45.0 <= rsi < 50.0:
-            pts += 8.0    # Neutral / weakening
-        # rsi < 45: no contribution — weak/negative momentum
+        if rsi > 70:
+            pts += 30
+        elif rsi > 50:
+            pts += 30 * ((rsi - 50) / 20)
 
     price = safe_num(tech.get("price"))
     ma50 = safe_num(tech.get("ma50"))
@@ -592,15 +571,9 @@ def legendary_labels(m: dict, scores: dict) -> dict:
         else "Sınırda" if scores["value"] >= 55
         else "Kaldı"
     )
-    industry_lower = (m.get("industry") or "").lower()
-    sector_lower   = (m.get("sector")   or "").lower()
-    is_bank        = "bank" in industry_lower or "financial serv" in sector_lower
-    is_insurance   = "insur" in industry_lower or "sigorta" in industry_lower
-
+    is_bank = "bank" in (m.get("industry") or "").lower() or "sigorta" in (m.get("industry") or "").lower()
     if is_bank:
         az_l = "N/A (Banka)"
-    elif is_insurance:
-        az_l = "N/A (Sigorta)"
 
     return {
         "piotroski": pf_l, "altman": az_l, "beneish": bm_l,
@@ -722,13 +695,7 @@ def compute_overall(
 
 
 def compute_fa_pure(scores: dict) -> float:
-    """
-    Saf FA skoru — sadece 7 temel boyut ağırlıklı ortalaması.
-
-    NOTE: This uses hardcoded FA_WEIGHTS. Kept for backward compatibility
-    and validation only. The production pipeline (analyze_symbol V10.1)
-    uses adjust_weights(FA_WEIGHTS, sector_group) instead.
-    """
+    """Saf FA skoru — sadece 7 temel boyut ağırlıklı ortalaması."""
     total = sum(
         FA_WEIGHTS[key] * scores.get(key, 50)
         for key in FA_WEIGHTS

@@ -442,6 +442,127 @@ STATIC_RATES: list[dict] = [
 STATIC_RATES_STALE_DAYS: int = 14
 
 # ================================================================
+# V11 UPGRADE — SCORING ENGINE CONSTANTS
+# Üç kaynağın sentezi: Citadel Quant + Forensic Professor + Berkay
+# V10 değerleri KORUNUYOR — V11 sidecar modüller bu sabitleri kullanır.
+# ================================================================
+
+# --- V11 FA Ağırlıkları (downside protection focus) ---
+V11_FA_WEIGHTS: dict[str, float] = {
+    "quality":  0.25,   # was 0.30 — slight reduction to distribute
+    "value":    0.18,   # kept — Ciro/PD goes INSIDE this dimension
+    "growth":   0.12,   # was 0.15 — nominal growth misleading in high-inflation
+    "balance":  0.15,   # was 0.10 — CRITICAL in 37% rate environment
+    "earnings": 0.13,   # was 0.10 — forensic upgrade (Beneish, CFO/NI)
+    "capital":  0.10,   # was 0.09 — compounder discipline
+    "moat":     0.07,   # was 0.08 — data still noisy
+}
+
+# --- V11 Overall Formül ---
+V11_OVERALL_FA_WEIGHT: float = 0.58       # was 0.55 — FA daha baskın
+V11_OVERALL_MOMENTUM_WEIGHT: float = 0.28  # was 0.35 — momentum azaltıldı
+V11_OVERALL_RISK_FACTOR: float = 0.38      # was 0.30 — risk daha çok konuşuyor
+
+# --- V11 Risk Caps ---
+V11_RISK_CAP_NORMAL: int = -42             # was -30
+V11_RISK_CAP_FATAL: int = -55              # YENİ — fatal red flag durumları
+
+# --- V11 Non-Linear Momentum Gate (piecewise) ---
+# FA < 35 → momentum neredeyse yok sayılır
+# FA 35-45 → sadece timing etkisi
+# FA 45-55 → kontrollü izin
+# FA 55-65 → alpha üretmeye başlar
+# FA >= 65 → tam teyit sinyali
+V11_MOMENTUM_GATE: list[tuple[int, float]] = [
+    (65, 0.95),   # FA >= 65 → tam kredi
+    (55, 0.70),   # FA >= 55 → %70
+    (45, 0.40),   # FA >= 45 → %40
+    (35, 0.18),   # FA >= 35 → %18
+    (0,  0.08),   # FA < 35  → neredeyse sıfır
+]
+
+# --- V11 Sector Thresholds (High-Rate Calibrated) ---
+V11_SECTOR_THRESHOLDS: dict[str, dict[str, tuple]] = {
+    "banka": {
+        "pe": (10, 7, 4.5, 2.5),          # was (12, 8, 5, 3) — tighter
+        "pb": (1.8, 1.2, 0.8, 0.5),       # unchanged
+        "roe": (0.12, 0.18, 0.25, 0.35),   # was (0.08, 0.14, 0.20, 0.28) — raised
+        "net_margin": (0.06, 0.14, 0.22, 0.32),  # raised
+        "roic": None,                       # N/A for banks
+        "ev_ebitda": None,
+        "debt_equity": None,
+        "current_ratio": None,
+        "altman_z": None,
+    },
+    "holding": {
+        "pe": (16, 10, 7, 4),              # tighter
+        "pb": (1.6, 1.1, 0.8, 0.5),
+        "roe": (0.06, 0.10, 0.16, 0.24),   # raised
+        "net_margin": (0.04, 0.08, 0.14, 0.22),
+    },
+    "savunma": {
+        "pe": (28, 18, 12, 7),             # tighter
+        "ev_ebitda": (14, 10, 7, 4),
+        "roe": (0.08, 0.14, 0.20, 0.28),   # raised
+        "revenue_growth": (-0.02, 0.08, 0.18, 0.30),
+    },
+    "enerji": {
+        "pe": (8, 5, 3, 2),               # tighter — compete with bonds
+        "ev_ebitda": (8, 6, 4, 2.5),
+        "roe": (0.10, 0.16, 0.22, 0.30),   # raised significantly
+        "net_margin": (0.02, 0.06, 0.10, 0.18),
+        "net_debt_ebitda": (3.0, 2.0, 1.2, 0.3),  # tighter
+        "debt_equity": (70, 130, 220, 370),
+        "altman_z": (0.8, 1.5, 2.5, 3.5),
+    },
+    "perakende": {
+        "pe": (20, 14, 9, 5),
+        "net_margin": (0.015, 0.04, 0.07, 0.12),
+        "roe": (0.06, 0.12, 0.18, 0.26),   # raised
+        "revenue_growth": (-0.03, 0.08, 0.15, 0.25),
+    },
+    "ulasim": {
+        "pe": (10, 7, 4, 2.5),
+        "ev_ebitda": (7, 5, 3.5, 2.5),
+        "roe": (0.08, 0.14, 0.20, 0.28),   # raised
+        "net_debt_ebitda": (3.0, 2.2, 1.2, 0.3),
+        "debt_equity": (140, 280, 460, 650),
+        "current_ratio": (0.6, 0.9, 1.2, 1.8),
+        "altman_z": (0.5, 1.0, 1.8, 2.8),
+    },
+    "sanayi": {
+        "pe": (18, 12, 7, 4),              # tighter
+        "roe": (0.06, 0.12, 0.18, 0.25),   # was (0.04, 0.10, 0.16, 0.22)
+        "roic": (0.04, 0.10, 0.15, 0.20),
+        "net_margin": (0.03, 0.08, 0.13, 0.20),
+        "ev_ebitda": (10, 7, 4, 2.5),
+    },
+}
+
+# --- V11 Ciro/PD Eşikleri (Berkay Factor) ---
+# score_higher ile kullanılır — yüksek = iyi (ucuz)
+V11_CIRO_PD_THRESHOLDS: tuple[float, float, float, float] = (1.0, 3.0, 6.0, 10.0)
+
+# --- V11 Ciro/PD Etiket Sistemi ---
+V11_CIRO_PD_LABELS: list[tuple[float, str, str]] = [
+    (10.0, "KELEPİR", "#FFD700"),       # Altın
+    (6.0,  "ÇOK UCUZ", "#00e676"),      # Neon yeşil
+    (4.0,  "UCUZ", "#66bb6a"),           # Yeşil
+    (1.0,  "NORMAL", "#78909c"),         # Gri
+    (0.0,  "PAHALI", "#ef5350"),         # Kırmızı
+]
+
+# --- V11 Fatal Risk Triggers ---
+# Bu kombinasyonlardan biri varsa → risk_cap = V11_RISK_CAP_FATAL
+V11_FATAL_TRIGGERS: list[str] = [
+    "negative_equity",                    # equity < 0
+    "fake_profit_critical",               # CFO < 0 & NI > 0 & interest_coverage < 1.5
+    "debt_distress",                      # NB/FAVÖK > 4.5 & faiz karşılama < 2
+    "manipulation_plus_fake",             # Beneish > -1.78 & CFO/NI < 0.5
+    "dilution_plus_negative_fcf",         # dilution > %10 & FCF margin < 0
+]
+
+# ================================================================
 # FİNANS SÖZLERI
 # ================================================================
 FINANCE_QUOTES: list[dict] = [
