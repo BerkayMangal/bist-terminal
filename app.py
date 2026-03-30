@@ -75,6 +75,8 @@ log = get_logger("bistbull")
 # HELPERS
 # ================================================================
 def _build_scan_item(r):
+    v11 = r.get("v11", {})
+    v11l = r.get("v11_labels", {})
     return {
         "ticker": r["ticker"], "name": r["name"], "overall": r["overall"], "confidence": r["confidence"],
         "fa_score": r.get("fa_score", r.get("deger", r["overall"])), "deger": r.get("deger", r["overall"]),
@@ -88,6 +90,21 @@ def _build_scan_item(r):
         "price": r["metrics"].get("price"), "market_cap": r["metrics"].get("market_cap"),
         "pe": r["metrics"].get("pe"), "pb": r["metrics"].get("pb"),
         "roe": r["metrics"].get("roe"), "revenue_growth": r["metrics"].get("revenue_growth"),
+        # V11 enrichment
+        "ciro_pd": v11.get("ciro_pd"),
+        "ciro_pd_label": v11.get("ciro_pd_label"),
+        "is_fatal": v11.get("is_fatal", False),
+        "fatal_risks": v11.get("fatal_risks", []),
+        "conviction": (v11l.get("conviction") or {}).get("score"),
+        "conviction_level": (v11l.get("conviction") or {}).get("level"),
+        "earnings_quality_label": (v11l.get("earnings_quality") or {}).get("label"),
+        "capital_label": (v11l.get("capital_allocation") or {}).get("label"),
+        "regime": v11l.get("regime"),
+        "legendary_v11": {
+            "buffett_graham": (v11l.get("legendary", {}).get("buffett_graham") or {}).get("passed"),
+            "anti_bubble": (v11l.get("legendary", {}).get("anti_bubble") or {}).get("passed"),
+            "value_trap": (v11l.get("legendary", {}).get("value_trap") or {}).get("passed"),
+        },
     }
 
 def _items_by_ticker(items):
