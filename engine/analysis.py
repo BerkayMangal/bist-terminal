@@ -457,8 +457,12 @@ def analyze_symbol(symbol: str) -> dict:
         "score_coverage": score_coverage,
     }
 
-    # Explainability — structured scoring explanation
-    r["explanation"] = build_explanation(r)
+    # Explainability — structured scoring explanation (never blocks analysis)
+    try:
+        r["explanation"] = build_explanation(r)
+    except Exception as e:
+        log.warning(f"Explainability skipped for {symbol}: {e}")
+        r["explanation"] = None
 
     # V11 Enrichment — mevcut alanları bozmadan v11 block ekler
     try:

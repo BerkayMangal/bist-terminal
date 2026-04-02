@@ -298,7 +298,7 @@ class ScanCoordinator:
                     return result
                 except Exception as e:
                     self._increment()
-                    log.debug(f"Scan skip {ticker}: {e}")
+                    log.warning(f"Scan skip {ticker}: {e}")
                     return None
 
             workers = min(SCAN_MAX_WORKERS, len(universe))
