@@ -270,8 +270,8 @@ def compute_metrics(symbol: str) -> dict:
 
     # Data quality diagnostics
     has_fin = fin is not None and hasattr(fin, 'empty') and not fin.empty
-    has_bal = balance is not None and hasattr(balance, 'empty') and not balance.empty
-    has_cf = cashflow is not None and hasattr(cashflow, 'empty') and not cashflow.empty
+    has_bal = bal is not None and hasattr(bal, 'empty') and not bal.empty
+    has_cf = cf is not None and hasattr(cf, 'empty') and not cf.empty
     stmt_count = sum([has_fin, has_bal, has_cf])
     if stmt_count == 0:
         log.warning(f"DATA QUALITY [{base_ticker(symbol)}]: No financial statements via yfinance — using info-dict only")

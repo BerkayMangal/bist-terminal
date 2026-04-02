@@ -395,6 +395,7 @@ async def api_social(request: Request):
 # ================================================================
 def _fetch_heatmap_data():
     items = get_top10_items()
+    # Fast path: scan results + daily changes from history download
     if items and len(items) >= 10 and _daily_changes:
         results = []
         for it in items:
@@ -402,19 +403,8 @@ def _fetch_heatmap_data():
             price = dc.get("price") or it.get("price"); chg = dc.get("change_pct", 0); mcap = it.get("market_cap")
             if price and mcap: results.append({"ticker": ticker, "price": round(float(price), 2), "change_pct": round(float(chg), 2), "market_cap": float(mcap), "sector": it.get("sector", "Diger") or "Diger", "score": it.get("overall")})
         if results: return results
+    # Fallback: yfinance batch download (fast — single request for all symbols)
     item_map = {item["ticker"]: item for item in items} if items else {}; results = []
-    if BORSAPY_AVAILABLE:
-        try:
-            import borsapy as bp_m
-            for t in UNIVERSE:
-                try:
-                    _tk = bp_m.Ticker(t); fi = _tk.fast_info; last = getattr(fi, "last_price", None); prev = getattr(fi, "previous_close", None); mcap = getattr(fi, "market_cap", None)
-                    if last is not None and prev is not None and prev > 0:
-                        chg = (last - prev) / prev * 100; si = item_map.get(t)
-                        results.append({"ticker": t, "price": round(float(last), 2), "change_pct": round(chg, 2), "market_cap": float(mcap) if mcap else None, "sector": (si.get("sector", "Diger") if si else "Diger") or "Diger", "score": si["overall"] if si else None})
-                except Exception: continue
-            if results: return results
-        except Exception as e: log.warning(f"heatmap borsapy: {e}")
     if not YF_AVAILABLE: return results
     symbols = [normalize_symbol(t) for t in UNIVERSE]
     try:

@@ -98,15 +98,18 @@ def fetch_all_macro() -> list[dict]:
     results: list[dict] = []
 
     try:
-        with ThreadPoolExecutor(max_workers=5) as pool:
+        with ThreadPoolExecutor(max_workers=10) as pool:
             futures = {
                 pool.submit(_fetch_one_macro, k, v, ytd_start): k
                 for k, v in MACRO_SYMBOLS.items()
             }
-            for future in as_completed(futures):
-                r = future.result()
-                if r:
-                    results.append(r)
+            for future in as_completed(futures, timeout=45):
+                try:
+                    r = future.result(timeout=15)
+                    if r:
+                        results.append(r)
+                except Exception:
+                    pass
 
         cb_yfinance.on_success()
         log.info(
