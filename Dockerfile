@@ -15,6 +15,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY . .
 
+# Create persistent data directory (mount volume at /data on Railway)
+RUN mkdir -p /data
+
 # Railway sets $PORT dynamically; default 8080 for local dev
 EXPOSE 8080
 

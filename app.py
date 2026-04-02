@@ -55,6 +55,9 @@ from engine.aggregation import (
     build_briefing_context, build_agent_context,
 )
 from data.macro import fetch_all_macro, is_yfinance_available
+from infra.storage import init_db
+from engine.watchlist import add as wl_add, remove as wl_remove, get_symbols as wl_symbols, get_enriched as wl_enriched
+from engine.alerts import generate_watchlist_alerts, get_user_alerts
 
 try:
     import yfinance as yf
@@ -127,6 +130,7 @@ async def _background_scanner():
 # ================================================================
 @asynccontextmanager
 async def lifespan(application: FastAPI):
+    init_db()
     redis_client.startup()
     restore_results = restore_all_from_redis()
     log.info(f"{APP_NAME} {BOT_VERSION} | Universe: {len(UNIVERSE)} | AI: {','.join(AI_PROVIDERS) or 'OFF'} | Chart: {'ON' if CHART_AVAILABLE else 'OFF'} | Redis: {'ON' if redis_client.is_available() else 'OFF'} | Restore: {restore_results}")
@@ -487,6 +491,56 @@ async def api_batch(tickers: str):
             r = await asyncio.to_thread(analyze_symbol, normalize_symbol(t)); results.append(build_batch_item(r))
         except Exception as e: results.append({"ticker": t, "error": str(e)})
     return success({"items": results})
+
+# ================================================================
+# WATCHLIST + ALERTS (Phase 7)
+# ================================================================
+def _user_id(request: Request) -> str:
+    return request.headers.get("x-user-id", "default")
+
+@app.get("/api/watchlist")
+async def api_watchlist_get(request: Request):
+    uid = _user_id(request)
+    cross_sigs = enrich_signals(cross_hunter.last_results or [], analysis_cache)
+    items = await asyncio.to_thread(wl_enriched, uid, analysis_cache, cross_sigs)
+    return success({"items": items, "count": len(items)})
+
+@app.post("/api/watchlist")
+async def api_watchlist_add(request: Request):
+    uid = _user_id(request)
+    try:
+        body = await request.json()
+        symbol = body.get("symbol", "")
+    except Exception:
+        return error("Gecersiz istek", status_code=400)
+    if not symbol:
+        return error("symbol alani gerekli", status_code=400)
+    result = wl_add(uid, symbol)
+    if not result["ok"]:
+        return error(result["error"], status_code=400)
+    return success(result)
+
+@app.delete("/api/watchlist/{symbol}")
+async def api_watchlist_remove(symbol: str, request: Request):
+    uid = _user_id(request)
+    result = wl_remove(uid, symbol)
+    return success(result)
+
+@app.get("/api/alerts")
+async def api_alerts_get(request: Request):
+    uid = _user_id(request)
+    alerts = await asyncio.to_thread(get_user_alerts, uid)
+    return success({"alerts": alerts, "count": len(alerts)})
+
+@app.post("/api/alerts/refresh")
+async def api_alerts_refresh(request: Request):
+    uid = _user_id(request)
+    symbols = wl_symbols(uid)
+    if not symbols:
+        return success({"alerts": [], "count": 0, "message": "Watchlist bos"})
+    cross_sigs = enrich_signals(cross_hunter.last_results or [], analysis_cache)
+    new_alerts = await asyncio.to_thread(generate_watchlist_alerts, uid, symbols, analysis_cache, cross_sigs)
+    return success({"new_alerts": new_alerts, "new_count": len(new_alerts)})
 
 # ================================================================
 # WEBSOCKET — Scan progress
