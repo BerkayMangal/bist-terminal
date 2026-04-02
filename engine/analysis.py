@@ -17,6 +17,7 @@ from utils.helpers import safe_num, pick_row_pair, growth, base_ticker
 from core.cache import raw_cache, analysis_cache
 from config import UNIVERSE
 from engine.metrics import normalize_metrics, compute_score_coverage, confidence_penalty_for_imputed_scores
+from engine.explainability import build_explanation
 
 log = logging.getLogger("bistbull.analysis")
 
@@ -267,6 +268,17 @@ def compute_metrics(symbol: str) -> dict:
     asset_to_p = (revenue_prev / total_assets_prev) if revenue_prev is not None and total_assets_prev not in (None, 0) else None
     inst_holders_pct = safe_num(info.get("heldPercentInstitutions"))
 
+    # Data quality diagnostics
+    has_fin = fin is not None and hasattr(fin, 'empty') and not fin.empty
+    has_bal = balance is not None and hasattr(balance, 'empty') and not balance.empty
+    has_cf = cashflow is not None and hasattr(cashflow, 'empty') and not cashflow.empty
+    stmt_count = sum([has_fin, has_bal, has_cf])
+    if stmt_count == 0:
+        log.warning(f"DATA QUALITY [{base_ticker(symbol)}]: No financial statements via yfinance — using info-dict only")
+    elif stmt_count < 3:
+        missing = [s for s, ok in [("income", has_fin), ("balance", has_bal), ("cashflow", has_cf)] if not ok]
+        log.info(f"DATA QUALITY [{base_ticker(symbol)}]: yfinance missing {', '.join(missing)}")
+
     m = {
         "symbol": symbol, "ticker": base_ticker(symbol),
         "name": str(info.get("shortName") or info.get("longName") or symbol),
@@ -304,6 +316,7 @@ def compute_metrics(symbol: str) -> dict:
         "inst_holders_pct": inst_holders_pct,
         "ciro_pd": (revenue / market_cap) if revenue is not None and market_cap not in (None, 0) else None,
         "data_source": "yfinance",
+        "data_quality": {"income_stmt": has_fin, "balance_sheet": has_bal, "cashflow": has_cf, "fast_info": bool(price)},
     }
     m["piotroski_f"] = compute_piotroski(m)
     m["altman_z"] = compute_altman(m)
@@ -443,6 +456,9 @@ def analyze_symbol(symbol: str) -> dict:
         "scores_imputed": scores_imputed,
         "score_coverage": score_coverage,
     }
+
+    # Explainability — structured scoring explanation
+    r["explanation"] = build_explanation(r)
 
     # V11 Enrichment — mevcut alanları bozmadan v11 block ekler
     try:

@@ -382,22 +382,22 @@ def compute_metrics_v9(symbol: str) -> dict:
     if not book_val_ps and equity and shares and shares > 0:
         book_val_ps = equity / shares
 
-    # Ratios
+    # Ratios — financial statement derived, with info-dict fallback
     roe = _safe_num(info.get("returnOnEquity")) or ((net_income / equity) if net_income and equity and equity != 0 else None)
     roa = _safe_num(info.get("returnOnAssets")) or ((net_income / total_assets) if net_income and total_assets and total_assets != 0 else None)
     roa_prev = (net_income_prev / total_assets_prev) if net_income_prev and total_assets_prev and total_assets_prev != 0 else None
     gross_margin = (gross_profit / revenue) if gross_profit and revenue else None
     gross_margin_prev = (gross_profit_prev / revenue_prev) if gross_profit_prev and revenue_prev else None
-    op_margin = (operating_income / revenue) if operating_income and revenue else None
-    net_margin = (net_income / revenue) if net_income and revenue else None
-    cur_ratio = (cur_assets / cur_liab) if cur_assets and cur_liab else None
+    op_margin = _safe_num(info.get("operatingMargins")) or ((operating_income / revenue) if operating_income and revenue else None)
+    net_margin = _safe_num(info.get("profitMargins")) or ((net_income / revenue) if net_income and revenue else None)
+    cur_ratio = _safe_num(info.get("currentRatio")) or ((cur_assets / cur_liab) if cur_assets and cur_liab else None)
     cur_ratio_prev = (cur_assets_prev / cur_liab_prev) if cur_assets_prev and cur_liab_prev else None
-    debt_eq = (total_debt / equity * 100) if total_debt and equity and equity != 0 else None
+    debt_eq = _safe_num(info.get("debtToEquity")) or ((total_debt / equity * 100) if total_debt and equity and equity != 0 else None)
     net_debt = (total_debt - cash) if total_debt is not None and cash is not None else None
     net_debt_ebit = (net_debt / ebitda) if net_debt is not None and ebitda not in (None, 0) else None
     _ev = ebit or operating_income
     int_cov = (_ev / abs(interest_exp)) if _ev and interest_exp and interest_exp != 0 else None
-    free_cf = free_cf_direct or ((op_cf + capex) if op_cf is not None and capex is not None else None)
+    free_cf = free_cf_direct or ((op_cf + capex) if op_cf is not None and capex is not None else None) or _safe_num(info.get("freeCashflow"))
     fcf_yield = (free_cf / market_cap) if free_cf is not None and market_cap not in (None, 0) else None
     fcf_margin = (free_cf / revenue) if free_cf is not None and revenue not in (None, 0) else None
     cfo_to_ni = (op_cf / net_income) if op_cf is not None and net_income not in (None, 0) else None
@@ -408,8 +408,8 @@ def compute_metrics_v9(symbol: str) -> dict:
             return None
         return (c - p) / abs(p)
 
-    rev_growth = _g(revenue, revenue_prev)
-    eps_growth = _g(net_income, net_income_prev)
+    rev_growth = _g(revenue, revenue_prev) or _safe_num(info.get("revenueGrowth"))
+    eps_growth = _g(net_income, net_income_prev) or _safe_num(info.get("earningsGrowth"))
     ebit_growth = _g(ebitda, ebitda_prev)
 
     # Working capital & ROIC
@@ -430,6 +430,30 @@ def compute_metrics_v9(symbol: str) -> dict:
     # EV/EBITDA fallback
     if ev_ebitda is None and market_cap and ebitda not in (None, 0):
         ev_ebitda = (market_cap + (total_debt or 0) - (cash or 0)) / ebitda
+
+    # Data quality diagnostics
+    has_income = fin is not None and hasattr(fin, 'empty') and not fin.empty
+    has_balance = bal is not None and hasattr(bal, 'empty') and not bal.empty
+    has_cashflow = cf is not None and hasattr(cf, 'empty') and not cf.empty
+    info_fallbacks_used = []
+    if not has_income and (op_margin is not None or net_margin is not None or rev_growth is not None):
+        info_fallbacks_used.append("ratios_from_info")
+    if not has_income and (rev_growth is not None or eps_growth is not None):
+        info_fallbacks_used.append("growth_from_info")
+
+    data_quality = {
+        "income_stmt": has_income,
+        "balance_sheet": has_balance,
+        "cashflow": has_cashflow,
+        "fast_info": bool(price),
+        "info_fallbacks": info_fallbacks_used,
+    }
+    stmt_count = sum([has_income, has_balance, has_cashflow])
+    if stmt_count == 0:
+        log.warning(f"DATA QUALITY [{tc}]: No financial statements — using market data + info fallbacks only")
+    elif stmt_count < 3:
+        missing = [s for s, ok in [("income", has_income), ("balance", has_balance), ("cashflow", has_cashflow)] if not ok]
+        log.info(f"DATA QUALITY [{tc}]: Missing {', '.join(missing)} statement(s)")
 
     return {
         "symbol": symbol, "ticker": tc,
@@ -474,6 +498,7 @@ def compute_metrics_v9(symbol: str) -> dict:
         "free_float": _safe_num(fast.get("free_float")),
         "ciro_pd": (revenue / market_cap) if revenue is not None and market_cap not in (None, 0) else None,
         "data_source": "borsapy",
+        "data_quality": data_quality,
     }
 
 

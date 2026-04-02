@@ -170,3 +170,77 @@ def clean_json_response(text: str) -> Optional[dict]:
         return json.loads(clean)
     except (json.JSONDecodeError, ValueError):
         return None
+
+
+# ================================================================
+# RICH CONTEXT BUILDER — detailed data context for AI prompts
+# ================================================================
+def build_rich_context(r: dict, tech: Optional[dict] = None) -> str:
+    """Build rich text context from analysis result for AI prompts.
+    Moved from ai/engine.py to centralize all prompt-related logic."""
+    from utils.helpers import fmt_num, fmt_pct
+
+    s = r["scores"]
+    m = r["metrics"]
+    L = r.get("legendary", {})
+    lines = [
+        f"Hisse: {r['ticker']} ({r['name']}) | Sektör: {m.get('sector', '')} ({r.get('sector_group', '')}) | {r['style']}",
+        f"FA SCORE (saf kalite): {r.get('fa_score', 50)}/100 | RİSK: {r.get('risk_score', 0)} | KARAR SKORU: {r['overall']}/100",
+        f"GİRİŞ: {r.get('entry_label', '?')} | KARAR: {r.get('decision', '?')} | KALİTE: {r.get('quality_tag', '?')}",
+        f"İVME: {r.get('ivme', 50)}/100 | ZAMANLAMA: {r.get('timing', '?')}",
+        f"Value:{s['value']:.0f} Quality:{s['quality']:.0f} Growth:{s['growth']:.0f} Balance:{s['balance']:.0f} Earnings:{s['earnings']:.0f} Moat:{s['moat']:.0f} Capital:{s['capital']:.0f}",
+        f"Momentum:{s.get('momentum', 50):.0f} TechBreak:{s.get('tech_break', 50):.0f} InstFlow:{s.get('inst_flow', 50):.0f}",
+        f"Fiyat:{fmt_num(m.get('price'))} PiyasaDeg:{fmt_num(m.get('market_cap'))} F/K:{fmt_num(m.get('pe'))} PD/DD:{fmt_num(m.get('pb'))} FD/FAVÖK:{fmt_num(m.get('ev_ebitda'))}",
+        f"ROE:{fmt_pct(m.get('roe'))} ROIC:{fmt_pct(m.get('roic'))} Brüt Marj:{fmt_pct(m.get('gross_margin'))} Net Marj:{fmt_pct(m.get('net_margin'))}",
+        f"Gelir Büyüme:{fmt_pct(m.get('revenue_growth'))} HBK Büyüme:{fmt_pct(m.get('eps_growth'))}",
+        f"NB/FAVÖK:{fmt_num(m.get('net_debt_ebitda'))} Cari Oran:{fmt_num(m.get('current_ratio'))} Faiz Karşılama:{fmt_num(m.get('interest_coverage'))}",
+        f"FCF Getiri:{fmt_pct(m.get('fcf_yield'))} CFO/NI:{fmt_num(m.get('cfo_to_ni'))}",
+        f"Piotroski:{L.get('piotroski', 'N/A')} Altman:{L.get('altman', 'N/A')} Beneish:{L.get('beneish', 'N/A')}",
+        f"Graham:{L.get('graham_filter', 'N/A')} Buffett:{L.get('buffett_filter', 'N/A')}",
+    ]
+    if tech:
+        rsi_val = tech.get("rsi")
+        rsi_str = f"{rsi_val:.0f}" if isinstance(rsi_val, (int, float)) else "?"
+        vol_val = tech.get("vol_ratio")
+        vol_str = f"{vol_val:.1f}x" if isinstance(vol_val, (int, float)) else "?"
+        pct_20d = tech.get("pct_20d")
+        pct_str = f"{pct_20d:+.1f}%" if isinstance(pct_20d, (int, float)) else "?"
+        ma50_above = (tech.get("price", 0) or 0) > (tech.get("ma50") or 0)
+        lines.append(
+            f"Teknik: RSI={rsi_str}, "
+            f"MACD={'bullish' if tech.get('macd_bullish') else 'bearish'}, "
+            f"{'MA50 üzerinde' if ma50_above else 'MA50 altında'}, "
+            f"BB:{tech.get('bb_pos', '?')}, Hacim:{vol_str}, "
+            f"20g değişim:{pct_str}, "
+            f"52W zirveden {abs(tech.get('pct_from_high', 0)):.0f}% uzakta"
+        )
+    if r.get("is_hype"):
+        lines.append("⚠️ HYPE TESPİTİ: Fiyat hızla yükseliyor ama temel zayıf — spekülasyon riski yüksek!")
+    lines.append(f"Risk faktörleri: {', '.join(r.get('risk_reasons', ['Yok']))}")
+    lines.append(f"Güçlü: {', '.join(r.get('positives', []))}")
+    lines.append(f"Zayıf: {', '.join(r.get('negatives', []))}")
+    return "\n".join(lines)
+
+
+# ================================================================
+# TRADER SUMMARY — investment thesis prompt
+# ================================================================
+def trader_summary_prompt(r: dict, tech: Optional[dict] = None) -> str:
+    """Build the trader summary / investment thesis AI prompt.
+    Moved from ai/engine.py to centralize all prompt logic."""
+    ctx = build_rich_context(r, tech)
+    entry = r.get("entry_label", "?")
+    is_hype = r.get("is_hype", False)
+    return (
+        "Sen kurumsal BIST analisti ve portföy yöneticisisin. 20 yıllık tecrüben var. Türkiye piyasasını çok iyi bilirsin.\n"
+        "Aşağıdaki veriye dayanarak bu hisse için yatırım tezi yaz. Türkçe.\n"
+        "ASLA sallama, SADECE verideki rakamlara dayan. Gerçekçi, spesifik, kısa ol.\n"
+        f"{'⚠️ DİKKAT: Bu hisse HYPE/SPEKÜLATİF olarak işaretlenmiş — temel zayıf ama fiyat uçuyor.' if is_hype else ''}\n\n"
+        f"{ctx}\n\n"
+        "Şu formatta yaz (her satır ayrı, başka HİÇBİR ŞEY yazma):\n"
+        f"GİRİŞ: {entry} — bu ne anlama geliyor? 1 cümle açıkla.\n"
+        "TEZ: 1 spesifik cümle — NEDEN bu karar? (rakam kullan)\n"
+        "RİSK: 1 spesifik cümle — en büyük risk? (rakam kullan)\n"
+        "ZAMANLAMA: 1 cümle — giriş zamanı uygun mu, ne beklemeli?\n"
+        "TÜRKİYE: 1 cümle — Türkiye piyasası bağlamında özel not (döviz, enflasyon, sektör)\n"
+    )

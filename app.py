@@ -35,11 +35,13 @@ from config import (
 )
 from utils.helpers import normalize_symbol, base_ticker, clean_for_json
 from utils.market_status import get_market_status, is_scan_worthwhile
-from ai.engine import AI_AVAILABLE, AI_PROVIDERS, ai_call, build_rich_context, ai_trader_summary
-from ai.prompts import (
-    hero_prompt, parse_hero_response,
-    briefing_prompt, macro_commentary_prompt, cross_commentary_prompt,
-    agent_prompt, SOCIAL_PROMPT, clean_json_response,
+from ai.engine import AI_AVAILABLE, AI_PROVIDERS
+from ai.prompts import build_rich_context
+from ai.service import (
+    generate_trader_summary, generate_hero_story,
+    generate_briefing, generate_macro_commentary,
+    generate_cross_commentary, generate_agent_answer,
+    generate_social_sentiment,
 )
 from engine.analysis import analyze_symbol
 from engine.technical import (
@@ -103,7 +105,7 @@ async def _background_scanner():
                 def _ai_enrich_fn(ranked):
                     if not AI_AVAILABLE: return
                     for r in ranked[:5]:
-                        try: tech = tech_cache.get(r.get("symbol", "")); ai_trader_summary(r, tech)
+                        try: tech = tech_cache.get(r.get("symbol", "")); generate_trader_summary(r, tech)
                         except Exception: pass
                 await asyncio.to_thread(scan_coordinator.start_scan, UNIVERSE, _analyze_fn, _history_fn, _cross_fn, _ai_enrich_fn)
                 heatmap_cache.clear()
@@ -182,7 +184,7 @@ async def api_ai_summary(request: Request, ticker: str):
     try:
         r = await asyncio.to_thread(analyze_symbol, symbol)
         tech = await asyncio.to_thread(compute_technical, symbol)
-        text = await asyncio.to_thread(ai_trader_summary, r, tech)
+        text = await asyncio.to_thread(generate_trader_summary, r, tech)
         return success({"ticker": base_ticker(ticker), "summary": text or "AI özet oluşturulamadı"})
     except Exception as e:
         log.warning(f"ai-summary {ticker}: {e}"); return error("AI özet alınamadı", status_code=500)
@@ -223,8 +225,7 @@ async def api_cross():
         ai_commentary = None
         if AI_AVAILABLE and new_signals:
             try:
-                prompt = cross_commentary_prompt(new_signals, bullish, bearish)
-                ai_commentary = await asyncio.to_thread(ai_call, prompt, 250)
+                ai_commentary = await asyncio.to_thread(generate_cross_commentary, new_signals, bullish, bearish)
             except Exception as e: log.debug(f"cross AI: {e}")
         return success({"signals": new_signals, "ai_commentary": ai_commentary, "summary": {"total": len(new_signals), "bullish": bullish, "bearish": bearish, "kirilim": kirilim_count, "momentum": momentum_count, "total_stars": total_stars, "vol_confirmed": vol_confirmed, "scanned": len(UNIVERSE)}}, as_of=now_iso())
     except Exception as e:
@@ -284,8 +285,7 @@ async def api_macro_commentary(request: Request):
     try:
         macro_data = macro_cache.get("macro_all")
         if not macro_data or not macro_data.get("items"): return success({"commentary": "Makro veri henüz yüklenmedi.", "generated": False})
-        prompt = macro_commentary_prompt(macro_data["items"])
-        text = await asyncio.to_thread(ai_call, prompt, 300)
+        text = await asyncio.to_thread(generate_macro_commentary, macro_data["items"])
         result = {"commentary": text, "generated": True, "timestamp": now_iso()}
         macro_ai_cache.set("macro_ai", result); return success(result)
     except Exception as e: return success({"commentary": None, "error": str(e)})
@@ -310,8 +310,7 @@ async def _generate_briefing_internal():
     items = get_top10_items()
     if not items: return {"briefing": "Henüz tarama yapılmadı.", "generated": False}
     ctx = build_briefing_context(items, cross_hunter.last_results)
-    prompt = briefing_prompt(ctx)
-    text = await asyncio.to_thread(ai_call, prompt, 400)
+    text = await asyncio.to_thread(generate_briefing, ctx)
     result = {"briefing": text, "generated": True, "timestamp": now_iso()}
     briefing_cache.set("daily_briefing", result)
     hour = dt.datetime.now().hour; period = "sabah" if hour < 12 else "oglen" if hour < 17 else "aksam"
@@ -378,17 +377,9 @@ async def api_social(request: Request):
     check_rate_limit(request, "social")
     cached = social_cache.get("social_sentiment")
     if cached is not None: return success(cached, cache_status="hit")
-    if AI_AVAILABLE and "grok" in AI_PROVIDERS:
-        try:
-            text = await asyncio.to_thread(ai_call, SOCIAL_PROMPT, 500)
-            if text:
-                data = clean_json_response(text)
-                if data:
-                    result = {"timestamp": now_iso(), "source": "grok_ai", "trending": data.get("trending", []), "overall_sentiment": data.get("overall_sentiment", "neutral"), "summary": data.get("summary", ""), "hot_topics": data.get("hot_topics", [])}
-                else:
-                    result = {"timestamp": now_iso(), "source": "grok_ai", "trending": [], "overall_sentiment": "unknown", "summary": text[:500], "hot_topics": []}
-                social_cache.set("social_sentiment", result); return success(result)
-        except Exception as e: log.warning(f"social grok: {e}")
+    result = await asyncio.to_thread(generate_social_sentiment)
+    if result:
+        social_cache.set("social_sentiment", result); return success(result)
     return success({"timestamp": now_iso(), "source": None, "trending": [], "overall_sentiment": "unavailable", "summary": "XAI_API_KEY gerekli.", "hot_topics": [], "error": "XAI_API_KEY gerekli"})
 
 # ================================================================
@@ -460,8 +451,7 @@ async def api_agent(request: Request, q: str = ""):
     try:
         items = get_top10_items()
         context = build_agent_context(items, cross_hunter.last_results, q, build_rich_context)
-        prompt = agent_prompt(context, q)
-        text = await asyncio.to_thread(ai_call, prompt, 300)
+        text = await asyncio.to_thread(generate_agent_answer, context, q)
         result = {"answer": text or "Cevap oluşturulamadı.", "cached": False}
         agent_cache.set(q.strip().lower()[:100], result); return success(result)
     except Exception as e: return success({"answer": f"Hata: {str(e)}", "error": True})
@@ -472,15 +462,7 @@ async def api_hero_summary():
     if cached is not None: return success(cached, cache_status="hit")
     items = get_top10_items(); macro_data = macro_cache.get("macro_all") or {}; cross_data = cross_hunter.last_results or []
     result = build_hero_data(items, macro_data, cross_data)
-    if AI_AVAILABLE and items:
-        try:
-            prompt = hero_prompt(mode_label=result["mode_label"], total=result["stats"]["total"], bullish_count=result["stats"]["bullish"], deger_leaders=result["deger_leaders"], ivme_leaders=result["ivme_leaders"], items=items, macro_items=macro_data.get("items", []), cross_count=len(cross_data))
-            text = await asyncio.to_thread(ai_call, prompt, 300)
-            if text:
-                parsed = parse_hero_response(text)
-                result["story"] = parsed["story"]; result["bot_says"] = parsed["bot_says"]
-                if parsed["ai_reason"] and result["opportunity"]: result["opportunity"]["ai_reason"] = parsed["ai_reason"]
-        except Exception as e: log.warning(f"hero AI: {e}")
+    result = await asyncio.to_thread(generate_hero_story, result, items, macro_data.get("items", []), len(cross_data))
     if not result["story"]:
         t, b, br = result["stats"]["total"], result["stats"]["bullish"], result["stats"]["bearish"]
         result["story"] = f"{t} hisse tarandı. {b} pozitif, {br} zayıf."
