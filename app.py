@@ -53,6 +53,8 @@ from engine.technical import (
     batch_download_history, cross_hunter, CHART_AVAILABLE,
 )
 from data.macro import fetch_all_macro, is_yfinance_available
+from engine.signal_tracker import signal_tracker
+from engine.background_tasks import paper_trade_loop
 
 try:
     import yfinance as yf
@@ -201,8 +203,12 @@ async def lifespan(application: FastAPI):
         f"Restore: {restore_results}"
     )
     task = asyncio.create_task(_background_scanner())
+    paper_task = asyncio.create_task(paper_trade_loop())
+    log.info(f"SignalTracker: {signal_tracker} başlatıldı")
+    log.info("Background tasks başlatıldı: scan_loop | paper_trade_loop")
     yield
     task.cancel()
+    paper_task.cancel()
     redis_client.shutdown()
     log.info(f"{APP_NAME} shutting down")
 
@@ -332,6 +338,17 @@ async def api_cross():
                 ai_commentary = await asyncio.to_thread(ai_call, prompt, 250)
             except Exception as e:
                 log.debug(f"cross AI: {e}")
+        # ── Paper Trade motoru: yeni sinyalleri kaydet ──────────────
+        if new_signals:
+            try:
+                logged = await asyncio.to_thread(
+                    signal_tracker.log_signals, new_signals, "1G"
+                )
+                if logged > 0:
+                    log.info(f"PaperTrade: {logged} yeni sinyal kaydedildi")
+            except Exception as e:
+                log.warning(f"PaperTrade log_signals hatası: {e}")
+
         return success({
             "signals": new_signals, "ai_commentary": ai_commentary,
             "summary": {"total": len(new_signals), "bullish": bullish, "bearish": bearish,
@@ -342,6 +359,37 @@ async def api_cross():
     except Exception as e:
         log.error(f"cross: {e}")
         return error("Cross Hunter hatası", status_code=500)
+
+# ================================================================
+# SIGNALS TRACK RECORD — Paper Trade sonuçları
+# ================================================================
+@app.get("/api/signals/track-record")
+async def api_signals_track_record(days: int = 30):
+    """
+    CrossHunter sinyallerinin gerçek zamanlı Track Record istatistiklerini döndürür.
+
+    Response:
+        period_days    : Kaç günlük veri
+        total          : Toplam sinyal sayısı
+        tp             : Hedef vuran sinyal sayısı
+        sl             : Stop olan sinyal sayısı
+        active         : Hâlâ açık sinyal sayısı
+        win_rate       : Başarı oranı (%) — sadece kapanan pozisyonlar
+        avg_pnl_pct    : Ortalama getiri (%)
+        best_pnl_pct   : En iyi getiri (%)
+        worst_pnl_pct  : En kötü getiri (%)
+        active_signals : Aktif pozisyonların tam listesi
+        recent_closed  : Son 30 kapanan pozisyon
+        by_timeframe   : Zaman dilimine göre breakdown
+        generated_at   : Hesaplama zamanı (UTC ISO)
+    """
+    try:
+        days = max(1, min(365, days))
+        record = await asyncio.to_thread(signal_tracker.get_track_record, days)
+        return success(record, as_of=record["generated_at"])
+    except Exception as e:
+        log.error(f"track-record: {e}")
+        return error("Track Record alınamadı", status_code=500)
 
 # ================================================================
 # HEALTH & STATUS
@@ -895,6 +943,22 @@ _LANDING_HTML = os.path.join(_BASE_DIR, "landing.html")
 @app.get("/apple-touch-icon-precomposed.png")
 async def _suppress_icon():
     return Response(status_code=204)
+
+@app.get("/sitemap.xml")
+async def serve_sitemap():
+    try:
+        with open(os.path.join(_BASE_DIR, "sitemap.xml"), "r") as f:
+            return Response(content=f.read(), media_type="application/xml")
+    except FileNotFoundError:
+        return Response(status_code=404)
+
+@app.get("/robots.txt")
+async def serve_robots():
+    try:
+        with open(os.path.join(_BASE_DIR, "robots.txt"), "r") as f:
+            return Response(content=f.read(), media_type="text/plain")
+    except FileNotFoundError:
+        return Response(status_code=404)
 
 @app.get("/", response_class=HTMLResponse)
 async def serve_landing():

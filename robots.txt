@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+Allow: /terminal
+Disallow: /api/
+
+Sitemap: https://bistbull.ai/sitemap.xml
