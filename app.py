@@ -44,6 +44,7 @@ from ai.service import (
     generate_social_sentiment,
 )
 from engine.analysis import analyze_symbol
+from engine.signal_engine import enrich_signals
 from engine.technical import (
     compute_technical, generate_chart_png,
     batch_download_history, cross_hunter, CHART_AVAILABLE,
@@ -216,18 +217,21 @@ async def api_scan_status(): return success(scan_coordinator.get_progress())
 async def api_cross():
     try:
         new_signals = await asyncio.to_thread(cross_hunter.scan_all)
+        new_signals = enrich_signals(new_signals, analysis_cache)
         bullish = sum(1 for s in new_signals if s.get("signal_type") == "bullish")
         bearish = sum(1 for s in new_signals if s.get("signal_type") == "bearish")
         total_stars = sum(s.get("stars", 1) for s in new_signals)
         vol_confirmed = sum(1 for s in new_signals if s.get("vol_confirmed"))
         kirilim_count = sum(1 for s in new_signals if s.get("category") == "kirilim")
         momentum_count = sum(1 for s in new_signals if s.get("category") == "momentum")
+        quality_a = sum(1 for s in new_signals if s.get("signal_quality") == "A")
+        quality_b = sum(1 for s in new_signals if s.get("signal_quality") == "B")
         ai_commentary = None
         if AI_AVAILABLE and new_signals:
             try:
                 ai_commentary = await asyncio.to_thread(generate_cross_commentary, new_signals, bullish, bearish)
             except Exception as e: log.debug(f"cross AI: {e}")
-        return success({"signals": new_signals, "ai_commentary": ai_commentary, "summary": {"total": len(new_signals), "bullish": bullish, "bearish": bearish, "kirilim": kirilim_count, "momentum": momentum_count, "total_stars": total_stars, "vol_confirmed": vol_confirmed, "scanned": len(UNIVERSE)}}, as_of=now_iso())
+        return success({"signals": new_signals, "ai_commentary": ai_commentary, "summary": {"total": len(new_signals), "bullish": bullish, "bearish": bearish, "kirilim": kirilim_count, "momentum": momentum_count, "total_stars": total_stars, "vol_confirmed": vol_confirmed, "quality_a": quality_a, "quality_b": quality_b, "scanned": len(UNIVERSE)}}, as_of=now_iso())
     except Exception as e:
         log.error(f"cross: {e}"); return error("Cross Hunter hatası", status_code=500)
 
