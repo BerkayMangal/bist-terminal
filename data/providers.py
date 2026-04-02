@@ -472,6 +472,7 @@ def compute_metrics_v9(symbol: str) -> dict:
         "asset_turnover": asset_to, "asset_turnover_prev": asset_to_p,
         "inst_holders_pct": foreign_ratio, "foreign_ratio": foreign_ratio,
         "free_float": _safe_num(fast.get("free_float")),
+        "ciro_pd": (revenue / market_cap) if revenue is not None and market_cap not in (None, 0) else None,
         "data_source": "borsapy",
     }
 

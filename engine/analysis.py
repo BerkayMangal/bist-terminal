@@ -16,6 +16,7 @@ import pandas as pd
 from utils.helpers import safe_num, pick_row_pair, growth, base_ticker
 from core.cache import raw_cache, analysis_cache
 from config import UNIVERSE
+from engine.metrics import normalize_metrics, compute_score_coverage, confidence_penalty_for_imputed_scores
 
 log = logging.getLogger("bistbull.analysis")
 
@@ -315,7 +316,8 @@ def compute_metrics(symbol: str) -> dict:
 # ================================================================
 def analyze_symbol(symbol: str) -> dict:
     """Full analysis: metrics → 7-dim scoring → risk → ivme → labels → decision.
-    V10: applicability_flags eklendi."""
+    V10: applicability_flags eklendi.
+    V10.1: score_coverage + imputation tracking + confidence penalty."""
     cached = analysis_cache.get(symbol)
     if cached is not None:
         return cached
@@ -332,7 +334,7 @@ def analyze_symbol(symbol: str) -> dict:
     from engine.technical import compute_technical
     from engine.applicability import build_applicability_flags
 
-    m = compute_metrics(symbol)
+    m = normalize_metrics(compute_metrics(symbol))
     sector_group = map_sector(m.get("sector", ""))
 
     tech = None
@@ -341,16 +343,32 @@ def analyze_symbol(symbol: str) -> dict:
     except Exception as e:
         log.debug(f"analyze_symbol tech for {symbol}: {e}")
 
-    # 7 boyut FA
-    scores: dict[str, float] = {
-        "value": round(score_value(m, sector_group) or 50, 1),
-        "quality": round(score_quality(m, sector_group) or 50, 1),
-        "growth": round(score_growth(m, sector_group) or 50, 1),
-        "balance": round(score_balance(m, sector_group) or 50, 1),
-        "earnings": round(score_earnings(m) or 50, 1),
-        "moat": round(score_moat(m) or 50, 1),
-        "capital": round(score_capital(m) or 50, 1),
+    # 7 boyut FA — compute raw scores (may be None)
+    _IMPUTE_DEFAULT = 50
+    _raw_fa = {
+        "value": score_value(m, sector_group),
+        "quality": score_quality(m, sector_group),
+        "growth": score_growth(m, sector_group),
+        "balance": score_balance(m, sector_group),
+        "earnings": score_earnings(m),
+        "moat": score_moat(m),
+        "capital": score_capital(m),
     }
+
+    # Track which dimensions were imputed (raw score was None)
+    scores_imputed: list[str] = [k for k, v in _raw_fa.items() if v is None]
+
+    # Apply imputation: None → 50 (backward compatible default)
+    scores: dict[str, float] = {
+        k: round(v if v is not None else _IMPUTE_DEFAULT, 1)
+        for k, v in _raw_fa.items()
+    }
+
+    if scores_imputed:
+        log.debug(
+            f"{symbol}: {len(scores_imputed)} FA dimension(s) imputed to {_IMPUTE_DEFAULT}: "
+            f"{', '.join(scores_imputed)}"
+        )
 
     fa_pure = compute_fa_pure(scores)
     risk_penalty, risk_reasons = compute_risk_penalties(m, sector_group)
@@ -390,7 +408,12 @@ def analyze_symbol(symbol: str) -> dict:
         e_label = "SPEKÜLATİF"
     decision = decision_engine(fa_pure, ivme_score, risk_penalty, e_label)
 
+    # Confidence — base score minus penalty for imputed dimensions
     confidence = confidence_score(m)
+    if scores_imputed:
+        imputation_penalty = confidence_penalty_for_imputed_scores(scores_imputed)
+        confidence = round(max(0, confidence - imputation_penalty), 1)
+
     style = style_label(scores)
     legends = legendary_labels(m, scores)
     pos, neg = drivers(scores, confidence, m, sector_group)
@@ -398,8 +421,14 @@ def analyze_symbol(symbol: str) -> dict:
     if is_hype and hype_reason:
         neg.insert(0, f"⚠️ HYPE: {hype_reason}")
 
+    if scores_imputed:
+        neg.append(f"Veri eksik: {', '.join(scores_imputed)} boyutları tahmini")
+
     # V10: Applicability flags
     applicability_flags = build_applicability_flags(sector_group)
+
+    # Score coverage — tracks data completeness per dimension
+    score_coverage = compute_score_coverage(m)
 
     r = {
         "symbol": symbol, "ticker": base_ticker(symbol), "name": m["name"], "currency": m["currency"],
@@ -411,6 +440,8 @@ def analyze_symbol(symbol: str) -> dict:
         "risk_penalty": risk_penalty, "risk_reasons": risk_reasons,
         "style": style, "legendary": legends, "positives": pos, "negatives": neg,
         "applicability": applicability_flags,
+        "scores_imputed": scores_imputed,
+        "score_coverage": score_coverage,
     }
 
     # V11 Enrichment — mevcut alanları bozmadan v11 block ekler
