@@ -82,6 +82,14 @@ _daily_changes: dict[str, dict] = {}
 
 async def _background_scanner():
     await asyncio.sleep(BACKGROUND_SCAN_STARTUP_DELAY)
+    # Pre-warm macro cache so first user request is instant
+    try:
+        results = await asyncio.to_thread(fetch_all_macro)
+        if results:
+            macro_cache.set("macro_all", {"timestamp": now_iso(), "items": clean_for_json(results), "rates": clean_for_json(STATIC_RATES)})
+            log.info(f"Macro pre-warmed: {len(results)} items cached")
+    except Exception as e:
+        log.debug(f"Macro pre-warm skipped: {e}")
     while True:
         try:
             has_data = bool(get_top10_items())
@@ -108,7 +116,7 @@ async def _background_scanner():
                 def _cross_fn(hmap): cross_hunter.scan_all(hmap)
                 def _ai_enrich_fn(ranked):
                     if not AI_AVAILABLE: return
-                    for r in ranked[:5]:
+                    for r in ranked[:3]:
                         try: tech = tech_cache.get(r.get("symbol", "")); generate_trader_summary(r, tech)
                         except Exception: pass
                 await asyncio.to_thread(scan_coordinator.start_scan, UNIVERSE, _analyze_fn, _history_fn, _cross_fn, _ai_enrich_fn)
@@ -502,7 +510,7 @@ async def api_watchlist_add(request: Request):
         body = await request.json()
         symbol = body.get("symbol", "")
     except Exception:
-        return error("Gecersiz istek", status_code=400)
+        return error("Geçersiz istek", status_code=400)
     if not symbol:
         return error("symbol alani gerekli", status_code=400)
     result = wl_add(uid, symbol)
@@ -527,7 +535,7 @@ async def api_alerts_refresh(request: Request):
     uid = _user_id(request)
     symbols = wl_symbols(uid)
     if not symbols:
-        return success({"alerts": [], "count": 0, "message": "Watchlist bos"})
+        return success({"alerts": [], "count": 0, "message": "Watchlist boş"})
     cross_sigs = enrich_signals(cross_hunter.last_results or [], analysis_cache)
     new_alerts = await asyncio.to_thread(generate_watchlist_alerts, uid, symbols, analysis_cache, cross_sigs)
     return success({"new_alerts": new_alerts, "new_count": len(new_alerts)})
