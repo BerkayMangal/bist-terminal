@@ -1,7 +1,8 @@
 # ================================================================
-# BISTBULL TERMINAL V9.1 — ANALYSIS ENGINE
+# BISTBULL TERMINAL V10.0 — ANALYSIS ENGINE
 # compute_metrics, Piotroski, Altman, Beneish, analyze_symbol
 # yfinance + borsapy unified data path.
+# V9.1 birebir korunmuş + V10 applicability flags eklendi.
 # ================================================================
 
 from __future__ import annotations
@@ -12,11 +13,13 @@ from typing import Optional, Any
 
 import pandas as pd
 
-from helpers import safe_num, pick_row_pair, growth, base_ticker
-from cache import raw_cache, analysis_cache
+from utils.helpers import safe_num, pick_row_pair, growth, base_ticker
+from core.cache import raw_cache, analysis_cache
 from config import UNIVERSE
+from engine.metrics import normalize_metrics, compute_score_coverage, confidence_penalty_for_imputed_scores
+from engine.explainability import build_explanation
 
-log = logging.getLogger("bistbull")
+log = logging.getLogger("bistbull.analysis")
 
 # ================================================================
 # OPTIONAL IMPORTS
@@ -27,10 +30,11 @@ try:
     yf.set_tz_cache_location("/tmp/yf-cache")
     YF_AVAILABLE = True
 except ImportError:
+    yf = None  # type: ignore
     YF_AVAILABLE = False
 
 try:
-    from data_layer_v9 import fetch_raw_v9, compute_metrics_v9, BORSAPY_AVAILABLE
+    from data.providers import fetch_raw_v9, compute_metrics_v9, BORSAPY_AVAILABLE
 except ImportError:
     BORSAPY_AVAILABLE = False
     fetch_raw_v9 = None  # type: ignore
@@ -264,6 +268,17 @@ def compute_metrics(symbol: str) -> dict:
     asset_to_p = (revenue_prev / total_assets_prev) if revenue_prev is not None and total_assets_prev not in (None, 0) else None
     inst_holders_pct = safe_num(info.get("heldPercentInstitutions"))
 
+    # Data quality diagnostics
+    has_fin = fin is not None and hasattr(fin, 'empty') and not fin.empty
+    has_bal = bal is not None and hasattr(bal, 'empty') and not bal.empty
+    has_cf = cf is not None and hasattr(cf, 'empty') and not cf.empty
+    stmt_count = sum([has_fin, has_bal, has_cf])
+    if stmt_count == 0:
+        log.warning(f"DATA QUALITY [{base_ticker(symbol)}]: No financial statements via yfinance — using info-dict only")
+    elif stmt_count < 3:
+        missing = [s for s, ok in [("income", has_fin), ("balance", has_bal), ("cashflow", has_cf)] if not ok]
+        log.info(f"DATA QUALITY [{base_ticker(symbol)}]: yfinance missing {', '.join(missing)}")
+
     m = {
         "symbol": symbol, "ticker": base_ticker(symbol),
         "name": str(info.get("shortName") or info.get("longName") or symbol),
@@ -299,7 +314,9 @@ def compute_metrics(symbol: str) -> dict:
         "peg": peg, "graham_fv": graham_fv, "margin_safety": mos,
         "share_change": share_ch, "asset_turnover": asset_to, "asset_turnover_prev": asset_to_p,
         "inst_holders_pct": inst_holders_pct,
+        "ciro_pd": (revenue / market_cap) if revenue is not None and market_cap not in (None, 0) else None,
         "data_source": "yfinance",
+        "data_quality": {"income_stmt": has_fin, "balance_sheet": has_bal, "cashflow": has_cf, "fast_info": bool(price)},
     }
     m["piotroski_f"] = compute_piotroski(m)
     m["altman_z"] = compute_altman(m)
@@ -308,15 +325,17 @@ def compute_metrics(symbol: str) -> dict:
 
 
 # ================================================================
-# ANALYZE SYMBOL — Full pipeline
+# ANALYZE SYMBOL — Full pipeline + V10 applicability
 # ================================================================
 def analyze_symbol(symbol: str) -> dict:
-    """Full analysis: metrics → 7-dim scoring → risk → ivme → labels → decision."""
+    """Full analysis: metrics → 7-dim scoring → risk → ivme → labels → decision.
+    V10: applicability_flags eklendi.
+    V10.1: score_coverage + imputation tracking + confidence penalty."""
     cached = analysis_cache.get(symbol)
     if cached is not None:
         return cached
 
-    from scoring import (
+    from engine.scoring import (
         map_sector, score_value, score_quality, score_growth,
         score_balance, score_earnings, score_moat, score_capital,
         score_momentum, score_technical_break, score_institutional_flow,
@@ -325,9 +344,10 @@ def analyze_symbol(symbol: str) -> dict:
         timing_label, quality_label, entry_quality_label,
         decision_engine, style_label, legendary_labels, drivers,
     )
-    from technical import compute_technical
+    from engine.technical import compute_technical
+    from engine.applicability import build_applicability_flags
 
-    m = compute_metrics(symbol)
+    m = normalize_metrics(compute_metrics(symbol))
     sector_group = map_sector(m.get("sector", ""))
 
     tech = None
@@ -336,16 +356,32 @@ def analyze_symbol(symbol: str) -> dict:
     except Exception as e:
         log.debug(f"analyze_symbol tech for {symbol}: {e}")
 
-    # 7 boyut FA
-    scores: dict[str, float] = {
-        "value": round(score_value(m, sector_group) or 50, 1),
-        "quality": round(score_quality(m, sector_group) or 50, 1),
-        "growth": round(score_growth(m, sector_group) or 50, 1),
-        "balance": round(score_balance(m, sector_group) or 50, 1),
-        "earnings": round(score_earnings(m) or 50, 1),
-        "moat": round(score_moat(m) or 50, 1),
-        "capital": round(score_capital(m) or 50, 1),
+    # 7 boyut FA — compute raw scores (may be None)
+    _IMPUTE_DEFAULT = 50
+    _raw_fa = {
+        "value": score_value(m, sector_group),
+        "quality": score_quality(m, sector_group),
+        "growth": score_growth(m, sector_group),
+        "balance": score_balance(m, sector_group),
+        "earnings": score_earnings(m),
+        "moat": score_moat(m),
+        "capital": score_capital(m),
     }
+
+    # Track which dimensions were imputed (raw score was None)
+    scores_imputed: list[str] = [k for k, v in _raw_fa.items() if v is None]
+
+    # Apply imputation: None → 50 (backward compatible default)
+    scores: dict[str, float] = {
+        k: round(v if v is not None else _IMPUTE_DEFAULT, 1)
+        for k, v in _raw_fa.items()
+    }
+
+    if scores_imputed:
+        log.debug(
+            f"{symbol}: {len(scores_imputed)} FA dimension(s) imputed to {_IMPUTE_DEFAULT}: "
+            f"{', '.join(scores_imputed)}"
+        )
 
     fa_pure = compute_fa_pure(scores)
     risk_penalty, risk_reasons = compute_risk_penalties(m, sector_group)
@@ -385,13 +421,27 @@ def analyze_symbol(symbol: str) -> dict:
         e_label = "SPEKÜLATİF"
     decision = decision_engine(fa_pure, ivme_score, risk_penalty, e_label)
 
+    # Confidence — base score minus penalty for imputed dimensions
     confidence = confidence_score(m)
+    if scores_imputed:
+        imputation_penalty = confidence_penalty_for_imputed_scores(scores_imputed)
+        confidence = round(max(0, confidence - imputation_penalty), 1)
+
     style = style_label(scores)
     legends = legendary_labels(m, scores)
     pos, neg = drivers(scores, confidence, m, sector_group)
 
     if is_hype and hype_reason:
         neg.insert(0, f"⚠️ HYPE: {hype_reason}")
+
+    if scores_imputed:
+        neg.append(f"Veri eksik: {', '.join(scores_imputed)} boyutları tahmini")
+
+    # V10: Applicability flags
+    applicability_flags = build_applicability_flags(sector_group)
+
+    # Score coverage — tracks data completeness per dimension
+    score_coverage = compute_score_coverage(m)
 
     r = {
         "symbol": symbol, "ticker": base_ticker(symbol), "name": m["name"], "currency": m["currency"],
@@ -402,6 +452,27 @@ def analyze_symbol(symbol: str) -> dict:
         "timing": t_label, "quality_tag": q_label, "decision": decision,
         "risk_penalty": risk_penalty, "risk_reasons": risk_reasons,
         "style": style, "legendary": legends, "positives": pos, "negatives": neg,
+        "applicability": applicability_flags,
+        "scores_imputed": scores_imputed,
+        "score_coverage": score_coverage,
     }
+
+    # Explainability — structured scoring explanation (never blocks analysis)
+    try:
+        r["explanation"] = build_explanation(r)
+    except Exception as e:
+        log.warning(f"Explainability skipped for {symbol}: {e}")
+        r["explanation"] = None
+
+    # V11 Enrichment — mevcut alanları bozmadan v11 block ekler
+    try:
+        from engine.scoring_v11 import enrich_analysis_v11, enrich_with_tech_v11
+        from engine.labels import compute_all_labels
+        r = enrich_analysis_v11(r)
+        r = enrich_with_tech_v11(r, tech)
+        r["v11_labels"] = compute_all_labels(r, tech)
+    except Exception as e:
+        log.debug(f"V11 enrichment skipped for {symbol}: {e}")
+
     analysis_cache.set(symbol, r)
     return r

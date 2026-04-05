@@ -1,6 +1,7 @@
 # ================================================================
-# BISTBULL TERMINAL V9.1 — HELPERS
+# BISTBULL TERMINAL V10.0 — HELPERS
 # Saf yardımcı fonksiyonlar. Side-effect SIFIR.
+# V9.1'in helpers.py'si birebir korunmuş + V10 eklemeleri.
 # ================================================================
 
 from __future__ import annotations
@@ -170,3 +171,36 @@ def clean_for_json(obj: Any) -> Any:
     if isinstance(obj, dt.datetime):
         return obj.isoformat()
     return obj
+
+
+# ================================================================
+# V10 EKLEMELERİ
+# ================================================================
+def is_stale_date(date_str: Optional[str], max_days: int = 14) -> bool:
+    """
+    Bir tarih string'inin kaç gün eski olduğunu kontrol et.
+    STATIC_RATES gibi manuel güncellenen verilerin yaşını ölçmek için.
+    True = stale (max_days'den eski), False = taze.
+    """
+    if not date_str:
+        return True
+    try:
+        d = dt.datetime.strptime(date_str, "%Y-%m-%d").date()
+        age = (dt.date.today() - d).days
+        return age > max_days
+    except (ValueError, TypeError):
+        return True
+
+
+def clamp(value: float, min_val: float, max_val: float) -> float:
+    """Değeri min-max aralığına sıkıştır."""
+    return max(min_val, min(max_val, value))
+
+
+def safe_divide(numerator: Any, denominator: Any, default: Optional[float] = None) -> Optional[float]:
+    """Güvenli bölme. 0'a bölme veya None → default."""
+    n = safe_num(numerator)
+    d = safe_num(denominator)
+    if n is None or d is None or d == 0:
+        return default
+    return n / d

@@ -1,7 +1,8 @@
 # ================================================================
-# BISTBULL TERMINAL V9.1 — SCORING ENGINE
+# BISTBULL TERMINAL V10.0 — SCORING ENGINE
 # 7-boyut FA + 3-boyut İvme + Risk + Label + Decision
 # Saf fonksiyonlar. Cache/IO SIFIR.
+# V9.1 birebir korunmuş — sadece import path'ler güncellendi.
 # ================================================================
 
 from __future__ import annotations
@@ -23,7 +24,7 @@ from config import (
     HYPE_STRICT_PCT, HYPE_STRICT_VOL, HYPE_STRICT_FA,
     HYPE_SOFT_PCT, HYPE_SOFT_VOL, HYPE_SOFT_FA,
 )
-from helpers import safe_num, avg, score_higher, score_lower, fmt_num, fmt_pct
+from utils.helpers import safe_num, avg, score_higher, score_lower, fmt_num, fmt_pct
 
 
 # ================================================================

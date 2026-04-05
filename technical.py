@@ -1,7 +1,11 @@
 # ================================================================
-# BISTBULL TERMINAL V9.1 — TECHNICAL ANALYSIS
+# BISTBULL TERMINAL V10.0 — TECHNICAL ANALYSIS
 # compute_technical, Ichimoku, VCP, Rectangle, Pivot levels,
 # CrossHunter sınıfı, Chart generator (memory-leak fixed)
+# V9.1 birebir korunmuş — sadece import path'ler güncellendi.
+#
+# V10.0-FIX2: batch_download_history artık 25'lik chunk'larla
+# indiriyor. TradingView 429 rate limit'ini önler.
 # ================================================================
 
 from __future__ import annotations
@@ -9,6 +13,7 @@ from __future__ import annotations
 import io
 import os
 import time
+import random
 import logging
 from typing import Optional, Any
 from collections import defaultdict
@@ -17,11 +22,11 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import numpy as np
 import pandas as pd
 
-from helpers import safe_num, normalize_symbol, base_ticker
-from cache import tech_cache, history_cache
+from utils.helpers import safe_num, normalize_symbol, base_ticker
+from core.cache import tech_cache, history_cache
 from config import UNIVERSE
 
-log = logging.getLogger("bistbull")
+log = logging.getLogger("bistbull.technical")
 
 # ================================================================
 # OPTIONAL IMPORTS
@@ -32,6 +37,7 @@ try:
     yf.set_tz_cache_location("/tmp/yf-cache")
     YF_AVAILABLE = True
 except ImportError:
+    yf = None  # type: ignore
     YF_AVAILABLE = False
 
 try:
@@ -41,56 +47,70 @@ try:
     import matplotlib.dates as mdates
     CHART_AVAILABLE = True
 except ImportError:
+    plt = None  # type: ignore
+    mdates = None  # type: ignore
     CHART_AVAILABLE = False
 
 try:
     import borsapy as bp
     BORSAPY_AVAILABLE_TECH = True
 except ImportError:
+    bp = None  # type: ignore
     BORSAPY_AVAILABLE_TECH = False
+
+# ================================================================
+# BATCH DOWNLOAD CONFIG
+# ================================================================
+BATCH_CHUNK_SIZE = 25
+BATCH_CHUNK_DELAY_MIN = 1.5
+BATCH_CHUNK_DELAY_MAX = 3.0
+BATCH_MAX_RETRIES = 2
 
 
 # ================================================================
-# BATCH HISTORY DOWNLOAD
+# BATCH HISTORY DOWNLOAD — Chunked to avoid TradingView 429
 # ================================================================
 def batch_download_history(
     symbols: list[str],
     period: str = "1y",
     interval: str = "1d",
 ) -> dict[str, pd.DataFrame]:
-    """Batch price history — yfinance (tek call) → borsapy fallback."""
+    """
+    Batch price history — yfinance (chunk'lı) → borsapy fallback.
+
+    V10 FIX: 108 sembolü tek seferde indirmek TradingView'dan 429 alıyordu.
+    Şimdi 25'lik chunk'larla indiriyoruz, aralara jittered delay koyuyoruz.
+    Her chunk başarısız olursa 1 kere retry yapıyor.
+    """
     if YF_AVAILABLE:
         result: dict[str, pd.DataFrame] = {}
-        try:
-            if not symbols:
-                return result
-            df = yf.download(
-                symbols, period=period, interval=interval,
-                group_by="ticker", progress=False, threads=True,
+
+        if not symbols:
+            return result
+
+        # Semboller 25'lik chunk'lara bölünür
+        chunks = [symbols[i:i + BATCH_CHUNK_SIZE] for i in range(0, len(symbols), BATCH_CHUNK_SIZE)]
+        total_chunks = len(chunks)
+
+        for chunk_idx, chunk in enumerate(chunks):
+            chunk_result = _download_chunk(chunk, period, interval)
+            result.update(chunk_result)
+
+            # Son chunk değilse delay koy — TradingView rate limit'ini önle
+            if chunk_idx < total_chunks - 1:
+                delay = random.uniform(BATCH_CHUNK_DELAY_MIN, BATCH_CHUNK_DELAY_MAX)
+                time.sleep(delay)
+
+        if result:
+            log.info(
+                f"batch_download (yfinance chunked): {len(result)}/{len(symbols)} başarılı "
+                f"({total_chunks} chunk)",
             )
-            if df is not None and not df.empty:
-                for sym in symbols:
-                    try:
-                        if len(symbols) == 1:
-                            ticker_df = df
-                        else:
-                            if sym in df.columns.get_level_values(0):
-                                ticker_df = df[sym].dropna(how="all")
-                            else:
-                                continue
-                        if ticker_df is not None and not ticker_df.empty and len(ticker_df) >= 20:
-                            result[sym] = ticker_df
-                    except Exception:
-                        continue
-                if result:
-                    log.info(f"batch_download (yfinance): {len(result)}/{len(symbols)} başarılı")
-                    return result
-        except Exception as e:
-            log.warning(f"batch_download yfinance failed: {e}")
+            return result
 
     # borsapy fallback
     if BORSAPY_AVAILABLE_TECH:
-        from data_layer_v9 import batch_download_history_v9
+        from data.providers import batch_download_history_v9
         result = batch_download_history_v9(symbols, period=period, interval=interval)
         if result:
             log.info(f"batch_download (borsapy fallback): {len(result)}/{len(symbols)} başarılı")
@@ -98,6 +118,45 @@ def batch_download_history(
 
     log.warning("batch_download: both yfinance and borsapy failed")
     return {}
+
+
+def _download_chunk(
+    chunk: list[str],
+    period: str,
+    interval: str,
+    retry: int = 0,
+) -> dict[str, pd.DataFrame]:
+    """Tek bir chunk'ı indir. Başarısız olursa retry."""
+    result: dict[str, pd.DataFrame] = {}
+    try:
+        df = yf.download(
+            chunk, period=period, interval=interval,
+            group_by="ticker", progress=False, threads=True,
+        )
+        if df is not None and not df.empty:
+            for sym in chunk:
+                try:
+                    if len(chunk) == 1:
+                        ticker_df = df
+                    else:
+                        if sym in df.columns.get_level_values(0):
+                            ticker_df = df[sym].dropna(how="all")
+                        else:
+                            continue
+                    if ticker_df is not None and not ticker_df.empty and len(ticker_df) >= 20:
+                        result[sym] = ticker_df
+                except Exception:
+                    continue
+    except Exception as e:
+        if retry < BATCH_MAX_RETRIES:
+            delay = random.uniform(3.0, 6.0)
+            log.info(f"batch chunk retry {retry + 1}/{BATCH_MAX_RETRIES} after {delay:.1f}s ({len(chunk)} symbols)")
+            time.sleep(delay)
+            return _download_chunk(chunk, period, interval, retry + 1)
+        else:
+            log.warning(f"batch chunk failed after {BATCH_MAX_RETRIES} retries: {e}")
+
+    return result
 
 
 # ================================================================
@@ -112,7 +171,6 @@ def compute_technical(
     if cached is not None:
         return cached
     try:
-        # Veri kaynağı: parametre → cache → fetch
         df = None
         if hist_df is not None and len(hist_df) >= 50:
             df = hist_df
@@ -433,7 +491,6 @@ class CrossHunter:
         new_signals: list[dict] = []
         all_signals: dict[str, set] = {}
 
-        # History'yi indir VEYA dışarıdan al (duplicate download fix)
         symbols = [normalize_symbol(t) for t in UNIVERSE]
         if history_map is None:
             history_map = batch_download_history(symbols, period="1y", interval="1d")
@@ -646,6 +703,5 @@ def generate_chart_png(symbol: str, tech_data: Optional[dict] = None) -> Optiona
         log.warning(f"Chart {symbol}: {e}")
         return None
     finally:
-        # B6 FIX: her durumda plt.close çağır
         if fig is not None:
             plt.close(fig)

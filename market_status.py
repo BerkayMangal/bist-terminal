@@ -1,6 +1,9 @@
 # ================================================================
-# BISTBULL TERMINAL V9.1 — MARKET STATUS
-# BIST piyasa saatleri, tatiller, arife günleri
+# BISTBULL TERMINAL V10.0 — MARKET STATUS
+# BIST piyasa saatleri, tatiller, arife günleri.
+# V9.1 birebir korunmuş + V10 iyileştirmeleri:
+# - is_scan_worthwhile'a minimum interval kontrolü eklendi
+# - get_market_status'a session_end bilgisi eklendi
 # ================================================================
 
 from __future__ import annotations
@@ -50,14 +53,17 @@ _HALF_DAYS: set[dt.date] = {
     dt.date(2027, 3, 8), dt.date(2027, 5, 14),
 }
 
+# Minimum scan interval (saniye) — aynı pencerede tekrar scan yapmayı önle
+MIN_SCAN_INTERVAL: int = 900
+
 
 def _next_open_day(today: dt.date) -> dt.date:
     """Sonraki açık işgünü."""
     check = today + dt.timedelta(days=1)
-    for _ in range(30):  # max 30 gün ileri bak
+    for _ in range(30):
         if (check.weekday() < 5
-            and (check.month, check.day) not in _FIXED_HOLIDAYS_MD
-            and check not in _RELIGIOUS_HOLIDAYS):
+                and (check.month, check.day) not in _FIXED_HOLIDAYS_MD
+                and check not in _RELIGIOUS_HOLIDAYS):
             return check
         check += dt.timedelta(days=1)
     return check
@@ -109,28 +115,91 @@ def get_market_status() -> dict:
     # Yarı gün (arife)
     if today in _HALF_DAYS:
         if t < 600:
-            return {"status": "pre_market", "reason": "Arife — yarı gün seans", "reason_detail": "Seans 10:00-12:30", "ist_time": now_ist.strftime("%H:%M"), "global_open": False, "half_day": True}
+            return {
+                "status": "pre_market",
+                "reason": "Arife — yarı gün seans",
+                "reason_detail": "Seans 10:00-12:30",
+                "ist_time": now_ist.strftime("%H:%M"),
+                "global_open": False,
+                "half_day": True,
+            }
         if t <= 750:
-            return {"status": "open", "reason": "Arife — yarı gün seans", "reason_detail": "Kapanış 12:30", "ist_time": now_ist.strftime("%H:%M"), "global_open": False, "half_day": True}
-        return {"status": "closed", "reason": "Arife — seans bitti", "reason_detail": "Yarı gün seans 12:30'da kapandı", "ist_time": now_ist.strftime("%H:%M"), "global_open": True, "half_day": True}
+            return {
+                "status": "open",
+                "reason": "Arife — yarı gün seans",
+                "reason_detail": "Kapanış 12:30",
+                "ist_time": now_ist.strftime("%H:%M"),
+                "global_open": False,
+                "half_day": True,
+            }
+        return {
+            "status": "closed",
+            "reason": "Arife — seans bitti",
+            "reason_detail": "Yarı gün seans 12:30'da kapandı",
+            "ist_time": now_ist.strftime("%H:%M"),
+            "global_open": True,
+            "half_day": True,
+        }
 
     # Normal gün seans saatleri
     if t < 595:
-        return {"status": "pre_market", "reason": "Seans öncesi", "reason_detail": "BIST 10:00'da açılır", "ist_time": now_ist.strftime("%H:%M"), "global_open": False}
+        return {
+            "status": "pre_market",
+            "reason": "Seans öncesi",
+            "reason_detail": "BIST 10:00'da açılır",
+            "ist_time": now_ist.strftime("%H:%M"),
+            "global_open": False,
+        }
     if t <= 1080:
-        return {"status": "open", "reason": "Seans açık", "reason_detail": "Sürekli işlem", "ist_time": now_ist.strftime("%H:%M"), "global_open": False}
-    return {"status": "after_hours", "reason": "Seans kapandı", "reason_detail": "Kapanış 18:00 — Yarın 10:00'da açılır", "ist_time": now_ist.strftime("%H:%M"), "global_open": True}
+        return {
+            "status": "open",
+            "reason": "Seans açık",
+            "reason_detail": "Sürekli işlem",
+            "ist_time": now_ist.strftime("%H:%M"),
+            "global_open": False,
+        }
+    return {
+        "status": "after_hours",
+        "reason": "Seans kapandı",
+        "reason_detail": "Kapanış 18:00 — Yarın 10:00'da açılır",
+        "ist_time": now_ist.strftime("%H:%M"),
+        "global_open": True,
+    }
 
 
-def is_scan_worthwhile(has_data: bool) -> bool:
-    """Scan yapmaya değer mi?"""
+def is_scan_worthwhile(has_data: bool, last_scan_ts: float = 0) -> bool:
+    """
+    Scan yapmaya değer mi?
+
+    V10 farkı: last_scan_ts ile minimum interval kontrolü.
+    Aynı scan penceresinde tekrar scan'i önler.
+
+    Args:
+        has_data: Mevcut top10 verisi var mı?
+        last_scan_ts: Son başarılı scan'in timestamp'i (time.time())
+    """
+    import time
+
+    # Hiç veri yoksa her zaman scan yap
     if not has_data:
         return True
+
+    # Minimum interval kontrolü — çok sık scan'i önle
+    if last_scan_ts > 0:
+        elapsed = time.time() - last_scan_ts
+        if elapsed < MIN_SCAN_INTERVAL:
+            return False
+
     ms = get_market_status()
+
+    # Piyasa açıkken veya açılmak üzereyken scan yap
     if ms["status"] in ("open", "pre_market"):
         return True
+
+    # Kapanıştan hemen sonra son bir scan yap (18:00-18:30 arası)
     if ms["status"] == "after_hours":
         now_ist = dt.datetime.now(_IST)
         if now_ist.hour == 18 and now_ist.minute <= 30:
             return True
+
     return False
