@@ -35,7 +35,7 @@ def get_grok_client():
     if _grok_client is None and GROK_KEY:
         try:
             from openai import OpenAI
-            _grok_client = OpenAI(api_key=GROK_KEY, base_url="https://api.x.ai/v1")
+            _grok_client = OpenAI(api_key=GROK_KEY, base_url="https://api.x.ai/v1", max_retries=0, timeout=15)
             log.info("Grok client initialized (singleton)")
         except ImportError:
             pass
@@ -48,7 +48,7 @@ def get_openai_client():
     if _openai_client is None and OPENAI_KEY:
         try:
             from openai import OpenAI
-            _openai_client = OpenAI(api_key=OPENAI_KEY)
+            _openai_client = OpenAI(api_key=OPENAI_KEY, max_retries=0, timeout=15)
             log.info("OpenAI client initialized (singleton)")
         except ImportError:
             pass
@@ -61,7 +61,7 @@ def get_anthropic_client():
     if _anthropic_client is None and ANTHROPIC_KEY:
         try:
             import anthropic
-            _anthropic_client = anthropic.Anthropic(api_key=ANTHROPIC_KEY)
+            _anthropic_client = anthropic.Anthropic(api_key=ANTHROPIC_KEY, max_retries=0, timeout=15)
             log.info("Anthropic client initialized (singleton)")
         except ImportError:
             pass
