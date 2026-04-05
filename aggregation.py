@@ -57,6 +57,7 @@ def build_scan_item(r: dict) -> dict:
             "anti_bubble": (v11l.get("legendary", {}).get("anti_bubble") or {}).get("passed"),
             "value_trap": (v11l.get("legendary", {}).get("value_trap") or {}).get("passed"),
         },
+        "data_quality_tier": r.get("data_quality_tier", "full"),
     }
 
 

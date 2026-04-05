@@ -122,7 +122,7 @@ class TestWatchlist:
     def test_add_invalid_symbol(self):
         result = add("u1", "NONEXISTENT")
         assert result["ok"] is False
-        assert "Gecersiz" in result["error"]
+        assert "Geçersiz" in result["error"]
 
     def test_add_lowercase(self):
         result = add("u1", "thyao")
@@ -236,7 +236,7 @@ class TestAlertGeneration:
         alerts = generate_alerts_for_symbol("THYAO", self._analysis(overall=65), [], prev)
         jumps = [a for a in alerts if a["alert_type"] == "score_jump"]
         assert len(jumps) == 1
-        assert "yukseldi" in jumps[0]["title"]
+        assert "yükseldi" in jumps[0]["title"]
 
     def test_no_alert_on_small_score_change(self):
         prev = {"overall": 63, "confidence": 80, "signals": [], "signal_qualities": {},

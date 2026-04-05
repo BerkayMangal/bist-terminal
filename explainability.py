@@ -33,36 +33,36 @@ from engine.scoring import get_threshold, compute_valuation_stretch
 # HUMAN-FRIENDLY NAME + EXPLANATION REGISTRY
 # ================================================================
 _FRIENDLY = {
-    "pe":              {"name": "Ucuz F/K orani",                  "pos": "Kazancina gore ucuz fiyatlaniyor.",                           "neg": "Kazancina gore pahali fiyatlaniyor."},
-    "pb":              {"name": "Defter degerine gore fiyat",      "pos": "Varliklarina gore makul fiyatlaniyor.",                       "neg": "Varliklarina gore pahali fiyatlaniyor."},
-    "ev_ebitda":       {"name": "FD/FAVOK degerleme",              "pos": "Isletme degeri nakit uretimine gore uygun.",                  "neg": "Isletme degeri nakit uretimine gore yuksek."},
-    "fcf_yield":       {"name": "Serbest nakit akisi gucu",       "pos": "Guclu serbest nakit akisi uretiyor.",                         "neg": "Serbest nakit akisi zayif."},
-    "margin_safety":   {"name": "Guvenlik marji",                  "pos": "Gercek degerinin altinda fiyatlaniyor.",                      "neg": "Gercek degerine yakin veya uzerinde fiyatlaniyor."},
-    "roe":             {"name": "Yuksek ozsermaye karliligi",      "pos": "Ozsermayesini verimli kullaniyor.",                           "neg": "Ozsermaye karliligi sektorun altinda."},
-    "roic":            {"name": "Yatirim getirisi (ROIC)",         "pos": "Yatirdigi sermayeden guclu getiri elde ediyor.",              "neg": "Yatirim getirisi dusuk."},
-    "net_margin":      {"name": "Net kar marji",                   "pos": "Her 100 TL gelirden guclu kar elde ediyor.",                  "neg": "Kar marji zayif."},
-    "revenue_growth":  {"name": "Gelir buyumesi",                  "pos": "Gelirler guclu buyuyor.",                                    "neg": "Gelir buyumesi zayif veya geriliyor."},
-    "eps_growth":      {"name": "Hisse basi kar buyumesi",         "pos": "Hisse basi kar artiyor.",                                    "neg": "Hisse basi kar dusuyor."},
-    "ebitda_growth":   {"name": "FAVOK buyumesi",                  "pos": "Operasyonel karlilik artiyor.",                               "neg": "Operasyonel karlilik geriliyor."},
-    "peg":             {"name": "Buyumeye gore fiyat (PEG)",       "pos": "Buyume hizina gore ucuz.",                                   "neg": "Buyume hizina gore pahali."},
-    "net_debt_ebitda": {"name": "Borc yuku (NB/FAVOK)",            "pos": "Borc yuku yonetilebilir seviyede.",                           "neg": "Borc yuku yuksek."},
-    "debt_equity":     {"name": "Borcluluk seviyesi",              "pos": "Borclanma ozsermayeye gore makul.",                           "neg": "Ozsermayeye gore asiri borclu."},
-    "current_ratio":   {"name": "Kisa vadeli odeme gucu",          "pos": "Kisa vadeli yukumluluklerini rahat karsilayabiliyor.",         "neg": "Kisa vadeli borclarini karsilamakta zorlanabilir."},
-    "interest_cov":    {"name": "Faiz karsilama gucu",             "pos": "Faiz odemelerini rahat karsiyor.",                            "neg": "Faiz odemelerini karsilamakta zorlaniyor."},
-    "altman_z":        {"name": "Iflas riski (Altman Z)",          "pos": "Iflas riski dusuk.",                                          "neg": "Iflas riski yuksek."},
-    "cfo_to_ni":       {"name": "Nakit akisi / kar kalitesi",     "pos": "Kar gercek nakit akisiyla destekleniyor.",                     "neg": "Kar nakit akisiyla desteklenmiyor."},
-    "fcf_margin":      {"name": "Serbest nakit marji",             "pos": "Gelirlerin anlamli kismi serbest nakde donuyor.",              "neg": "Serbest nakit akisi marji zayif."},
-    "beneish":         {"name": "Muhasebe guvenirliligi",          "pos": "Finansal tablolar guvenilir gorunuyor.",                      "neg": "Finansal tablolarda manipulasyon riski var."},
-    "momentum":        {"name": "Fiyat momentumu",                 "pos": "Fiyat ve hacim yukari yonlu guclu.",                          "neg": "Fiyat momentumu zayif."},
-    "tech_break":      {"name": "Teknik kirilim",                  "pos": "Teknik sinyaller kirilim gosteriyor.",                        "neg": "Teknik gorunum zayif."},
-    "inst_flow":       {"name": "Kurumsal yatirimci ilgisi",       "pos": "Kurumsal alis akisi pozitif.",                                "neg": "Kurumsal ilgi dusuk."},
+    "pe":              {"name": "Düşük F/K oranı",                 "pos": "Kazancına göre ucuz fiyatlanıyor.",                          "neg": "Kazancına göre pahalı fiyatlanıyor."},
+    "pb":              {"name": "Defter değerine göre fiyat",      "pos": "Varlıklarına göre makul fiyatlanıyor.",                      "neg": "Varlıklarına göre pahalı fiyatlanıyor."},
+    "ev_ebitda":       {"name": "FD/FAVÖK değerleme",              "pos": "İşletme değeri nakit üretimine göre uygun.",                 "neg": "İşletme değeri nakit üretimine göre yüksek."},
+    "fcf_yield":       {"name": "Serbest nakit akışı gücü",        "pos": "Güçlü serbest nakit akışı üretiyor.",                        "neg": "Serbest nakit akışı zayıf."},
+    "margin_safety":   {"name": "Güvenlik marjı",                  "pos": "Gerçek değerinin altında fiyatlanıyor.",                     "neg": "Gerçek değerine yakın veya üzerinde fiyatlanıyor."},
+    "roe":             {"name": "Yüksek özsermaye kârlılığı",      "pos": "Özsermayesini verimli kullanıyor.",                          "neg": "Özsermaye kârlılığı sektörün altında."},
+    "roic":            {"name": "Yatırım getirisi (ROIC)",         "pos": "Yatırdığı sermayeden güçlü getiri elde ediyor.",             "neg": "Yatırım getirisi düşük."},
+    "net_margin":      {"name": "Net kâr marjı",                   "pos": "Her 100 TL gelirden güçlü kâr elde ediyor.",                 "neg": "Kâr marjı zayıf."},
+    "revenue_growth":  {"name": "Gelir büyümesi",                  "pos": "Gelirler güçlü büyüyor.",                                   "neg": "Gelir büyümesi zayıf veya geriliyor."},
+    "eps_growth":      {"name": "Hisse başı kâr büyümesi",         "pos": "Hisse başı kâr artıyor.",                                   "neg": "Hisse başı kâr düşüyor."},
+    "ebitda_growth":   {"name": "FAVÖK büyümesi",                  "pos": "Operasyonel kârlılık artıyor.",                              "neg": "Operasyonel kârlılık geriliyor."},
+    "peg":             {"name": "Büyümeye göre fiyat (PEG)",       "pos": "Büyüme hızına göre ucuz.",                                  "neg": "Büyüme hızına göre pahalı."},
+    "net_debt_ebitda": {"name": "Borç yükü (NB/FAVÖK)",            "pos": "Borç yükü yönetilebilir seviyede.",                          "neg": "Borç yükü yüksek."},
+    "debt_equity":     {"name": "Borçluluk seviyesi",              "pos": "Borçlanma özsermayeye göre makul.",                          "neg": "Özsermayeye göre aşırı borçlu."},
+    "current_ratio":   {"name": "Kısa vadeli ödeme gücü",          "pos": "Kısa vadeli yükümlülüklerini rahat karşılayabiliyor.",        "neg": "Kısa vadeli borçlarını karşılamakta zorlanabilir."},
+    "interest_cov":    {"name": "Faiz karşılama gücü",             "pos": "Faiz ödemelerini rahat karşılıyor.",                         "neg": "Faiz ödemelerini karşılamakta zorlanıyor."},
+    "altman_z":        {"name": "İflas riski (Altman Z)",           "pos": "İflas riski düşük.",                                        "neg": "İflas riski yüksek."},
+    "cfo_to_ni":       {"name": "Nakit akışı / kâr kalitesi",      "pos": "Kâr gerçek nakit akışıyla destekleniyor.",                   "neg": "Kâr nakit akışıyla desteklenmiyor."},
+    "fcf_margin":      {"name": "Serbest nakit marjı",             "pos": "Gelirlerin anlamlı kısmı serbest nakde dönüyor.",            "neg": "Serbest nakit akışı marjı zayıf."},
+    "beneish":         {"name": "Muhasebe güvenilirliği",          "pos": "Finansal tablolar güvenilir görünüyor.",                     "neg": "Finansal tablolarda manipülasyon riski var."},
+    "momentum":        {"name": "Fiyat momentumu",                 "pos": "Fiyat ve hacim yukarı yönlü güçlü.",                         "neg": "Fiyat momentumu zayıf."},
+    "tech_break":      {"name": "Teknik kırılım",                  "pos": "Teknik sinyaller kırılım gösteriyor.",                       "neg": "Teknik görünüm zayıf."},
+    "inst_flow":       {"name": "Kurumsal yatırımcı ilgisi",       "pos": "Kurumsal alış akışı pozitif.",                               "neg": "Kurumsal ilgi düşük."},
 }
 
 _DIM_NAMES = {
-    "value": "degerleme", "quality": "karlilik", "growth": "buyume",
-    "balance": "bilanco", "earnings": "nakit kalitesi", "moat": "rekabet gucu",
+    "value": "değerleme", "quality": "kârlılık", "growth": "büyüme",
+    "balance": "bilanço", "earnings": "nakit kalitesi", "moat": "rekabet gücü",
     "capital": "sermaye disiplini", "momentum": "momentum",
-    "tech_break": "teknik", "inst_flow": "kurumsal akis",
+    "tech_break": "teknik", "inst_flow": "kurumsal akış",
 }
 
 
@@ -326,23 +326,23 @@ def extract_top_drivers(breakdown, risk_reasons, risk_penalty):
 def build_summary(top_pos, top_neg, scores_imputed, overall):
     pos_parts, neg_parts = [], []
     _POS_MAP = [
-        (["ucuz", "f/k", "deger"], "ucuz degerleme"),
-        (["karlilik", "roe", "roic"], "guclu karlilik"),
-        (["buyume", "gelir"], "guclu buyume"),
-        (["nakit"], "guclu nakit akisi"),
-        (["bilanco", "borc", "odeme"], "saglam bilanco"),
-        (["momentum", "fiyat"], "guclu momentum"),
-        (["marj"], "yuksek marjlar"),
-        (["guvenilir", "muhasebe"], "guvenilir finansallar"),
+        (["ucuz", "f/k", "değer"], "ucuz değerleme"),
+        (["kârlılık", "roe", "roic"], "güçlü kârlılık"),
+        (["büyüme", "gelir"], "güçlü büyüme"),
+        (["nakit"], "güçlü nakit akışı"),
+        (["bilanço", "borç", "ödeme"], "sağlam bilanço"),
+        (["momentum", "fiyat"], "güçlü momentum"),
+        (["marj"], "yüksek marjlar"),
+        (["güvenilir", "muhasebe"], "güvenilir finansallar"),
     ]
     _NEG_MAP = [
-        (["buyume", "gelir", "hisse basi"], "buyume zayif"),
-        (["borc", "bilanco", "iflas"], "borcluluk riski var"),
-        (["pahali", "deger", "fiyat"], "degerleme yuksek"),
-        (["eksik"], "bazi veriler eksik"),
-        (["momentum", "teknik"], "teknik gorunum zayif"),
-        (["risk", "penalti"], "risk faktorleri mevcut"),
-        (["nakit", "muhasebe"], "nakit akisi zayif"),
+        (["büyüme", "gelir", "hisse başı"], "büyüme zayıf"),
+        (["borç", "bilanço", "iflas"], "borçluluk riski var"),
+        (["pahalı", "değer", "fiyat"], "değerleme yüksek"),
+        (["eksik"], "bazı veriler eksik"),
+        (["momentum", "teknik"], "teknik görünüm zayıf"),
+        (["risk", "penalti"], "risk faktörleri mevcut"),
+        (["nakit", "muhasebe"], "nakit akışı zayıf"),
     ]
 
     def _match(name_lower, mapping, parts):
@@ -364,13 +364,13 @@ def build_summary(top_pos, top_neg, scores_imputed, overall):
     neg_parts = neg_parts[:2]
 
     if pos_parts and neg_parts:
-        return pos_parts[0].capitalize() + (" ve " + pos_parts[1] if len(pos_parts) > 1 else "") + " sayesinde one cikiyor, ancak " + " ve ".join(neg_parts) + "."
+        return pos_parts[0].capitalize() + (" ve " + pos_parts[1] if len(pos_parts) > 1 else "") + " sayesinde öne çıkıyor, ancak " + " ve ".join(neg_parts) + "."
     elif pos_parts:
-        return " ve ".join(pos_parts).capitalize() + " sayesinde guclu bir profil ciziyor."
+        return " ve ".join(pos_parts).capitalize() + " sayesinde güçlü bir profil çiziyor."
     elif neg_parts:
         return "Dikkat: " + " ve ".join(neg_parts) + "."
     else:
-        return "Dengeli bir profil -- belirgin bir guclu veya zayif yon yok."
+        return "Dengeli bir profil — belirgin bir güçlü veya zayıf yön yok."
 
 
 # ================================================================
@@ -381,13 +381,13 @@ def explain_confidence(confidence, metrics, scores_imputed):
     total = len(CONFIDENCE_KEYS)
     missing_keys = [k for k in CONFIDENCE_KEYS if safe_num(metrics.get(k)) is None]
     if confidence >= 80:
-        level = "Veri kalitesi iyi -- skora guvenebilirsiniz."
+        level = "Veri kalitesi iyi — skora güvenebilirsiniz."
     elif confidence >= 60:
-        level = "Bazi veriler eksik ama skor genel olarak guvenilir."
+        level = "Bazı veriler eksik ama skor genel olarak güvenilir."
     elif confidence >= 40:
-        level = "Onemli veriler eksik -- skoru dikkatli degerlendirin."
+        level = "Önemli veriler eksik — skoru dikkatli değerlendirin."
     else:
-        level = "Veri cok yetersiz -- skor guvenilir degil."
+        level = "Veri çok yetersiz — skor güvenilir değil."
     parts = [str(present) + "/" + str(total) + " temel metrik mevcut.", level]
     if scores_imputed:
         dims = ", ".join(_DIM_NAMES.get(d, d) for d in scores_imputed)
@@ -404,7 +404,7 @@ def explain_confidence(confidence, metrics, scores_imputed):
 # ================================================================
 def explain_missing_data(scores_imputed, score_coverage):
     if not scores_imputed:
-        return {"has_impact": False, "summary": "Tum boyutlar gercek veriye dayali.", "imputed_dimensions": []}
+        return {"has_impact": False, "summary": "Tüm boyutlar gerçek veriye dayalı.", "imputed_dimensions": []}
     total_weight = sum(FA_WEIGHTS.get(d, 0) for d in scores_imputed)
     dim_details = []
     for dim in scores_imputed:
@@ -417,9 +417,9 @@ def explain_missing_data(scores_imputed, score_coverage):
             "data_available": cov.get("available", 0), "data_total": cov.get("total", 0),
         })
     if len(scores_imputed) <= 2:
-        summary = "Bazi onemli veriler eksik oldugu icin skorun bir kismi tahmine dayaniyor."
+        summary = "Bazı önemli veriler eksik olduğu için skorun bir kısmı tahmine dayanıyor."
     else:
-        summary = "Onemli veriler eksik -- skorun buyuk kismi tahmine dayaniyor. Dikkatli degerlendirin."
+        summary = "Önemli veriler eksik — skorun büyük kısmı tahmine dayanıyor. Dikkatli değerlendirin."
     return {
         "has_impact": True, "summary": summary,
         "total_weight_imputed_pct": round(total_weight * 100, 1),

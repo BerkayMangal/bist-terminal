@@ -443,6 +443,15 @@ def analyze_symbol(symbol: str) -> dict:
     # Score coverage — tracks data completeness per dimension
     score_coverage = compute_score_coverage(m)
 
+    # Data quality tier — visible indicator of data trustworthiness
+    n_imputed = len(scores_imputed)
+    if n_imputed <= 1 and confidence >= 70:
+        data_quality_tier = "full"
+    elif n_imputed <= 3 and confidence >= 40:
+        data_quality_tier = "partial"
+    else:
+        data_quality_tier = "market_only"
+
     r = {
         "symbol": symbol, "ticker": base_ticker(symbol), "name": m["name"], "currency": m["currency"],
         "sector": m.get("sector", ""), "sector_group": sector_group, "industry": m.get("industry", ""),
@@ -455,6 +464,7 @@ def analyze_symbol(symbol: str) -> dict:
         "applicability": applicability_flags,
         "scores_imputed": scores_imputed,
         "score_coverage": score_coverage,
+        "data_quality_tier": data_quality_tier,
     }
 
     # Explainability — structured scoring explanation (never blocks analysis)

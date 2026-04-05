@@ -137,7 +137,7 @@ def generate_alerts_for_symbol(
         if prev_q and _quality_upgraded(prev_q, cur_q):
             alerts.append(_alert(
                 symbol, "signal_quality_upgrade", "warning",
-                f"{symbol}: Sinyal kalitesi yukseldi",
+                f"{symbol}: Sinyal kalitesi yükseldi",
                 f"{sig_name}: {prev_q} → {cur_q}",
                 {"signal": sig_name, "from": prev_q, "to": cur_q},
             ))
@@ -146,7 +146,7 @@ def generate_alerts_for_symbol(
     if prev_overall is not None and cur_overall is not None:
         delta = cur_overall - prev_overall
         if abs(delta) >= SCORE_CHANGE_THRESHOLD:
-            direction = "yukseldi" if delta > 0 else "dustu"
+            direction = "yükseldi" if delta > 0 else "düştü"
             sev = "warning" if abs(delta) >= 10 else "info"
             alerts.append(_alert(
                 symbol, "score_jump", sev,
@@ -161,8 +161,8 @@ def generate_alerts_for_symbol(
         if drop >= CONFIDENCE_DROP_THRESHOLD:
             alerts.append(_alert(
                 symbol, "confidence_drop", "warning",
-                f"{symbol}: Guven skoru dustu",
-                f"Guven: {prev_confidence:.0f}% → {cur_confidence:.0f}% ({-drop:+.0f})",
+                f"{symbol}: Güven skoru düştü",
+                f"Güven: {prev_confidence:.0f}% → {cur_confidence:.0f}% ({-drop:+.0f})",
                 {"from": prev_confidence, "to": cur_confidence, "drop": round(drop, 1)},
             ))
 
@@ -172,7 +172,7 @@ def generate_alerts_for_symbol(
         if risk:
             alerts.append(_alert(
                 symbol, "new_risk_flag", "warning",
-                f"{symbol}: Yeni risk faktoru",
+                f"{symbol}: Yeni risk faktörü",
                 risk,
                 {"driver": risk},
             ))
@@ -183,7 +183,7 @@ def generate_alerts_for_symbol(
         if pos:
             alerts.append(_alert(
                 symbol, "new_positive_driver", "info",
-                f"{symbol}: Yeni guclu yonu tespit edildi",
+                f"{symbol}: Yeni güçlü yönü tespit edildi",
                 pos,
                 {"driver": pos},
             ))

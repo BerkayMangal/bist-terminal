@@ -282,11 +282,11 @@ def fetch_raw_v9(symbol: str) -> dict:
             f_fin = pool.submit(_income)
             f_bal = pool.submit(_balance)
             f_cf = pool.submit(_cashflow)
-            fast = f_fast.result(timeout=30)
-            info = f_info.result(timeout=30)
-            fin = f_fin.result(timeout=15)
-            bal = f_bal.result(timeout=15)
-            cf = f_cf.result(timeout=15)
+            fast = f_fast.result(timeout=8)
+            info = f_info.result(timeout=8)
+            fin = f_fin.result(timeout=8)
+            bal = f_bal.result(timeout=8)
+            cf = f_cf.result(timeout=8)
 
         if info is None:
             info = {

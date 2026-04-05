@@ -129,7 +129,7 @@ class TestSummary:
         pos = [{"name": "Ucuz F/K orani", "contribution": 5.0}]
         neg = []
         s = build_summary(pos, neg, [], 80)
-        assert "guclu" in s.lower() or "one" in s.lower()
+        assert "güçlü" in s.lower() or "öne" in s.lower() or "profil" in s.lower()
 
     def test_build_summary_all_negative(self):
         pos = []
@@ -354,4 +354,4 @@ class TestEdgeCases:
         exp = build_explanation(r)
         assert len(exp["top_positive_drivers"]) >= 3
         assert exp["missing_data_impact"]["has_impact"] is False
-        assert "guclu" in exp["summary"].lower() or "one" in exp["summary"].lower()
+        assert "güçlü" in exp["summary"].lower() or "öne" in exp["summary"].lower() or "profil" in exp["summary"].lower()

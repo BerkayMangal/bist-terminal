@@ -32,7 +32,7 @@ def add(user_id: str, symbol: str) -> dict:
     """Add symbol to watchlist. Returns status dict."""
     clean = validate_symbol(symbol)
     if not clean:
-        return {"ok": False, "error": f"Gecersiz sembol: {symbol}"}
+        return {"ok": False, "error": f"Geçersiz sembol: {symbol}"}
     added = watchlist_add(user_id, clean)
     if added:
         return {"ok": True, "symbol": clean, "action": "added"}
@@ -43,7 +43,7 @@ def remove(user_id: str, symbol: str) -> dict:
     """Remove symbol from watchlist. Returns status dict."""
     clean = validate_symbol(symbol)
     if not clean:
-        return {"ok": False, "error": f"Gecersiz sembol: {symbol}"}
+        return {"ok": False, "error": f"Geçersiz sembol: {symbol}"}
     removed = watchlist_remove(user_id, clean)
     if removed:
         return {"ok": True, "symbol": clean, "action": "removed"}
@@ -108,7 +108,7 @@ def get_enriched(user_id: str, analysis_cache, cross_signals: list[dict]) -> lis
                 item["top_negative"] = analysis.get("negatives", [])[:2]
         else:
             item["overall"] = None
-            item["summary"] = "Analiz verisi henuz mevcut degil."
+            item["summary"] = "Analiz verisi henüz mevcut değil."
 
         # Active signals
         sigs = sig_by_ticker.get(sym, [])

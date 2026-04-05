@@ -304,9 +304,9 @@ class ScanCoordinator:
             workers = min(SCAN_MAX_WORKERS, len(universe))
             with ThreadPoolExecutor(max_workers=workers) as pool:
                 futures = {pool.submit(_safe_analyze, t): t for t in universe}
-                for future in as_completed(futures, timeout=300):
+                for future in as_completed(futures, timeout=240):
                     try:
-                        r = future.result(timeout=60)
+                        r = future.result(timeout=30)
                     except Exception:
                         r = None
                     if r and r.get("confidence", 0) >= CONFIDENCE_MIN:

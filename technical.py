@@ -62,8 +62,8 @@ except ImportError:
 # BATCH DOWNLOAD CONFIG
 # ================================================================
 BATCH_CHUNK_SIZE = 25
-BATCH_CHUNK_DELAY_MIN = 1.5
-BATCH_CHUNK_DELAY_MAX = 3.0
+BATCH_CHUNK_DELAY_MIN = 0.5
+BATCH_CHUNK_DELAY_MAX = 1.2
 BATCH_MAX_RETRIES = 2
 
 
@@ -149,7 +149,7 @@ def _download_chunk(
                     continue
     except Exception as e:
         if retry < BATCH_MAX_RETRIES:
-            delay = random.uniform(3.0, 6.0)
+            delay = random.uniform(1.5, 3.0)
             log.info(f"batch chunk retry {retry + 1}/{BATCH_MAX_RETRIES} after {delay:.1f}s ({len(chunk)} symbols)")
             time.sleep(delay)
             return _download_chunk(chunk, period, interval, retry + 1)
