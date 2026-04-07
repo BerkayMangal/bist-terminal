@@ -457,42 +457,37 @@ def analyze_symbol(symbol: str) -> dict:
         "score_coverage": score_coverage,
     }
 
-    # Data Quality — trust & anomaly layer (never blocks analysis)
+    # Data Quality (never blocks)
     try:
         from engine.data_quality import assess_data_quality, build_decision_context
         r["data_health"] = assess_data_quality(m, scores_imputed)
         r["data_context"] = r["data_health"]
-        r["decision_context"] = build_decision_context(
-            r["data_health"], confidence, is_hype, scores_imputed,
-        )
+        r["decision_context"] = build_decision_context(r["data_health"], confidence, is_hype, scores_imputed)
     except Exception as e:
-        log.debug(f"Data quality layer skipped for {symbol}: {e}")
+        log.debug(f"Data quality skipped for {symbol}: {e}")
 
-    # Valuation Trust Layer — range, confidence, assumptions (never blocks analysis)
+    # Valuation Trust Layer (never blocks)
     try:
         from engine.valuation import build_valuation_layer
-        val_layer = build_valuation_layer(m, r)
-        r.update(val_layer)
+        r.update(build_valuation_layer(m, r))
     except Exception as e:
-        log.debug(f"Valuation layer skipped for {symbol}: {e}")
+        log.debug(f"Valuation skipped for {symbol}: {e}")
 
-    # Timing Intelligence — plain-language timing context (never blocks analysis)
+    # Timing Intelligence (never blocks)
     try:
         from engine.timing_intel import build_timing_intel
-        timing_data = build_timing_intel(scores, tech, m)
-        r.update(timing_data)
+        r.update(build_timing_intel(scores, tech, m))
     except Exception as e:
         log.debug(f"Timing intel skipped for {symbol}: {e}")
 
-    # Delta — daily snapshot + 7d change tracking (never blocks analysis)
+    # Delta — daily snapshot + 7d change (never blocks)
     try:
         from engine.delta import save_daily_snapshot, compute_delta
         save_daily_snapshot(symbol, r)
-        delta_data = compute_delta(symbol, r)
-        if delta_data:
-            r.update(delta_data)
+        dd = compute_delta(symbol, r)
+        if dd: r.update(dd)
     except Exception as e:
-        log.debug(f"Delta layer skipped for {symbol}: {e}")
+        log.debug(f"Delta skipped for {symbol}: {e}")
 
     # Explainability — structured scoring explanation (never blocks analysis)
     try:
