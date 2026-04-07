@@ -123,6 +123,47 @@ section h2 em{font-style:normal;color:var(--gold)}
 footer{text-align:center;padding:28px 24px;border-top:1px solid rgba(255,255,255,.03);font-size:11px;color:var(--text-dim)}
 footer a{color:var(--gold);text-decoration:none}
 
+/* MOCKUP */
+.mockup-wrap{margin-top:48px;text-align:center}
+.mockup-label{font-size:13px;color:var(--text-dim);margin-bottom:16px}
+.mockup{background:var(--bg-card);border:1px solid rgba(255,179,0,.15);border-radius:16px;padding:24px;max-width:440px;margin:0 auto;text-align:left;box-shadow:0 8px 32px rgba(0,0,0,.4)}
+.mk-header{margin-bottom:16px;padding-bottom:14px;border-bottom:1px solid rgba(255,255,255,.06)}
+.mk-ticker{font-family:'JetBrains Mono',monospace;font-size:18px;font-weight:700;color:var(--text);display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.mk-pill{font-size:10px;padding:3px 8px;border-radius:4px;font-weight:700;letter-spacing:.5px}
+.mk-green{background:rgba(34,197,94,.12);color:var(--green)}
+.mk-blue{background:rgba(96,165,250,.12);color:#60a5fa}
+.mk-name{font-size:12px;color:var(--text-dim);margin-top:4px}
+.mk-scores{display:flex;justify-content:center;gap:28px;margin-bottom:18px}
+.mk-ring{width:68px;height:68px;border-radius:50%;display:flex;flex-direction:column;align-items:center;justify-content:center;border:3px solid}
+.mk-ring-green{border-color:var(--green)}
+.mk-ring-blue{border-color:#60a5fa}
+.mk-ring-purple{border-color:#a78bfa}
+.mk-ring-val{font-family:'JetBrains Mono',monospace;font-size:20px;font-weight:800;color:var(--text)}
+.mk-ring-label{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--text-dim);letter-spacing:1px}
+.mk-metrics{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px}
+.mk-m{display:flex;justify-content:space-between;padding:6px 10px;background:rgba(255,255,255,.03);border-radius:6px}
+.mk-m-l{font-size:12px;color:var(--text-dim)}
+.mk-m-v{font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:600;color:var(--text)}
+.mk-m-v.green{color:var(--green)}
+.mk-reasons{margin-bottom:14px}
+.mk-pos,.mk-neg{font-size:12px;color:var(--text);padding:4px 0;line-height:1.5}
+.mk-dot{margin-right:6px}
+.mk-dot.green{color:var(--green)}
+.mk-dot.red{color:var(--red)}
+.mk-footer{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--text-dim);padding-top:12px;border-top:1px solid rgba(255,255,255,.06)}
+.mockup-note{font-size:11px;color:var(--text-dim);margin-top:12px;font-style:italic}
+
+/* LEGAL */
+.legal-section{max-width:720px;margin:0 auto;padding:60px 24px 40px}
+.legal-section h3{font-family:'Playfair Display',serif;font-size:20px;font-weight:800;margin-bottom:18px;color:var(--text)}
+.legal-section p{font-size:13px;color:var(--text-dim);line-height:1.8;margin-bottom:12px}
+.legal-section p strong{color:var(--text);font-weight:600}
+.legal-section .legal-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:20px;margin-bottom:20px}
+.legal-card{background:var(--bg-card);border:1px solid rgba(255,255,255,.04);border-radius:10px;padding:16px}
+.legal-card h4{font-size:12px;font-weight:700;color:var(--gold);margin-bottom:6px;font-family:'JetBrains Mono',monospace;letter-spacing:.5px}
+.legal-card p{font-size:12px;margin-bottom:0}
+@media(max-width:768px){.legal-section .legal-grid{grid-template-columns:1fr}.mk-scores{gap:16px}.mk-ring{width:58px;height:58px}.mk-ring-val{font-size:17px}}
+
 @keyframes fadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
 @media(max-width:768px){.nav-links a:not(.nav-cta){display:none}.how-steps{grid-template-columns:1fr}.features-grid{grid-template-columns:1fr}.trust-items{flex-direction:column;align-items:center}.demo-box{padding:18px}section{padding:68px 20px}}
 </style>
@@ -207,6 +248,35 @@ footer a{color:var(--gold);text-decoration:none}
   <p class="output-explanation">
     "Al" veya "sat" demiyoruz. Sana <strong>neden güçlü, neden riskli</strong> gösteriyoruz. Karar yine senin.
   </p>
+
+  <!-- LIVE MOCKUP -->
+  <div class="mockup-wrap">
+    <div class="mockup-label">Gerçek terminal çıktısı böyle görünüyor:</div>
+    <div class="mockup">
+      <div class="mk-header">
+        <div class="mk-ticker">THYAO <span class="mk-pill mk-green">GÜÇLÜ GÖRÜNÜYOR</span> <span class="mk-pill mk-blue">TEYİTLİ</span></div>
+        <div class="mk-name">Türk Hava Yolları · Ulaştırma</div>
+      </div>
+      <div class="mk-scores">
+        <div class="mk-ring mk-ring-green"><div class="mk-ring-val">72</div><div class="mk-ring-label">FA</div></div>
+        <div class="mk-ring mk-ring-blue"><div class="mk-ring-val">65</div><div class="mk-ring-label">İVME</div></div>
+        <div class="mk-ring mk-ring-purple"><div class="mk-ring-val">68</div><div class="mk-ring-label">KARAR</div></div>
+      </div>
+      <div class="mk-metrics">
+        <div class="mk-m"><span class="mk-m-l">F/K</span><span class="mk-m-v">5.2</span></div>
+        <div class="mk-m"><span class="mk-m-l">PD/DD</span><span class="mk-m-v">1.8</span></div>
+        <div class="mk-m"><span class="mk-m-l">ROE</span><span class="mk-m-v green">34%</span></div>
+        <div class="mk-m"><span class="mk-m-l">FCF Getiri</span><span class="mk-m-v green">12%</span></div>
+      </div>
+      <div class="mk-reasons">
+        <div class="mk-pos"><span class="mk-dot green">✓</span> Güçlü nakit akışı, kâr gerçek</div>
+        <div class="mk-pos"><span class="mk-dot green">✓</span> Sektörde ucuz, PEG düşük</div>
+        <div class="mk-neg"><span class="mk-dot red">✗</span> Döviz riski yüksek (yakıt maliyeti)</div>
+      </div>
+      <div class="mk-footer">Güven: %94 · Buffett: Geçti · Graham: Sınırda</div>
+    </div>
+    <div class="mockup-note">* Örnek gösterimdir. Gerçek skorlar piyasa verisine göre güncellenir.</div>
+  </div>
 </section>
 
 <div class="divider"></div>
@@ -248,7 +318,7 @@ footer a{color:var(--gold);text-decoration:none}
 <div class="divider"></div>
 
 <div class="honesty-block">
-  <p>Veriler kamuya açık finansal kaynaklardan gelir.<br>
+  <p>Veriler kamuya açık finansal kaynaklardan gelir (KAP, İş Yatırım, borsapy).<br>
   <strong>Bazen eksik veya gecikmeli olabilir.</strong><br>
   Her analizde veri güvenilirlik oranını da gösteriyoruz.</p>
 </div>
@@ -285,6 +355,42 @@ footer a{color:var(--gold);text-decoration:none}
   <h2>Bir dahaki tüyodan <em>önce</em>,</h2>
   <p>Hisseyi yaz. 3 saniye. Sonra sen karar ver.</p>
   <a href="https://bistbull.ai/terminal">Sonucu Gör →</a>
+</div>
+
+<div class="divider"></div>
+
+<!-- LEGAL SECTION -->
+<div class="legal-section">
+  <h3>Yasal Uyarı ve Sorumluluk Reddi</h3>
+  
+  <p><strong>BistBull.ai bir yatırım danışmanlığı hizmeti değildir.</strong> Sermaye Piyasası Kurulu (SPK) tarafından yetkilendirilmiş bir yatırım kuruluşu veya portföy yönetim şirketi değildir. SPK lisansı bulunmamaktadır.</p>
+
+  <p>Bu platform üzerinde sunulan tüm bilgiler, skorlar, analizler ve değerlendirmeler <strong>yalnızca bilgilendirme ve eğitim amaçlıdır</strong>. Hiçbir içerik, doğrudan veya dolaylı olarak alım, satım veya tutma tavsiyesi, yatırım danışmanlığı veya portföy yönetim hizmeti olarak yorumlanmamalıdır.</p>
+
+  <div class="legal-grid">
+    <div class="legal-card">
+      <h4>Yatırım Tavsiyesi Değildir</h4>
+      <p>Platformda yer alan "güçlü görünüyor", "zayıf görünüyor" gibi ifadeler, temel ve teknik verilerin algoritmik değerlendirmesidir. Kişisel yatırım tavsiyesi niteliği taşımaz.</p>
+    </div>
+    <div class="legal-card">
+      <h4>Veri Kaynakları</h4>
+      <p>Veriler KAP, İş Yatırım ve kamuya açık finansal kaynaklardan elde edilmektedir. Veriler gecikmeli, eksik veya hatalı olabilir. Doğruluğu garanti edilmez.</p>
+    </div>
+    <div class="legal-card">
+      <h4>Risk Uyarısı</h4>
+      <p>Sermaye piyasası işlemleri risk içerir. Yatırımlarınızın değeri artabileceği gibi azalabilir. Yatırılan anaparanın tamamını kaybetme riski mevcuttur.</p>
+    </div>
+    <div class="legal-card">
+      <h4>Sorumluluk Reddi</h4>
+      <p>Bu platformu kullanarak alınan tüm yatırım kararlarının sorumluluğu tamamen kullanıcıya aittir. BistBull.ai, kullanıcıların uğrayabileceği doğrudan veya dolaylı zararlardan sorumlu tutulamaz.</p>
+    </div>
+  </div>
+
+  <p><strong>Geçmiş performans, gelecekteki sonuçların göstergesi değildir.</strong> Herhangi bir yatırım kararı almadan önce bağımsız finansal danışmanlık almanız tavsiye edilir.</p>
+
+  <p>Algoritmik skorlama sistemi deterministiktir — aynı veri aynı sonucu üretir. Ancak piyasa koşulları, şirket açıklamaları ve makroekonomik gelişmeler nedeniyle skorlar günlük olarak değişebilir.</p>
+
+  <p style="margin-top:16px;font-size:12px;color:var(--text-dim)">Bu platform Türkiye Cumhuriyeti yasalarına tabidir. 6362 sayılı Sermaye Piyasası Kanunu ve ilgili mevzuat hükümleri saklıdır. Kullanıcı, platformu kullanarak bu şartları kabul etmiş sayılır.</p>
 </div>
 
 <footer>
