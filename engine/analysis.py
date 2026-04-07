@@ -457,6 +457,17 @@ def analyze_symbol(symbol: str) -> dict:
         "score_coverage": score_coverage,
     }
 
+    # Data Quality — trust & anomaly layer (never blocks analysis)
+    try:
+        from engine.data_quality import assess_data_quality, build_decision_context
+        r["data_health"] = assess_data_quality(m, scores_imputed)
+        r["data_context"] = r["data_health"]  # alias for backward compat
+        r["decision_context"] = build_decision_context(
+            r["data_health"], confidence, is_hype, scores_imputed,
+        )
+    except Exception as e:
+        log.debug(f"Data quality layer skipped for {symbol}: {e}")
+
     # Explainability — structured scoring explanation (never blocks analysis)
     try:
         r["explanation"] = build_explanation(r)
