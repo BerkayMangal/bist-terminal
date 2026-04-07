@@ -468,6 +468,14 @@ def analyze_symbol(symbol: str) -> dict:
     except Exception as e:
         log.debug(f"Data quality layer skipped for {symbol}: {e}")
 
+    # Valuation Trust Layer — range, confidence, assumptions (never blocks analysis)
+    try:
+        from engine.valuation import build_valuation_layer
+        val_layer = build_valuation_layer(m, r)
+        r.update(val_layer)
+    except Exception as e:
+        log.debug(f"Valuation layer skipped for {symbol}: {e}")
+
     # Explainability — structured scoring explanation (never blocks analysis)
     try:
         r["explanation"] = build_explanation(r)
