@@ -166,21 +166,21 @@ def regime_label(analysis_result: dict) -> str:
 
     # Fatal durumlar
     if is_fatal:
-        return "KIRMIZI BAYRAK / FATAL RİSK"
+        return "KIRMIZI BAYRAK — YÜKSEK RİSK"
     if is_hype:
-        return "HYPE TRAP / SPEKÜLATİF — UZAK DUR"
+        return "SPEKÜLATİF — DİKKATLİ OL"
 
     # Temel + momentum + akış kombinasyonları
     if fa >= 65 and acc_type == "ACCUMULATION":
-        return "YÜKSEK KALİTE + SESSİZ ALIM"
+        return "GÜÇLÜ TEMEL + SESSİZ ALIM"
     if fa >= 65 and ivme >= 60 and decision == "AL":
-        return "GÜÇLÜ TEMELLİ AL SİNYALİ"
+        return "GÜÇLÜ TEMEL + UYGUN MOMENTUM"
     if fa >= 55 and ivme < 40:
         return "KALİTELİ AMA HENÜZ İVME YOK"
     if fa >= 55 and acc_type == "FOMO":
-        return "İYİ TEMEL AMA FOMO SPİKE / KOVALAMA"
+        return "İYİ TEMEL AMA FOMO RİSKİ"
     if fa < 40 and ivme >= 65:
-        return "TEMELSİZ MOMENTUM / HYPE RİSKİ"
+        return "TEMELSİZ MOMENTUM — DİKKAT"
 
     # Ciro/PD bazlı
     if ciro_label in ("KELEPİR", "ÇOK UCUZ") and scores.get("balance", 50) >= 55:
@@ -190,12 +190,12 @@ def regime_label(analysis_result: dict) -> str:
 
     # Genel durumlar
     if decision == "AL":
-        return "AL — TEYİTLİ"
+        return "GÜÇLÜ GÖRÜNÜYOR"
     if decision == "İZLE":
-        return "İZLE — GELİŞİYOR"
+        return "İZLENEBİLİR — GELİŞİYOR"
     if decision == "BEKLE":
-        return "BEKLE — KATALIST YOK"
-    return "KAÇIN — RİSK YÜKSEK"
+        return "BEKLEMEDE — NET SİNYAL YOK"
+    return "ZAYIF GÖRÜNÜYOR — DİKKAT"
 
 
 # ================================================================
