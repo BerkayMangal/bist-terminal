@@ -476,6 +476,14 @@ def analyze_symbol(symbol: str) -> dict:
     except Exception as e:
         log.debug(f"Valuation layer skipped for {symbol}: {e}")
 
+    # Timing Intelligence — plain-language timing context (never blocks analysis)
+    try:
+        from engine.timing_intel import build_timing_intel
+        timing_data = build_timing_intel(scores, tech, m)
+        r.update(timing_data)
+    except Exception as e:
+        log.debug(f"Timing intel skipped for {symbol}: {e}")
+
     # Explainability — structured scoring explanation (never blocks analysis)
     try:
         r["explanation"] = build_explanation(r)
