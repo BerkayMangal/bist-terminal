@@ -484,6 +484,16 @@ def analyze_symbol(symbol: str) -> dict:
     except Exception as e:
         log.debug(f"Timing intel skipped for {symbol}: {e}")
 
+    # Delta — daily snapshot + 7d change tracking (never blocks analysis)
+    try:
+        from engine.delta import save_daily_snapshot, compute_delta
+        save_daily_snapshot(symbol, r)
+        delta_data = compute_delta(symbol, r)
+        if delta_data:
+            r.update(delta_data)
+    except Exception as e:
+        log.debug(f"Delta layer skipped for {symbol}: {e}")
+
     # Explainability — structured scoring explanation (never blocks analysis)
     try:
         r["explanation"] = build_explanation(r)

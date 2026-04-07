@@ -524,6 +524,28 @@ async def api_watchlist_remove(symbol: str, request: Request):
     result = wl_remove(uid, symbol)
     return success(result)
 
+@app.get("/api/watchlist-changes")
+async def api_watchlist_changes(request: Request):
+    uid = _user_id(request)
+    symbols = wl_symbols(uid)
+    if not symbols:
+        return success({"changes": [], "count": 0})
+    try:
+        from engine.delta import watchlist_changes
+        changes = await asyncio.to_thread(watchlist_changes, symbols)
+        return success({"changes": changes, "count": len(changes)})
+    except Exception:
+        return success({"changes": [], "count": 0})
+
+@app.get("/api/movers")
+async def api_movers():
+    try:
+        from engine.delta import get_movers
+        movers = await asyncio.to_thread(get_movers)
+        return success(movers)
+    except Exception:
+        return success({"gainers": [], "losers": []})
+
 @app.get("/api/alerts")
 async def api_alerts_get(request: Request):
     uid = _user_id(request)

@@ -71,6 +71,18 @@ def init_db():
             updated_at TEXT NOT NULL DEFAULT (datetime('now')),
             PRIMARY KEY (user_id, symbol)
         );
+
+        CREATE TABLE IF NOT EXISTS score_history (
+            symbol     TEXT NOT NULL,
+            snap_date  TEXT NOT NULL,
+            score      REAL,
+            momentum   REAL,
+            risk       REAL,
+            fa_score   REAL,
+            ivme       REAL,
+            decision   TEXT,
+            PRIMARY KEY (symbol, snap_date)
+        );
     """)
     conn.commit()
     log.info(f"SQLite storage initialized: {DB_PATH}")
