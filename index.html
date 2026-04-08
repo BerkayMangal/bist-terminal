@@ -533,11 +533,23 @@ _trEl.innerHTML=_trH;var _ov3=document.getElementById('ds-ov');if(_ov3)_ov3.appe
 }catch(e){}
 
 try{
-// Share button
+// Share — WhatsApp-first, natural Turkish
 var _dpH2=document.querySelector('.dp-h > div');
-if(_dpH2){var _sBtn=document.createElement('button');_sBtn.className='btn btn-sm';_sBtn.style.cssText='background:var(--bg3);border:1px solid var(--bdr);color:var(--t2);font-size:10px;padding:4px 10px;margin-left:6px;cursor:pointer';_sBtn.textContent='\ud83d\udcf1 Payla\u015f';
-_sBtn.onclick=function(){var _txt=r.ticker+'\\nSkor: '+Math.round(r.overall||r.deger||0)+'/100 \u2014 '+(r.decision||'')+'\\nbistbull.ai';if(navigator.share){navigator.share({title:r.ticker,text:_txt}).catch(function(){});}else{navigator.clipboard.writeText(_txt).then(function(){_sBtn.textContent='\u2705 Kopyaland\u0131';setTimeout(function(){_sBtn.textContent='\ud83d\udcf1 Payla\u015f';},2000);}).catch(function(){});}};
-var _pr2=_dpH2.querySelector('div:last-child');if(_pr2)_pr2.appendChild(_sBtn);}
+if(_dpH2){
+function _mkSh(){
+var tk=r.ticker||'';var dec=r.decision||'';var ti=(r.timing_intel||{}).state||'';var wc=(r.what_changed||[]);
+var dt=dec==='AL'?'g\u00fc\u00e7l\u00fc g\u00f6r\u00fcn\u00fcyor':dec==='\u0130ZLE'?'ilgin\u00e7 g\u00f6r\u00fcn\u00fcyor':dec==='BEKLE'?'karars\u0131z g\u00f6r\u00fcn\u00fcyor':'zay\u0131f g\u00f6r\u00fcn\u00fcyor';
+var tt=ti==='uygun'?'zamanlama da uygun':ti==='erken'?'ama zamanlama biraz erken':ti==='bekle'?'\u015fu an beklemek daha mant\u0131kl\u0131':'';
+var wt='';if(wc.length&&wc[0]!=='\u00d6nemli bir de\u011fi\u015fiklik yok'){wt='son durumda '+wc[0].toLowerCase();}
+var l=[tk,'','\u015fu an '+dt];if(tt)l.push(tt);if(wt)l.push(wt);l.push('');l.push('bir bak derim:');l.push('https://bistbull.ai/terminal?t='+tk);
+return l.join('\n');}
+var _sc2=document.createElement('div');_sc2.style.cssText='display:inline-flex;gap:4px;margin-left:6px';
+var _wa=document.createElement('button');_wa.className='btn btn-sm';_wa.style.cssText='background:rgba(37,211,102,.12);border:1px solid rgba(37,211,102,.25);color:#25d366;font-size:10px;padding:4px 8px;cursor:pointer';_wa.textContent='WhatsApp';
+_wa.onclick=function(){window.open('https://wa.me/?text='+encodeURIComponent(_mkSh()),'_blank');};
+var _cp=document.createElement('button');_cp.className='btn btn-sm';_cp.style.cssText='background:var(--bg3);border:1px solid var(--bdr);color:var(--t3);font-size:10px;padding:4px 8px;cursor:pointer';_cp.textContent='kopyala';
+_cp.onclick=function(){navigator.clipboard.writeText(_mkSh()).then(function(){_cp.textContent='\u2705';setTimeout(function(){_cp.textContent='kopyala';},1500);}).catch(function(){});};
+_sc2.appendChild(_wa);_sc2.appendChild(_cp);
+var _pr2=_dpH2.querySelector('div:last-child');if(_pr2)_pr2.appendChild(_sc2);}
 }catch(e){}
 
 try{
