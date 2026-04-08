@@ -546,6 +546,22 @@ async def api_movers():
     except Exception:
         return success({"gainers": [], "losers": []})
 
+@app.get("/api/compare")
+async def api_compare(request: Request, left: str = "", right: str = ""):
+    if not left or not right:
+        return error("left ve right parametreleri gerekli", status_code=400)
+    try:
+        from engine.compare import compare_stocks
+        l_sym = normalize_symbol(left)
+        r_sym = normalize_symbol(right)
+        l_analysis = await asyncio.to_thread(analyze_symbol, l_sym)
+        r_analysis = await asyncio.to_thread(analyze_symbol, r_sym)
+        comparison = compare_stocks(l_analysis, r_analysis)
+        return success({"left": l_analysis, "right": r_analysis, "comparison": comparison})
+    except Exception as e:
+        log.warning(f"compare {left} vs {right}: {e}")
+        return error("Karşılaştırma yapılamadı", status_code=500)
+
 @app.get("/api/alerts")
 async def api_alerts_get(request: Request):
     uid = _user_id(request)

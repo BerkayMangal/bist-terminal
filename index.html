@@ -523,6 +523,63 @@ _tiEl.innerHTML=_th;var _ov2=document.getElementById('ds-ov');if(_ov2)_ov2.appen
 }}catch(e){}
 
 try{
+// Turkey context card
+var _tc=r.turkey_context||{};var _ia=_tc.inflation_accounting||{};var _pqi=_tc.profit_quality_interpretation||{};var _ar=_tc.accounting_risk||{};var _tn=_tc.turkey_notes||[];
+if(_pqi.level||_ar.level||_tn.length){
+var _tcEl=document.createElement('div');_tcEl.style.cssText='margin-top:14px;padding:12px 14px;background:var(--bg3);border:1px solid var(--bdr);border-radius:var(--rad)';
+var _tch='<div style="font-family:\'JetBrains Mono\',monospace;font-size:var(--fs-xs);color:var(--acc);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">T\u00dcRK\u0130YE KONTEKST</div>';
+if(_pqi.level){var _pqC=_pqi.level==='iyi'?'var(--grn)':_pqi.level==='orta'?'var(--ylw)':'var(--red)';_tch+='<div style="margin-bottom:6px;font-size:var(--fs-sm);color:var(--t2)"><span style="color:var(--t3)">K\u00e2r Kalitesi:</span> <span style="color:'+_pqC+'">'+esc(_pqi.summary||'')+'</span></div>';}
+if(_ar.level&&_ar.level!=='bilinmiyor'){var _arC=_ar.level==='d\u00fc\u015f\u00fck'?'var(--grn)':_ar.level==='orta'?'var(--ylw)':'var(--red)';_tch+='<div style="margin-bottom:6px;font-size:var(--fs-sm);color:var(--t2)"><span style="color:var(--t3)">Muhasebe Riski:</span> <span style="color:'+_arC+'">'+esc(_ar.level)+'</span> <span style="color:var(--t4);font-size:var(--fs-xs)">'+esc(_ar.note||'')+'</span></div>';}
+if(_ia.status&&_ia.status!=='normal'){_tch+='<div style="margin-bottom:6px;font-size:var(--fs-xs);color:var(--ylw)">\u26a0 '+esc(_ia.note||'')+'</div>';}
+if(_tn.length){_tch+=_tn.map(function(n){return'<div style="font-size:var(--fs-xs);color:var(--t3);padding:1px 0">\u25b8 '+esc(n)+'</div>';}).join('');}
+_tcEl.innerHTML=_tch;var _ov4=document.getElementById('ds-ov');if(_ov4)_ov4.appendChild(_tcEl);}
+}catch(e){}
+
+try{
+// Karşılaştır button (near share)
+var _dpH3=document.querySelector('.dp-h > div');
+if(_dpH3){
+var _cmpBtn=document.createElement('button');_cmpBtn.className='btn btn-sm';_cmpBtn.style.cssText='background:var(--bg3);border:1px solid var(--bdr);color:var(--cyn);font-size:10px;padding:4px 8px;margin-left:4px;cursor:pointer';_cmpBtn.textContent='\u2194 Kar\u015f\u0131la\u015ft\u0131r';
+_cmpBtn.onclick=function(){
+var _inp=prompt('Kar\u015f\u0131la\u015ft\u0131rmak istedi\u011fin hisseyi yaz (ör: FROTO):');
+if(!_inp)return;_inp=_inp.trim().toUpperCase();if(_inp.length<2)return;
+_cmpBtn.textContent='Y\u00fckleniyor...';_cmpBtn.disabled=true;
+api('/api/compare?left='+encodeURIComponent(r.ticker)+'&right='+encodeURIComponent(_inp)).then(function(d){
+_cmpBtn.textContent='\u2194 Kar\u015f\u0131la\u015ft\u0131r';_cmpBtn.disabled=false;
+if(!d||d.error){alert('Kar\u015f\u0131la\u015ft\u0131rma yap\u0131lamad\u0131');return;}
+_showCompare(d);
+}).catch(function(){_cmpBtn.textContent='\u2194 Kar\u015f\u0131la\u015ft\u0131r';_cmpBtn.disabled=false;});
+};
+var _pr3=_dpH3.querySelector('div:last-child');if(_pr3)_pr3.appendChild(_cmpBtn);}
+}catch(e){}
+
+try{
+// Compare overlay renderer
+window._showCompare=function(d){
+var c=d.comparison||{};var L=d.left||{};var R=d.right||{};var lt=c.left_ticker||'?';var rt=c.right_ticker||'?';
+var ov=document.createElement('div');ov.id='_cmpOverlay';ov.style.cssText='position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.85);overflow-y:auto;padding:20px';
+ov.onclick=function(e){if(e.target===ov)ov.remove();};
+function _pill(v,l){var col=v>=65?'var(--grn)':v>=45?'var(--ylw)':'var(--red)';return'<div style="text-align:center"><div style="font-size:9px;color:var(--t3)">'+l+'</div><div style="font-family:\'JetBrains Mono\',monospace;font-size:16px;font-weight:700;color:'+col+'">'+Math.round(v)+'</div></div>';}
+function _dimRow(label,lv,rv){var col='var(--t3)';var arrow='=';if(lv>rv+3){col='var(--cyn)';arrow='\u25c0';}else if(rv>lv+3){col='var(--cyn)';arrow='\u25b6';}return'<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--bdr)"><span style="font-family:\'JetBrains Mono\',monospace;font-size:12px;color:'+(lv>rv+3?'var(--grn)':'var(--t2)')+'">'+Math.round(lv)+'</span><span style="font-size:10px;color:var(--t3)">'+esc(label)+'</span><span style="font-family:\'JetBrains Mono\',monospace;font-size:12px;color:'+(rv>lv+3?'var(--grn)':'var(--t2)')+'">'+Math.round(rv)+'</span></div>';}
+var h='<div style="max-width:500px;margin:0 auto;background:var(--bg2);border:1px solid var(--bdr);border-radius:var(--rad2);padding:20px">';
+h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px"><span style="font-family:\'JetBrains Mono\',monospace;font-size:18px;color:var(--t1)">'+esc(lt)+' <span style="color:var(--t4)">vs</span> '+esc(rt)+'</span><button onclick="document.getElementById(\'_cmpOverlay\').remove()" style="background:none;border:none;color:var(--t3);font-size:18px;cursor:pointer">\u2715</button></div>';
+h+='<div style="margin-bottom:14px;font-size:var(--fs-sm);color:var(--t2);line-height:1.6">'+esc(c.summary||'')+'</div>';
+if((c.key_differences||[]).length){h+='<div style="margin-bottom:14px">'+c.key_differences.map(function(d2){return'<div style="font-size:var(--fs-xs);color:var(--cyn);padding:2px 0">\u25b8 '+esc(d2)+'</div>';}).join('')+'</div>';}
+h+='<div style="display:flex;justify-content:space-between;margin-bottom:14px;padding:12px;background:var(--bg3);border-radius:var(--rad)">';
+var ls=c.scores?.left||{};var rs2=c.scores?.right||{};
+h+='<div style="text-align:center;flex:1">'+_pill(ls.overall||0,lt)+'</div>';
+h+='<div style="text-align:center;flex:1">'+_pill(rs2.overall||0,rt)+'</div></div>';
+var lsc=L.scores||{};var rsc=R.scores||{};
+h+=_dimRow('De\u011ferleme',lsc.value||50,rsc.value||50);
+h+=_dimRow('Kalite',lsc.quality||50,rsc.quality||50);
+h+=_dimRow('B\u00fcy\u00fcme',lsc.growth||50,rsc.growth||50);
+h+=_dimRow('Bilan\u00e7o',lsc.balance||50,rsc.balance||50);
+h+=_dimRow('K\u00e2r Kal.',lsc.earnings||50,rsc.earnings||50);
+h+=_dimRow('Momentum',lsc.momentum||50,rsc.momentum||50);
+h+='<div style="margin-top:14px;padding:10px;background:var(--bg3);border-radius:var(--rad);font-size:var(--fs-sm);color:var(--t2);line-height:1.6;font-style:italic">'+esc(c.conclusion||'')+'</div>';
+h+='<div style="margin-top:10px;font-size:9px;color:var(--t4);text-align:center">Bu bir kar\u015f\u0131la\u015ft\u0131rma \u00e7er\u00e7evesidir, yat\u0131r\u0131m tavsiyesi de\u011fildir.</div>';
+h+='</div>';ov.innerHTML=h;document.body.appendChild(ov);};
+
 // Trust footer
 var _dh4=r.data_health||{};var _dc4=r.decision_context||{};var _dhG=_dh4.grade||'A';
 var _trEl=document.createElement('div');_trEl.style.cssText='margin-top:14px;padding:10px 14px;border-top:1px solid var(--bdr);font-size:10px;color:var(--t4);line-height:1.6';

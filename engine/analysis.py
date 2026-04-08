@@ -480,6 +480,13 @@ def analyze_symbol(symbol: str) -> dict:
     except Exception as e:
         log.debug(f"Timing intel skipped for {symbol}: {e}")
 
+    # Turkey Context — inflation, profit quality, accounting risk (never blocks)
+    try:
+        from engine.turkey_context import build_turkey_context
+        r["turkey_context"] = build_turkey_context(m, r)
+    except Exception as e:
+        log.debug(f"Turkey context skipped for {symbol}: {e}")
+
     # Delta — daily snapshot + 7d change (never blocks)
     try:
         from engine.delta import save_daily_snapshot, compute_delta
