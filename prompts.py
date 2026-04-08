@@ -226,21 +226,66 @@ def build_rich_context(r: dict, tech: Optional[dict] = None) -> str:
 # TRADER SUMMARY — investment thesis prompt
 # ================================================================
 def trader_summary_prompt(r: dict, tech: Optional[dict] = None) -> str:
-    """Build the trader summary / investment thesis AI prompt.
-    Moved from ai/engine.py to centralize all prompt logic."""
+    """Build the trader summary AI prompt.
+    V2: Natural tone, trust-first, no buy/sell language."""
     ctx = build_rich_context(r, tech)
-    entry = r.get("entry_label", "?")
+
+    # Timing intel context
+    ti = r.get("timing_intel", {})
+    ti_line = f"Zamanlama durumu: {ti.get('text', 'bilinmiyor')}" if ti.get("state") else ""
+
+    # Delta context
+    delta = r.get("delta", {})
+    wc = r.get("what_changed", [])
+    delta_line = f"Son 7 gün: {', '.join(wc)}" if wc and wc[0] != "Önemli bir değişiklik yok" else ""
+
+    # Valuation context
+    val = r.get("valuation", {})
+    val_line = ""
+    if val.get("base_case"):
+        val_line = f"Değerleme aralığı: {val.get('range', '?')} ({val.get('method', '?')})"
+
     is_hype = r.get("is_hype", False)
-    return (
-        "Sen kurumsal BIST analisti ve portföy yöneticisisin. 20 yıllık tecrüben var. Türkiye piyasasını çok iyi bilirsin.\n"
-        "Aşağıdaki veriye dayanarak bu hisse için yatırım tezi yaz. Türkçe.\n"
-        "ASLA sallama, SADECE verideki rakamlara dayan. Gerçekçi, spesifik, kısa ol.\n"
-        f"{'⚠️ DİKKAT: Bu hisse HYPE/SPEKÜLATİF olarak işaretlenmiş — temel zayıf ama fiyat uçuyor.' if is_hype else ''}\n\n"
-        f"{ctx}\n\n"
-        "Şu formatta yaz (her satır ayrı, başka HİÇBİR ŞEY yazma):\n"
-        f"GİRİŞ: {entry} — bu ne anlama geliyor? 1 cümle açıkla.\n"
-        "TEZ: 1 spesifik cümle — NEDEN bu karar? (rakam kullan)\n"
-        "RİSK: 1 spesifik cümle — en büyük risk? (rakam kullan)\n"
-        "ZAMANLAMA: 1 cümle — giriş zamanı uygun mu, ne beklemeli?\n"
-        "TÜRKİYE: 1 cümle — Türkiye piyasası bağlamında özel not (döviz, enflasyon, sektör)\n"
+
+    system = (
+        "Sen BistBull.ai'nin analiz motoruna bağlı çalışan bir finans yorumlayıcısın.\n"
+        "Görevin: Mevcut veriyi sade, net ve güvenilir şekilde yorumlamak. Karar vermezsin, yönlendirme yapmazsın.\n\n"
+        "ÜSLUP:\n"
+        "- Sakin, net ve kendinden emin konuş\n"
+        "- Kısa ve akıcı yaz (2-4 cümle, maksimum 80 kelime)\n"
+        "- Profesyonel ama mesafeli değil\n"
+        "- Teknik terimleri sadeleştir\n\n"
+        "YAPI:\n"
+        "1. Genel durum (çok kısa)\n"
+        "2. Dikkat çeken ana nokta\n"
+        "3. Dengeli yorum (olumlu + risk)\n\n"
+        "YASAKLAR:\n"
+        '- "al", "sat", "giriş yap" gibi yönlendirici ifadeler\n'
+        '- Kesin konuşma (örn: "kesin yükselir")\n'
+        "- Abartılı veya hype dili\n"
+        "- Öğretici uzun açıklamalar\n"
+        "- Aynı kalıpları tekrar etme\n\n"
+        "RİSK YAKLAŞIMI: Her zaman dengeli ol — 'olumlu taraf var ama şu noktaya dikkat etmek gerekir'\n\n"
+        "ÖRNEK TON:\n"
+        '❌ "Şirketin finansal performansı oldukça güçlüdür"\n'
+        '✅ "temel taraf güçlü görünüyor ama son hareket hızlı"\n\n'
+        "Sen karar vermezsin. Sadece mevcut analizi insan diline çevirirsin.\n"
     )
+
+    data = f"{ctx}"
+    if ti_line:
+        data += f"\n{ti_line}"
+    if delta_line:
+        data += f"\n{delta_line}"
+    if val_line:
+        data += f"\n{val_line}"
+    if is_hype:
+        data += "\n⚠️ HYPE TESPİTİ: Fiyat hızla yükseliyor ama temel zayıf."
+
+    return (
+        f"{system}\n"
+        f"--- VERİ ---\n{data}\n\n"
+        f"Yukarıdaki veriye dayanarak bu hisse hakkında 2-4 cümlelik sade bir yorum yaz. "
+        f"Tek paragraf, başlık yok, madde yok. Sadece doğal Türkçe."
+    )
+
