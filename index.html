@@ -529,7 +529,7 @@ try{
 var _de=r.dimension_explanations||{};var _tc=r.turkey_context||{};
 if(Object.keys(_de).length){
 var _deEl=document.createElement('div');_deEl.style.cssText='margin-top:14px;padding:12px 14px;background:var(--bg3);border:1px solid var(--bdr);border-radius:var(--rad)';
-var _deh='<div style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-xs);color:var(--acc);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">BOYUT YORUMLARI</div>';
+var _deh='<div style="font-family:\'JetBrains Mono\',monospace;font-size:var(--fs-xs);color:var(--acc);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">BOYUT YORUMLARI</div>';
 var _dimOrder=[['value','Değerleme'],['quality','Kalite'],['growth','Büyüme'],['balance','Bilanço'],['earnings','Kâr Kalitesi'],['moat','Hendek'],['capital','Sermaye']];
 _dimOrder.forEach(function(d){var exp=_de[d[0]];if(exp){_deh+='<div style="display:flex;justify-content:space-between;padding:3px 0;font-size:var(--fs-xs);border-bottom:1px solid var(--bdr)"><span style="color:var(--t3)">'+d[1]+'</span><span style="color:var(--t2)">'+esc(exp)+'</span></div>';}});
 _deEl.innerHTML=_deh;var _scTab=document.getElementById('ds-sc');if(_scTab)_scTab.appendChild(_deEl);}
