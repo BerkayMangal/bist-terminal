@@ -546,6 +546,22 @@ async def api_movers():
     except Exception:
         return success({"gainers": [], "losers": []})
 
+@app.get("/api/resolve-ticker")
+async def api_resolve_ticker(q: str = ""):
+    if not q:
+        return success({"tickers": []})
+    from engine.ticker_resolver import resolve_multiple
+    tickers = resolve_multiple(q)
+    return success({"tickers": tickers, "query": q})
+
+@app.get("/api/search-suggest")
+async def api_search_suggest(q: str = ""):
+    if not q or len(q) < 2:
+        return success({"suggestions": []})
+    from engine.ticker_resolver import search_suggestions
+    sugs = search_suggestions(q)
+    return success({"suggestions": sugs})
+
 @app.get("/api/compare")
 async def api_compare(request: Request, left: str = "", right: str = ""):
     if not left or not right:

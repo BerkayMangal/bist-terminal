@@ -480,6 +480,13 @@ def analyze_symbol(symbol: str) -> dict:
     except Exception as e:
         log.debug(f"Timing intel skipped for {symbol}: {e}")
 
+    # Dimension Explanations — plain-language per-dimension (never blocks)
+    try:
+        from engine.dimension_explainer import build_dimension_explanations
+        r["dimension_explanations"] = build_dimension_explanations(scores, m)
+    except Exception as e:
+        log.debug(f"Dimension explainer skipped for {symbol}: {e}")
+
     # Turkey Context — inflation, profit quality, accounting risk (never blocks)
     try:
         from engine.turkey_context import build_turkey_context

@@ -175,7 +175,7 @@ footer a{color:var(--gold);text-decoration:none}
   <div class="nav-links">
     <a href="#nasil">Nasıl Çalışır</a>
     <a href="#fiyat">Fiyat</a>
-    <a href="https://bistbull.ai/terminal" class="nav-cta">Sonucu Gör →</a>
+    <a href="/terminal" class="nav-cta">Sonucu Gör →</a>
   </div>
 </nav>
 
@@ -339,7 +339,7 @@ footer a{color:var(--gold);text-decoration:none}
       <li>Q asistanı — sor, cevap al</li>
       <li>Her gün güncellenir</li>
     </ul>
-    <a href="https://bistbull.ai/terminal" class="pricing-cta">Sonucu Gör →</a>
+    <a href="/terminal" class="pricing-cta">Sonucu Gör →</a>
     <div class="pricing-note">Kayıt yok. Kredi kartı yok. Aç, kullan.</div>
   </div>
 </section>
@@ -354,7 +354,7 @@ footer a{color:var(--gold);text-decoration:none}
 <div class="final-cta">
   <h2>Bir dahaki tüyodan <em>önce</em>,</h2>
   <p>Hisseyi yaz. 3 saniye. Sonra sen karar ver.</p>
-  <a href="https://bistbull.ai/terminal">Sonucu Gör →</a>
+  <a href="/terminal">Sonucu Gör →</a>
 </div>
 
 <div class="divider"></div>
@@ -394,14 +394,14 @@ footer a{color:var(--gold);text-decoration:none}
 </div>
 
 <footer>
-  <p style="margin-bottom:6px">© 2025 <a href="https://bistbull.ai">BistBull.ai</a> · Veri odaklı BIST analiz terminali</p>
+  <p style="margin-bottom:6px">© 2025 <a href="">BistBull.ai</a> · Veri odaklı BIST analiz terminali</p>
   <p>Yatırım tavsiyesi değildir. Tüm kararlar kullanıcıya aittir. <a href="https://x.com/bistbull_ai">@bistbull_ai</a></p>
 </footer>
 
 <script>
 function goTerminal(){
   const v=document.getElementById('heroInput').value.trim().toUpperCase();
-  window.location.href=v?'https://bistbull.ai/terminal?t='+encodeURIComponent(v):'https://bistbull.ai/terminal';
+  window.location.href=v?'/terminal?t='+encodeURIComponent(v):'/terminal';
 }
 document.getElementById('heroInput').addEventListener('keydown',function(e){if(e.key==='Enter')goTerminal();});
 
