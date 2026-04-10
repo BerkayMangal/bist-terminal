@@ -38,7 +38,11 @@ def _range(m,gr,ma,sh,nd):
  if ev is None or not sh or sh<=0:
   if gfv>0 and price>0: return {"bear_case":round(gfv*0.75,2),"base_case":round(gfv,2),"bull_case":round(gfv*1.25,2),"range":f"{gfv*0.75:.0f}–{gfv*1.25:.0f} TL","currency":m.get("currency","TRY"),"method":"graham","vs_price":round((gfv/price-1)*100,1)}
   return {"method":"unavailable"}
- eq=ev-nd; eq=max(eq,ev*0.1); b=eq/sh; return {"bear_case":round(b*0.6,2),"base_case":round(b,2),"bull_case":round(b*1.4,2),"range":f"{b*0.6:.0f}–{b*1.4:.0f} TL","currency":m.get("currency","TRY"),"method":meth,"vs_price":round((b/price-1)*100,1) if price>0 else None}
+ eq=ev-nd
+ if eq<=0: return {"method":"unavailable","reason":"net_debt_exceeds_ev"}
+ b=eq/sh
+ if b<=0 or (price>0 and b>price*20): return {"method":"unavailable","reason":"implausible_fair_value"}
+ return {"bear_case":round(b*0.6,2),"base_case":round(b,2),"bull_case":round(b*1.4,2),"range":f"{b*0.6:.0f}–{b*1.4:.0f} TL","currency":m.get("currency","TRY"),"method":meth,"vs_price":round((b/price-1)*100,1) if price>0 else None}
 def _conf(m,val):
  meth=val.get("method","unavailable")
  if meth=="unavailable": return {"level":"low","reason":"yeterli veri yok"}

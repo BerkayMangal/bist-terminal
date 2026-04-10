@@ -9,11 +9,12 @@ from __future__ import annotations
 
 import os
 import logging
+import datetime as dt
 from typing import Optional, Any
 
 import pandas as pd
 
-from utils.helpers import safe_num, pick_row_pair, growth, base_ticker
+from utils.helpers import safe_num, pick_row_pair, growth, base_ticker, first_valid
 from core.cache import raw_cache, analysis_cache
 from config import UNIVERSE
 from engine.metrics import normalize_metrics, compute_score_coverage, confidence_penalty_for_imputed_scores
@@ -84,6 +85,7 @@ def fetch_raw(symbol: str) -> dict:
         "info": info, "fast": fast,
         "financials": financials, "balance": balance, "cashflow": cashflow,
         "source": "yfinance",
+        "_fetched_at": dt.datetime.now(dt.timezone.utc).isoformat(),
     }
     raw_cache.set(symbol, raw)
     return raw
@@ -165,7 +167,9 @@ def compute_beneish(m: dict) -> Optional[float]:
         sgai = (abs(sga or 0) / (sales or 1)) / max(abs(sga_prev or 0) / (sales_prev or 1), 1e-9)
         lvgi = ((m.get("total_debt") or 0) / max(ta, 1e-9)) / max((m.get("total_debt_prev") or 0) / max(ta_prev, 1e-9), 1e-9)
         tata = ((ni or 0) - (cfo or 0)) / max(ta, 1e-9)
-        return -4.84 + 0.92 * dsri + 0.528 * gmi + 0.404 * aqi + 0.892 * sgi + 0.115 * depi - 0.172 * sgai + 4.679 * tata - 0.327 * lvgi
+        _bm = -4.84 + 0.92 * dsri + 0.528 * gmi + 0.404 * aqi + 0.892 * sgi + 0.115 * depi - 0.172 * sgai + 4.679 * tata - 0.327 * lvgi
+        if _bm < -10 or _bm > 10: return None
+        return _bm
     except Exception:
         return None
 
@@ -218,50 +222,51 @@ def compute_metrics(symbol: str) -> dict:
     receivables, rec_prev = pick_row_pair(bal, ["Accounts Receivable", "Receivables"])
     ppe, ppe_prev = pick_row_pair(bal, ["Net PPE", "Property Plant Equipment Net"])
 
-    price = safe_num(fast.get("last_price")) or safe_num(info.get("currentPrice"))
-    market_cap = safe_num(fast.get("market_cap")) or safe_num(info.get("marketCap"))
-    pe = safe_num(info.get("trailingPE")) or safe_num(info.get("forwardPE"))
+    price = first_valid(safe_num(fast.get("last_price")), safe_num(info.get("currentPrice")))
+    market_cap = first_valid(safe_num(fast.get("market_cap")), safe_num(info.get("marketCap")))
+    pe = safe_num(info.get("trailingPE"))
     pb = safe_num(info.get("priceToBook"))
     ev_ebitda = safe_num(info.get("enterpriseToEbitda"))
     div_yield = safe_num(info.get("dividendYield"))
     beta = safe_num(info.get("beta"))
-    trailing_eps = safe_num(info.get("trailingEps")) or safe_num(eps_row)
-    book_val_ps = safe_num(info.get("bookValue")) or ((equity / dil_shares) if equity and dil_shares else None)
+    trailing_eps = first_valid(safe_num(info.get("trailingEps")), safe_num(eps_row))
+    book_val_ps = first_valid(safe_num(info.get("bookValue")), (equity / dil_shares) if equity and dil_shares else None)
 
-    roe = safe_num(info.get("returnOnEquity")) or ((net_income / equity) if net_income and equity else None)
-    roa = safe_num(info.get("returnOnAssets")) or ((net_income / total_assets) if net_income and total_assets else None)
-    roa_prev = (net_income_prev / total_assets_prev) if net_income_prev and total_assets_prev else None
-    gross_margin = (gross_profit / revenue) if gross_profit and revenue else None
-    gross_margin_prev = (gross_profit_prev / revenue_prev) if gross_profit_prev and revenue_prev else None
-    op_margin = safe_num(info.get("operatingMargins")) or ((operating_income / revenue) if operating_income and revenue else None)
-    net_margin = safe_num(info.get("profitMargins")) or ((net_income / revenue) if net_income and revenue else None)
-    cur_ratio = safe_num(info.get("currentRatio")) or ((cur_assets / cur_liab) if cur_assets and cur_liab else None)
-    cur_ratio_prev = (cur_assets_prev / cur_liab_prev) if cur_assets_prev and cur_liab_prev else None
-    debt_eq = safe_num(info.get("debtToEquity")) or ((total_debt / equity * 100) if total_debt and equity else None)
+    roe = first_valid(safe_num(info.get("returnOnEquity")), (net_income / equity) if net_income is not None and equity not in (None, 0) else None)
+    roa = first_valid(safe_num(info.get("returnOnAssets")), (net_income / total_assets) if net_income is not None and total_assets not in (None, 0) else None)
+    roa_prev = (net_income_prev / total_assets_prev) if net_income_prev is not None and total_assets_prev not in (None, 0) else None
+    gross_margin = (gross_profit / revenue) if gross_profit is not None and revenue not in (None, 0) and revenue > 0 else None
+    gross_margin_prev = (gross_profit_prev / revenue_prev) if gross_profit_prev is not None and revenue_prev not in (None, 0) and revenue_prev > 0 else None
+    op_margin = first_valid(safe_num(info.get("operatingMargins")), (operating_income / revenue) if operating_income is not None and revenue not in (None, 0) and revenue > 0 else None)
+    net_margin = first_valid(safe_num(info.get("profitMargins")), (net_income / revenue) if net_income is not None and revenue not in (None, 0) and revenue > 0 else None)
+    cur_ratio = first_valid(safe_num(info.get("currentRatio")), (cur_assets / cur_liab) if cur_assets is not None and cur_liab not in (None, 0) and cur_liab > 0 else None)
+    cur_ratio_prev = (cur_assets_prev / cur_liab_prev) if cur_assets_prev is not None and cur_liab_prev not in (None, 0) and cur_liab_prev > 0 else None
+    debt_eq = first_valid(safe_num(info.get("debtToEquity")), (total_debt / equity * 100) if total_debt is not None and equity not in (None, 0) and abs(equity) > 1e4 else None)
 
     net_debt = (total_debt - cash) if total_debt is not None and cash is not None else None
     net_debt_ebit = (net_debt / ebitda) if net_debt is not None and ebitda not in (None, 0) else None
     _ebit_val = ebit if ebit is not None else operating_income
     int_cov = (_ebit_val / abs(interest_exp)) if _ebit_val is not None and interest_exp not in (None, 0) else None
 
-    free_cf = ((op_cf + capex) if op_cf is not None and capex is not None else None) or safe_num(info.get("freeCashflow"))
+    free_cf = first_valid((op_cf + capex) if op_cf is not None and capex is not None else None, safe_num(info.get("freeCashflow")))
     fcf_yield = (free_cf / market_cap) if free_cf is not None and market_cap not in (None, 0) else None
     fcf_margin = (free_cf / revenue) if free_cf is not None and revenue not in (None, 0) else None
     cfo_to_ni = (op_cf / net_income) if op_cf is not None and net_income not in (None, 0) else None
 
-    rev_growth = safe_num(info.get("revenueGrowth")) or growth(revenue, revenue_prev)
-    eps_growth = safe_num(info.get("earningsGrowth")) or growth(eps_row, eps_row_prev) or growth(net_income, net_income_prev)
+    rev_growth = first_valid(safe_num(info.get("revenueGrowth")), growth(revenue, revenue_prev))
+    eps_growth = first_valid(safe_num(info.get("earningsGrowth")), growth(eps_row, eps_row_prev), growth(net_income, net_income_prev))
     ebit_growth = growth(ebitda, ebitda_prev)
 
     wc = (cur_assets - cur_liab) if cur_assets is not None and cur_liab is not None else None
-    tax_rate = safe_num(info.get("effectiveTaxRate")) or 0.20
+    _tax_raw = safe_num(info.get("effectiveTaxRate"))
+    tax_rate = _tax_raw if _tax_raw is not None else 0.20
     inv_cap = (total_debt + equity - cash) if total_debt is not None and equity is not None and cash is not None else None
     _ebit_nopat = ebit if ebit is not None else operating_income
     nopat = (_ebit_nopat * (1 - min(max(tax_rate, 0), 0.35))) if _ebit_nopat is not None else None
     roic = (nopat / inv_cap) if nopat is not None and inv_cap not in (None, 0) else None
 
-    peg = (pe / max(eps_growth * 100, 1e-9)) if pe not in (None, 0) and eps_growth is not None and eps_growth > 0 else None
-    graham_fv = ((22.5 * trailing_eps * book_val_ps) ** 0.5) if trailing_eps not in (None, 0) and book_val_ps not in (None, 0) and trailing_eps > 0 and book_val_ps > 0 else None
+    peg = (pe / (eps_growth * 100)) if pe not in (None, 0) and eps_growth is not None and eps_growth > 0.01 else None
+    graham_fv = ((22.5 * trailing_eps * book_val_ps) ** 0.5) if trailing_eps is not None and book_val_ps is not None and trailing_eps > 0.5 and book_val_ps > 0.5 else None
     mos = ((graham_fv - price) / graham_fv) if graham_fv not in (None, 0) and price is not None else None
     share_ch = growth(dil_shares, dil_shares_prev)
     asset_to = (revenue / total_assets) if revenue is not None and total_assets not in (None, 0) else None
@@ -346,8 +351,9 @@ def analyze_symbol(symbol: str) -> dict:
     )
     from engine.technical import compute_technical
     from engine.applicability import build_applicability_flags
+    from engine.metric_guards import validate_metrics
 
-    m = normalize_metrics(compute_metrics(symbol))
+    m = validate_metrics(normalize_metrics(compute_metrics(symbol)))
     sector_group = map_sector(m.get("sector", ""))
 
     tech = None
@@ -357,7 +363,7 @@ def analyze_symbol(symbol: str) -> dict:
         log.debug(f"analyze_symbol tech for {symbol}: {e}")
 
     # 7 boyut FA — compute raw scores (may be None)
-    _IMPUTE_DEFAULT = 50
+    _IMPUTE_PENALTY = 35
     _raw_fa = {
         "value": score_value(m, sector_group),
         "quality": score_quality(m, sector_group),
@@ -373,17 +379,23 @@ def analyze_symbol(symbol: str) -> dict:
 
     # Apply imputation: None → 50 (backward compatible default)
     scores: dict[str, float] = {
-        k: round(v if v is not None else _IMPUTE_DEFAULT, 1)
+        k: round(v if v is not None else _IMPUTE_PENALTY, 1)
         for k, v in _raw_fa.items()
     }
 
     if scores_imputed:
         log.debug(
-            f"{symbol}: {len(scores_imputed)} FA dimension(s) imputed to {_IMPUTE_DEFAULT}: "
+            f"{symbol}: {len(scores_imputed)} FA dimension(s) imputed to {_IMPUTE_PENALTY}: "
             f"{', '.join(scores_imputed)}"
         )
 
-    fa_pure = compute_fa_pure(scores)
+    from config import FA_WEIGHTS
+    _active = {k: v for k, v in _raw_fa.items() if v is not None}
+    if len(_active) >= 3:
+        _wsum = sum(FA_WEIGHTS[k] for k in _active)
+        fa_pure = round(max(1, min(99, sum((FA_WEIGHTS[k] / _wsum) * _active[k] for k in _active))), 1)
+    else:
+        fa_pure = compute_fa_pure(scores)
     risk_penalty, risk_reasons = compute_risk_penalties(m, sector_group)
 
     # Fake Profit filtresi
@@ -455,6 +467,10 @@ def analyze_symbol(symbol: str) -> dict:
         "applicability": applicability_flags,
         "scores_imputed": scores_imputed,
         "score_coverage": score_coverage,
+        "data_source": m.get("data_source", "unknown"),
+        "data_fetched_at": raw_cache.get(symbol, {}).get("_fetched_at") if raw_cache.get(symbol) else None,
+        "analyzed_at": dt.datetime.now(dt.timezone.utc).isoformat(),
+        "_metric_violations": m.get("_metric_violations", 0),
     }
 
     # Data Quality (never blocks)

@@ -1,0 +1,9 @@
+*.zip
+*.jpg
+app (7).py
+index_v12.html
+tests/
+test_*.py
+__pycache__/
+*.pyc
+hero-bg*

@@ -12,6 +12,7 @@ from __future__ import annotations
 import math
 import logging
 import re
+import datetime as _dt
 from typing import Optional, Any
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -301,6 +302,7 @@ def fetch_raw_v9(symbol: str) -> dict:
             "info": info, "fast": fast,
             "financials": fin, "balance": bal, "cashflow": cf,
             "source": "borsapy", "ticker_clean": tc, "is_bank": is_bank(tc),
+            "_fetched_at": _dt.datetime.now(_dt.timezone.utc).isoformat(),
         }
 
         raw_cache.set(symbol, raw)
@@ -363,41 +365,52 @@ def compute_metrics_v9(symbol: str) -> dict:
     ppe, ppe_prev = _pair(bal, BS_MAP["ppe"])
 
     # Market data
-    price = _safe_num(fast.get("last_price")) or _safe_num(info.get("currentPrice"))
-    market_cap = _safe_num(fast.get("market_cap")) or _safe_num(info.get("marketCap"))
-    pe = _safe_num(fast.get("pe_ratio")) or _safe_num(info.get("trailingPE"))
-    pb = _safe_num(fast.get("pb_ratio")) or _safe_num(info.get("priceToBook"))
+    price = _safe_num(fast.get("last_price"))
+    if price is None: price = _safe_num(info.get("currentPrice"))
+    market_cap = _safe_num(fast.get("market_cap"))
+    if market_cap is None: market_cap = _safe_num(info.get("marketCap"))
+    pe = _safe_num(fast.get("pe_ratio"))
+    pe = pe if pe is not None else _safe_num(info.get("trailingPE"))
+    pb = _safe_num(fast.get("pb_ratio"))
+    pb = pb if pb is not None else _safe_num(info.get("priceToBook"))
     ev_ebitda = _safe_num(info.get("enterpriseToEbitda"))
     div_yield = _safe_num(info.get("dividendYield"))
     beta = _safe_num(info.get("beta"))
     shares = _safe_num(fast.get("shares"))
-    if not shares and market_cap and price and price > 0:
+    if shares is None and market_cap and price and price > 0:
         shares = market_cap / price
 
     # Per-share
     trailing_eps = _safe_num(info.get("trailingEps"))
-    if not trailing_eps and net_income and shares and shares > 0:
+    if trailing_eps is None and net_income is not None and shares and shares > 0:
         trailing_eps = net_income / shares
     book_val_ps = _safe_num(info.get("bookValue"))
-    if not book_val_ps and equity and shares and shares > 0:
+    if book_val_ps is None and equity and shares and shares > 0:
         book_val_ps = equity / shares
 
     # Ratios — financial statement derived, with info-dict fallback
-    roe = _safe_num(info.get("returnOnEquity")) or ((net_income / equity) if net_income and equity and equity != 0 else None)
-    roa = _safe_num(info.get("returnOnAssets")) or ((net_income / total_assets) if net_income and total_assets and total_assets != 0 else None)
+    roe = _safe_num(info.get("returnOnEquity"))
+    roe = roe if roe is not None else ((net_income / equity) if net_income is not None and equity not in (None, 0) else None)
+    roa = _safe_num(info.get("returnOnAssets"))
+    roa = roa if roa is not None else ((net_income / total_assets) if net_income is not None and total_assets not in (None, 0) else None)
     roa_prev = (net_income_prev / total_assets_prev) if net_income_prev and total_assets_prev and total_assets_prev != 0 else None
     gross_margin = (gross_profit / revenue) if gross_profit and revenue else None
     gross_margin_prev = (gross_profit_prev / revenue_prev) if gross_profit_prev and revenue_prev else None
-    op_margin = _safe_num(info.get("operatingMargins")) or ((operating_income / revenue) if operating_income and revenue else None)
-    net_margin = _safe_num(info.get("profitMargins")) or ((net_income / revenue) if net_income and revenue else None)
-    cur_ratio = _safe_num(info.get("currentRatio")) or ((cur_assets / cur_liab) if cur_assets and cur_liab else None)
+    op_margin = _safe_num(info.get("operatingMargins"))
+    op_margin = op_margin if op_margin is not None else ((operating_income / revenue) if operating_income is not None and revenue not in (None, 0) and revenue > 0 else None)
+    net_margin = _safe_num(info.get("profitMargins"))
+    net_margin = net_margin if net_margin is not None else ((net_income / revenue) if net_income is not None and revenue not in (None, 0) and revenue > 0 else None)
+    cur_ratio = _safe_num(info.get("currentRatio"))
+    cur_ratio = cur_ratio if cur_ratio is not None else ((cur_assets / cur_liab) if cur_assets is not None and cur_liab not in (None, 0) and cur_liab > 0 else None)
     cur_ratio_prev = (cur_assets_prev / cur_liab_prev) if cur_assets_prev and cur_liab_prev else None
-    debt_eq = _safe_num(info.get("debtToEquity")) or ((total_debt / equity * 100) if total_debt and equity and equity != 0 else None)
+    debt_eq = _safe_num(info.get("debtToEquity"))
+    debt_eq = debt_eq if debt_eq is not None else ((total_debt / equity * 100) if total_debt is not None and equity not in (None, 0) and abs(equity) > 1e4 else None)
     net_debt = (total_debt - cash) if total_debt is not None and cash is not None else None
     net_debt_ebit = (net_debt / ebitda) if net_debt is not None and ebitda not in (None, 0) else None
-    _ev = ebit or operating_income
-    int_cov = (_ev / abs(interest_exp)) if _ev and interest_exp and interest_exp != 0 else None
-    free_cf = free_cf_direct or ((op_cf + capex) if op_cf is not None and capex is not None else None) or _safe_num(info.get("freeCashflow"))
+    _ev = ebit if ebit is not None else operating_income
+    int_cov = (_ev / abs(interest_exp)) if _ev is not None and interest_exp not in (None, 0) else None
+    _fcf_c = (op_cf + capex) if op_cf is not None and capex is not None else None
+    free_cf = free_cf_direct if free_cf_direct is not None else (_fcf_c if _fcf_c is not None else _safe_num(info.get("freeCashflow")))
     fcf_yield = (free_cf / market_cap) if free_cf is not None and market_cap not in (None, 0) else None
     fcf_margin = (free_cf / revenue) if free_cf is not None and revenue not in (None, 0) else None
     cfo_to_ni = (op_cf / net_income) if op_cf is not None and net_income not in (None, 0) else None
@@ -408,20 +421,23 @@ def compute_metrics_v9(symbol: str) -> dict:
             return None
         return (c - p) / abs(p)
 
-    rev_growth = _g(revenue, revenue_prev) or _safe_num(info.get("revenueGrowth"))
-    eps_growth = _g(net_income, net_income_prev) or _safe_num(info.get("earningsGrowth"))
+    rev_growth = _g(revenue, revenue_prev)
+    rev_growth = rev_growth if rev_growth is not None else _safe_num(info.get("revenueGrowth"))
+    eps_growth = _g(net_income, net_income_prev)
+    eps_growth = eps_growth if eps_growth is not None else _safe_num(info.get("earningsGrowth"))
     ebit_growth = _g(ebitda, ebitda_prev)
 
     # Working capital & ROIC
     wc = (cur_assets - cur_liab) if cur_assets is not None and cur_liab is not None else None
-    tax_rate = _safe_num(info.get("effectiveTaxRate")) or 0.20
+    tax_rate = _safe_num(info.get("effectiveTaxRate"))
+    tax_rate = tax_rate if tax_rate is not None else 0.20
     inv_cap = (total_debt + equity - cash) if total_debt is not None and equity is not None and cash is not None else None
     nopat = ((_ev or 0) * (1 - min(max(tax_rate, 0), 0.35))) if _ev else None
-    roic = (nopat / inv_cap) if nopat and inv_cap not in (None, 0) else None
+    roic = (nopat / inv_cap) if nopat is not None and inv_cap not in (None, 0) else None
 
     # Valuation extras
-    peg = (pe / max(eps_growth * 100, 1e-9)) if pe not in (None, 0) and eps_growth and eps_growth > 0 else None
-    graham_fv = ((22.5 * trailing_eps * book_val_ps) ** 0.5) if trailing_eps and book_val_ps and trailing_eps > 0 and book_val_ps > 0 else None
+    peg = (pe / (eps_growth * 100)) if pe not in (None, 0) and eps_growth is not None and eps_growth > 0.01 else None
+    graham_fv = ((22.5 * trailing_eps * book_val_ps) ** 0.5) if trailing_eps and book_val_ps and trailing_eps > 0.5 and book_val_ps > 0.5 else None
     mos = ((graham_fv - price) / graham_fv) if graham_fv not in (None, 0) and price else None
     asset_to = (revenue / total_assets) if revenue and total_assets not in (None, 0) else None
     asset_to_p = (revenue_prev / total_assets_prev) if revenue_prev and total_assets_prev not in (None, 0) else None

@@ -147,6 +147,19 @@ async def lifespan(application: FastAPI):
     task.cancel(); redis_client.shutdown(); log.info(f"{APP_NAME} shutting down")
 
 app = FastAPI(title="BistBull Terminal", version=BOT_VERSION, lifespan=lifespan)
+import secrets as _secrets
+from fastapi.middleware.cors import CORSMiddleware
+_AO = os.environ.get("ALLOWED_ORIGINS","").split(",")
+_AO = [o.strip() for o in _AO if o.strip()]
+if _AO: app.add_middleware(CORSMiddleware,allow_origins=_AO,allow_methods=["GET","POST","DELETE"],allow_headers=["Content-Type"])
+@app.middleware("http")
+async def sec_mw(request:Request,call_next):
+    r=await call_next(request);r.headers["X-Content-Type-Options"]="nosniff";r.headers["X-Frame-Options"]="DENY";r.headers["Referrer-Policy"]="strict-origin-when-cross-origin";return r
+@app.middleware("http")
+async def ses_mw(request:Request,call_next):
+    sid=request.cookies.get("bb_session")
+    if not sid:sid=_secrets.token_urlsafe(32)
+    request.state.user_id=sid;r=await call_next(request);r.set_cookie("bb_session",sid,httponly=True,samesite="strict",max_age=86400*90);return r
 
 @app.exception_handler(RateLimitExceeded)
 async def _rate_limit_handler(request: Request, exc: RateLimitExceeded):
@@ -494,7 +507,7 @@ async def api_batch(tickers: str):
 # WATCHLIST + ALERTS (Phase 7)
 # ================================================================
 def _user_id(request: Request) -> str:
-    return request.headers.get("x-user-id", "default")
+    return getattr(request.state, "user_id", None) or request.cookies.get("bb_session", "anonymous")
 
 @app.get("/api/watchlist")
 async def api_watchlist_get(request: Request):

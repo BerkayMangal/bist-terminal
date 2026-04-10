@@ -181,10 +181,13 @@ def check_rate_limit(request: Any, endpoint: str) -> None:
 def _extract_ip(request: Any) -> str:
     """Request nesnesinden IP adresini çıkar."""
     # FastAPI Request
+    if hasattr(request, "headers"):
+        forwarded = request.headers.get("x-forwarded-for", "")
+        if forwarded:
+            return forwarded.split(",")[-1].strip()
     if hasattr(request, "client") and request.client:
         return request.client.host or "unknown"
-    # Proxy arkasında
-    if hasattr(request, "headers"):
+    if False:
         forwarded = request.headers.get("x-forwarded-for", "")
         if forwarded:
             return forwarded.split(",")[0].strip()

@@ -50,13 +50,21 @@ def fmt_pct(x: Any, digits: int = 1) -> str:
     return f"{v * 100:.{digits}f}%"
 
 
+import re as _re
+_TICKER_RE = _re.compile(r'^[A-Z0-9]{1,12}$')
+_SYMBOL_RE = _re.compile(r'^[A-Z0-9]{1,12}\.[A-Z]{1,5}$')
+
 def normalize_symbol(ticker: str) -> str:
-    """Ticker'ı Yahoo Finance formatına çevir: 'THYAO' → 'THYAO.IS'"""
+    """Ticker dogrulama + Yahoo Finance formati."""
     t = (ticker or "").strip().upper().replace(" ", "")
+    if not t or len(t) > 20: raise ValueError(f"Invalid ticker: {ticker}")
     if t.endswith(".IS"):
+        if not _TICKER_RE.match(t[:-3]): raise ValueError(f"Invalid ticker: {ticker}")
         return t
     if "." in t:
+        if not _SYMBOL_RE.match(t): raise ValueError(f"Invalid ticker: {ticker}")
         return t
+    if not _TICKER_RE.match(t): raise ValueError(f"Invalid ticker: {ticker}")
     return f"{t}.IS"
 
 
@@ -204,3 +212,11 @@ def safe_divide(numerator: Any, denominator: Any, default: Optional[float] = Non
     if n is None or d is None or d == 0:
         return default
     return n / d
+
+
+def first_valid(*values: Any) -> Optional[float]:
+    """Return the first non-None value. Unlike or, treats 0.0 as valid."""
+    for v in values:
+        if v is not None:
+            return v
+    return None

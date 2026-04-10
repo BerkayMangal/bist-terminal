@@ -16,7 +16,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # Create persistent data directory (mount volume at /data on Railway)
-RUN mkdir -p /data
+RUN mkdir -p /data && adduser --disabled-password --gecos "" appuser && chown -R appuser:appuser /app /data
+USER appuser
 
 # Railway sets $PORT dynamically; default 8080 for local dev
 EXPOSE 8080
