@@ -621,13 +621,13 @@ _INDEX_HTML = os.path.join(_BASE_DIR, "index.html"); _LANDING_HTML = os.path.joi
 async def _suppress_icon(): return Response(status_code=204)
 
 @app.get("/", response_class=HTMLResponse)
-async def serve_terminal():
-    try:
-        with open(_INDEX_HTML, "r", encoding="utf-8") as f: return HTMLResponse(content=f.read())
-    except FileNotFoundError: return HTMLResponse(content="<h1>BistBull Terminal</h1><p>index.html bulunamadi</p>", status_code=500)
-
-@app.get("/landing", response_class=HTMLResponse)
 async def serve_landing():
     try:
         with open(_LANDING_HTML, "r", encoding="utf-8") as f: return HTMLResponse(content=f.read())
     except FileNotFoundError: return await serve_terminal()
+
+@app.get("/terminal", response_class=HTMLResponse)
+async def serve_terminal():
+    try:
+        with open(_INDEX_HTML, "r", encoding="utf-8") as f: return HTMLResponse(content=f.read())
+    except FileNotFoundError: return HTMLResponse(content="<h1>BistBull Terminal</h1><p>index.html bulunamadi</p>", status_code=500)
