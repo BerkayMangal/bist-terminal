@@ -1430,26 +1430,89 @@ function rmPF(ticker){savePF(getPF().filter(p=>p.ticker!==ticker));}
 // ===== NASIL ÇALIŞIR PAGE =====
 function renderNasilPage(){
 const pg=$('pg-nasil');
-let h=`<div style="margin-bottom:20px"><h2 style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-lg);color:var(--blu)">🐂 BistBull Nasıl Çalışır?</h2><p style="font-size:var(--fs-base);color:var(--t2);margin-top:6px;line-height:1.7">BistBull, BIST hisselerini 9 boyutta analiz eden bir karar destek aracıdır. Veriyi daha sistemli okumanı sağlar — karar yine senin.</p></div>`;
-h+=`<div style="margin-bottom:20px;padding:16px;background:rgba(255,179,0,.06);border:1px solid rgba(255,179,0,.15);border-left:3px solid var(--ylw);border-radius:0 var(--rad) var(--rad) 0"><div style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-sm);font-weight:700;color:var(--ylw);margin-bottom:6px">📌 BİLGİ</div><div style="font-size:var(--fs-base);color:var(--t2);line-height:1.7">Bu skorlar <b>orta-uzun vadeli temel analiz</b> içindir. Al-sat sinyali veya yatırım tavsiyesi <b>değildir</b>. Veriler kamuya açık kaynaklardan gelir, bazen eksik veya gecikmeli olabilir. Karar sizin.</div></div>`;
-h+=`<div class="card" style="margin-bottom:20px"><div class="card-h"><span class="card-t">🏗️ Genel Yapı</span></div><div class="card-b" style="font-size:var(--fs-base);color:var(--t2);line-height:1.7">Her hisse iki perspektiften değerlendirilir:<div class="g2" style="margin:16px 0"><div style="padding:14px;background:rgba(76,175,80,.08);border:1px solid rgba(76,175,80,.2);border-radius:var(--rad)"><div style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-md);color:var(--grn);font-weight:700;margin-bottom:6px">🏛️ DEĞER SKORU</div><div style="font-size:var(--fs-sm);color:var(--t2);line-height:1.6">Şirketin temel gücü. Bilanço, kârlılık, büyüme, değerleme. <b>"Bu şirket iyi mi?"</b></div></div><div style="padding:14px;background:rgba(100,181,246,.08);border:1px solid rgba(100,181,246,.2);border-radius:var(--rad)"><div style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-md);color:var(--blu);font-weight:700;margin-bottom:6px">⚡ İVME SKORU</div><div style="font-size:var(--fs-sm);color:var(--t2);line-height:1.6">Piyasa dinamikleri. Momentum, teknik kırılım, kurum akışı. <b>"Şu an giriş zamanı mı?"</b></div></div></div><div style="text-align:center;font-family:'JetBrains Mono',monospace;font-size:var(--fs-sm);color:var(--t3)">Genel Skor = Değer × %55 + İvme × %45</div></div></div>`;
-const dB=[['💰','Değerleme',18,'Hisse ucuz mu pahalı mı?','F/K, PD/DD, FD/FAVÖK, Ciro/PD, FCF getirisi, Graham güvenlik payı. Sektöre göre kalibre edilir.'],['⭐','Kalite',25,'Şirket kârlı ve verimli mi?','ROE (özsermaye kârlılığı), ROIC (yatırılan sermaye getirisi), net kâr marjı. Sektör bazlı eşiklerle.'],['📈','Büyüme',12,'Gelir ve kârlar artıyor mu?','Gelir büyümesi, HBK büyümesi, FAVÖK büyümesi, PEG oranı. Yüksek enflasyonda nominal büyüme yanıltabilir.'],['🏦','Bilanço',15,'Borç seviyesi tehlikeli mi?','Net Borç/FAVÖK, Borç/Özsermaye, cari oran, faiz karşılama, Altman Z-Score. Yüksek faiz ortamında en kritik boyut.'],['💵','Kâr Kalitesi',13,'Kazandığı para gerçek mi?','Nakit akış/net gelir (CFO/NI ≥ 1.0 = gerçek kâr), FCF marjı, Beneish M-Score (muhasebe manipülasyonu testi). Kağıt kâr tuzağından korur.'],['🏗️','Sermaye Tahsisi',10,'Yönetim parayı iyi kullanıyor mu?','Temettü, FCF getiri, ROIC kalitesi, hisse seyreltme, capex disiplini. Buffett\'ın en önem verdiği boyut.'],['🏰','Hendek',7,'Rekabet avantajı var mı?','Brüt marj stabilitesi, fiyatlama gücü, faaliyet marjı, varlık devir trendi.']];
-h+=`<div class="card" style="margin-bottom:20px"><div class="card-h"><span class="card-t">🏛️ Değer Boyutları (6 boyut)</span></div><div class="card-b">`;
-dB.forEach(([ic,nm,w,q,dt])=>{h+=`<div style="margin-bottom:14px;padding:14px;background:var(--bg3);border-radius:var(--rad);border-left:3px solid var(--grn)"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><span style="font-size:var(--fs-md);font-weight:700;color:var(--t1)">${ic} ${nm}</span><span style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-xs);color:var(--grn)">Ağırlık: %${w}</span></div><div style="font-size:var(--fs-base);color:var(--t1);font-weight:600;margin-bottom:4px">${q}</div><div style="font-size:var(--fs-sm);color:var(--t2);line-height:1.6">${dt}</div></div>`;});
-h+=`</div></div>`;
-const iB=[['🚀','Momentum',40,'Fiyat trendi ve hacim güçlü mü?','RSI, fiyat/MA pozisyonu, hacim oranı, 20 günlük değişim.'],['💥','Teknik Kırılım',35,'Önemli seviyeler kırılıyor mu?','52 haftalık zirve, Golden Cross, BB kırılımı, MACD divergence.'],['🏢','Kurum Akışı',25,'Kurumsal yatırımcı alıyor mu?','Kurumsal sahiplik, hacim-fiyat korelasyonu, birikim sinyalleri.']];
-h+=`<div class="card" style="margin-bottom:20px"><div class="card-h"><span class="card-t">⚡ İvme Boyutları (3 boyut)</span></div><div class="card-b">`;
-iB.forEach(([ic,nm,w,q,dt])=>{h+=`<div style="margin-bottom:14px;padding:14px;background:var(--bg3);border-radius:var(--rad);border-left:3px solid var(--blu)"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><span style="font-size:var(--fs-md);font-weight:700;color:var(--t1)">${ic} ${nm}</span><span style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-xs);color:var(--blu)">Ağırlık: %${w}</span></div><div style="font-size:var(--fs-base);color:var(--t1);font-weight:600;margin-bottom:4px">${q}</div><div style="font-size:var(--fs-sm);color:var(--t2);line-height:1.6">${dt}</div></div>`;});
-h+=`</div></div>`;
-h+=`<div class="card" style="margin-bottom:20px"><div class="card-h"><span class="card-t">🎯 Karar Sistemi (V8)</span></div><div class="card-b"><div style="font-size:var(--fs-base);color:var(--t2);line-height:1.7;margin-bottom:16px">Her hisseye otomatik olarak bir <b>karar</b>, bir <b>zamanlama</b> ve bir <b>kalite</b> etiketi atanır.</div><div style="margin-bottom:16px"><div style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-sm);color:var(--t3);margin-bottom:8px">KARAR ETİKETLERİ</div>`;
-[['AL','var(--grn)','Güçlü görünüyor — temel sağlam, momentum uygun'],['İZLE','var(--blu)','İlginç ama henüz net değil — izlenebilir'],['BEKLE','var(--ylw)','İyi şirket ama zamanlama geç veya fiyat yüksek olabilir'],['KAÇIN','var(--red)','Zayıf görünüyor — veriler dikkatli olmayı öneriyor']].forEach(([l,c,d])=>{h+=`<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--bdr)"><span style="font-family:'JetBrains Mono',monospace;font-weight:700;color:${c};min-width:60px">${l}</span><span style="font-size:var(--fs-sm);color:var(--t2)">${d}</span></div>`;});
-h+=`</div><div style="margin-bottom:16px"><div style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-sm);color:var(--t3);margin-bottom:8px">ZAMANLAMA ETİKETLERİ</div>`;
-[['ERKEN','Henüz kimse fark etmedi — potansiyel fırsat'],['GELİŞİYOR','Sinyaller oluşuyor — takip et'],['TEYİTLİ','Trend başladı — giriş penceresi'],['GEÇ','Fiyatlanmış olabilir — dikkatli ol'],['AŞIRI','Çok geç — düzeltme riski yüksek']].forEach(([l,d])=>{h+=`<div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--bdr)"><span style="font-family:'JetBrains Mono',monospace;font-weight:600;color:var(--t1);min-width:80px">${l}</span><span style="font-size:var(--fs-sm);color:var(--t2)">${d}</span></div>`;});
-h+=`</div></div></div>`;
-h+=`<div class="card" style="margin-bottom:20px"><div class="card-h"><span class="card-t">🏢 Sektör Kalibrasyonu</span></div><div class="card-b"><div style="font-size:var(--fs-base);color:var(--t2);line-height:1.7">V8'de skorlama eşikleri <b>sektöre göre ayarlanır</b>. Bir bankanın F/K 5 olması "normal"ken, bir savunma şirketinin F/K 20 olması da "normal" olabilir. Sektörler arası adaletsiz karşılaştırma önlenir.<br><br><b>Desteklenen sektörler:</b> Banka, Holding, Sanayi, Savunma, Enerji, Perakende, Ulaştırma</div></div></div>`;
-h+=`<div class="card" style="margin-bottom:20px"><div class="card-h"><span class="card-t">📊 Kullanılan Finansal Modeller</span></div><div class="card-b">`;
-[['Piotroski F-Score (0-9)','9 kriterli bilanço sağlığı testi. 7+ güçlü, 3- zayıf.'],['Altman Z-Score','İflas riski formülü. >3.0 güvenli, <1.8 riskli. Bankalar hariç.'],['Beneish M-Score','Muhasebe manipülasyonu tespit modeli. <-2.22 güvenli, >-1.78 şüpheli.'],['Graham İçsel Değer','√(22.5 × HBK × Defter Değeri) — Benjamin Graham formülü.'],['Buffett Filtresi','Kalite + Hendek + Bilanço birleşimi. "Mükemmel şirketi makul fiyattan al."']].forEach(([n,d])=>{h+=`<div style="margin-bottom:10px;padding:10px;background:var(--bg3);border-radius:var(--rad)"><span style="font-weight:700;color:var(--t1)">${n}</span><span style="font-size:var(--fs-sm);color:var(--t2);margin-left:8px">${d}</span></div>`;});
-h+=`</div></div>`;
+let h=`<div style="margin-bottom:24px;text-align:center">
+<div style="font-size:48px;margin-bottom:12px">🐂</div>
+<h2 style="font-family:'JetBrains Mono',monospace;font-size:22px;color:var(--acc);margin-bottom:8px">BistBull Nasıl Çalışır?</h2>
+<p style="font-size:var(--fs-base);color:var(--t2);line-height:1.7;max-width:600px;margin:0 auto">Borsayı anlamak için finans mezunu olmana gerek yok.<br>BistBull sana basitçe şunu söylüyor: <b style="color:var(--t1)">"Bu şirket sağlam mı, şu an alınır mı?"</b></p>
+</div>`;
+
+h+=`<div style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-xs);color:var(--t4);text-transform:uppercase;letter-spacing:2px;margin-bottom:14px;text-align:center">3 Adımda Anlat</div>
+<div class="g3" style="gap:12px;margin-bottom:24px">
+<div style="padding:20px;background:linear-gradient(135deg,rgba(76,175,80,.08),rgba(76,175,80,.03));border:1px solid rgba(76,175,80,.2);border-radius:var(--rad2);text-align:center">
+<div style="font-size:32px;margin-bottom:8px">🏛️</div>
+<div style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-md);color:var(--grn);font-weight:700;margin-bottom:8px">1. Şirket Sağlam mı?</div>
+<div style="font-size:var(--fs-sm);color:var(--t2);line-height:1.6">Bilançoya, kârlılığa, borca, büyümeye bakıyoruz. <b style="color:var(--t1)">7 farklı açıdan</b> inceliyoruz.</div>
+<div style="margin-top:10px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--grn);background:rgba(76,175,80,.1);padding:4px 10px;border-radius:20px;display:inline-block">= DEĞER SKORU</div>
+</div>
+<div style="padding:20px;background:linear-gradient(135deg,rgba(100,181,246,.08),rgba(100,181,246,.03));border:1px solid rgba(100,181,246,.2);border-radius:var(--rad2);text-align:center">
+<div style="font-size:32px;margin-bottom:8px">⚡</div>
+<div style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-md);color:var(--blu);font-weight:700;margin-bottom:8px">2. Zamanlama Uygun mu?</div>
+<div style="font-size:var(--fs-sm);color:var(--t2);line-height:1.6">Fiyat yükseliyor mu, hacim artıyor mu, kurumlar alıyor mu? <b style="color:var(--t1)">3 farklı sinyale</b> bakıyoruz.</div>
+<div style="margin-top:10px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--blu);background:rgba(100,181,246,.1);padding:4px 10px;border-radius:20px;display:inline-block">= İVME SKORU</div>
+</div>
+<div style="padding:20px;background:linear-gradient(135deg,rgba(255,179,0,.08),rgba(255,179,0,.03));border:1px solid rgba(255,179,0,.2);border-radius:var(--rad2);text-align:center">
+<div style="font-size:32px;margin-bottom:8px">🎯</div>
+<div style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-md);color:var(--acc);font-weight:700;margin-bottom:8px">3. Ne Yapmalı?</div>
+<div style="font-size:var(--fs-sm);color:var(--t2);line-height:1.6">İkisini birleştirip karar veriyoruz. Sağlam + iyi zamanlama = <span style="color:var(--grn);font-weight:700">AL</span>. Zayıf + kötü = <span style="color:var(--red);font-weight:700">KAÇIN</span>.</div>
+<div style="margin-top:10px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--acc);background:rgba(255,179,0,.1);padding:4px 10px;border-radius:20px;display:inline-block">= GENEL SKOR</div>
+</div>
+</div>`;
+
+h+=`<div class="card" style="margin-bottom:20px"><div class="card-h"><span class="card-t">🏷️ Etiketler ne demek?</span></div><div class="card-b">
+<div style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-xs);color:var(--t4);margin-bottom:10px">KARAR</div>
+<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:8px;margin-bottom:20px">
+<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:rgba(76,175,80,.08);border-radius:var(--rad);border-left:3px solid var(--grn)"><span style="font-family:'JetBrains Mono',monospace;font-weight:800;color:var(--grn);min-width:50px">AL</span><span style="font-size:var(--fs-sm);color:var(--t2)">Şirket güçlü, zamanlama iyi görünüyor</span></div>
+<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:rgba(100,181,246,.08);border-radius:var(--rad);border-left:3px solid var(--blu)"><span style="font-family:'JetBrains Mono',monospace;font-weight:800;color:var(--blu);min-width:50px">İZLE</span><span style="font-size:var(--fs-sm);color:var(--t2)">İlginç ama henüz net değil — takipte kal</span></div>
+<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:rgba(255,202,40,.08);border-radius:var(--rad);border-left:3px solid var(--ylw)"><span style="font-family:'JetBrains Mono',monospace;font-weight:800;color:var(--ylw);min-width:50px">BEKLE</span><span style="font-size:var(--fs-sm);color:var(--t2)">İyi şirket ama pahalı veya zamanlama uygun değil</span></div>
+<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:rgba(239,83,80,.08);border-radius:var(--rad);border-left:3px solid var(--red)"><span style="font-family:'JetBrains Mono',monospace;font-weight:800;color:var(--red);min-width:50px">KAÇIN</span><span style="font-size:var(--fs-sm);color:var(--t2)">Zayıf görünüyor — dikkatli ol</span></div>
+</div>
+<div style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-xs);color:var(--t4);margin-bottom:10px">ZAMANLAMA</div>
+<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:20px">
+<span class="pill" style="background:var(--blud);color:var(--blu)">ERKEN — kimse fark etmedi</span>
+<span class="pill" style="background:var(--blud);color:var(--blu)">GELİŞİYOR — sinyaller oluşuyor</span>
+<span class="pill" style="background:var(--grnd);color:var(--grn)">TEYİTLİ — trend başladı ✓</span>
+<span class="pill" style="background:var(--ylwd);color:var(--ylw)">GEÇ — geç kalmış olabilirsin</span>
+<span class="pill" style="background:var(--redd);color:var(--red)">AŞIRI — düzeltme riski</span>
+</div>
+<div style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-xs);color:var(--t4);margin-bottom:10px">KALİTE</div>
+<div style="display:flex;flex-wrap:wrap;gap:6px">
+<span class="pill" style="background:var(--grnd);color:var(--grn)">ELİT — en iyi %5</span>
+<span class="pill" style="background:var(--grnd);color:var(--grn)">GÜÇLÜ — sağlam şirket</span>
+<span class="pill" style="background:var(--ylwd);color:var(--ylw)">ORTA — idare eder</span>
+<span class="pill" style="background:var(--redd);color:var(--red)">ZAYIF — dikkat</span>
+<span class="pill" style="background:var(--redd);color:var(--red)">RİSKLİ — çok zayıf</span>
+</div>
+</div></div>`;
+
+h+=`<div class="card" style="margin-bottom:20px"><div class="card-h"><span class="card-t">📱 Sayfalar ne işe yarar?</span></div><div class="card-b" style="padding:0">
+<div style="display:flex;align-items:center;gap:14px;padding:14px 18px;border-bottom:1px solid var(--bdr)"><span style="font-size:20px">🏠</span><div><div style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-sm);font-weight:700;color:var(--t1)">Ana Sayfa</div><div style="font-size:var(--fs-sm);color:var(--t2)">Genel bakış. Piyasa durumu, en iyi hisseler, AI brifing.</div></div></div>
+<div style="display:flex;align-items:center;gap:14px;padding:14px 18px;border-bottom:1px solid var(--bdr)"><span style="font-size:20px">🏛️</span><div><div style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-sm);font-weight:700;color:var(--t1)">Radar</div><div style="font-size:var(--fs-sm);color:var(--t2)">Tüm hisseleri tarayıp sıralıyor. Uzun vadeli yatırımcı için.</div></div></div>
+<div style="display:flex;align-items:center;gap:14px;padding:14px 18px;border-bottom:1px solid var(--bdr)"><span style="font-size:20px">⚡</span><div><div style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-sm);font-weight:700;color:var(--t1)">Sinyaller</div><div style="font-size:var(--fs-sm);color:var(--t2)">Teknik kırılım ve momentum sinyalleri. Kısa vadeci için.</div></div></div>
+<div style="display:flex;align-items:center;gap:14px;padding:14px 18px;border-bottom:1px solid var(--bdr)"><span style="font-size:20px">🌍</span><div><div style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-sm);font-weight:700;color:var(--t1)">Makro</div><div style="font-size:var(--fs-sm);color:var(--t2)">Dolar, altın, faiz, BIST endeksi, gelişen piyasalar.</div></div></div>
+<div style="display:flex;align-items:center;gap:14px;padding:14px 18px"><span style="font-size:20px">📒</span><div><div style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-sm);font-weight:700;color:var(--t1)">Portföy</div><div style="font-size:var(--fs-sm);color:var(--t2)">Sanal portföy oluştur, Q ile analiz ettir.</div></div></div>
+</div></div>`;
+
+h+=`<div class="card" style="margin-bottom:20px"><div class="card-h"><span class="card-t">❓ Sık Sorulanlar</span></div><div class="card-b">
+<div style="padding:14px 0;border-bottom:1px solid var(--bdr)"><div style="font-weight:700;color:var(--t1);margin-bottom:6px">Bu bir yatırım tavsiyesi mi?</div><div style="font-size:var(--fs-sm);color:var(--t2);line-height:1.7"><b>Hayır.</b> BistBull bir karar destek aracıdır. Son karar her zaman senindir.</div></div>
+<div style="padding:14px 0;border-bottom:1px solid var(--bdr)"><div style="font-weight:700;color:var(--t1);margin-bottom:6px">Veriler nereden geliyor?</div><div style="font-size:var(--fs-sm);color:var(--t2);line-height:1.7">Borsa İstanbul verileri (KAP/İş Yatırım) ve yfinance. 15-20 dakika gecikmeli olabilir.</div></div>
+<div style="padding:14px 0;border-bottom:1px solid var(--bdr)"><div style="font-weight:700;color:var(--t1);margin-bottom:6px">AL diyor, almalı mıyım?</div><div style="font-size:var(--fs-sm);color:var(--t2);line-height:1.7">AL = "şu an iyi görünüyor" demek. Ama her analiz yanılabilir. Tek bir araca göre karar verme.</div></div>
+<div style="padding:14px 0;border-bottom:1px solid var(--bdr)"><div style="font-weight:700;color:var(--t1);margin-bottom:6px">Neden bazı hisseler listede yok?</div><div style="font-size:var(--fs-sm);color:var(--t2);line-height:1.7">Veri kalitesi çok düşük olanlar otomatik filtrelenir.</div></div>
+<div style="padding:14px 0"><div style="font-weight:700;color:var(--t1);margin-bottom:6px">Q asistanı nasıl çalışıyor?</div><div style="font-size:var(--fs-sm);color:var(--t2);line-height:1.7">Yapay zeka tüm verileri okuyup Türkçe yorum üretiyor. AI yanılabilir — referans olarak kullan.</div></div>
+</div></div>`;
+
+h+=`<details style="margin-bottom:20px"><summary style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-sm);color:var(--t3);cursor:pointer;padding:12px 16px;background:var(--bg2);border:1px solid var(--bdr);border-radius:var(--rad)">🔬 Teknik Detaylar (meraklılar için)</summary>
+<div style="padding:16px;background:var(--bg2);border:1px solid var(--bdr);border-top:0;border-radius:0 0 var(--rad) var(--rad);font-size:var(--fs-sm);color:var(--t2);line-height:1.7">
+<b style="color:var(--t1)">Değer Boyutları (7):</b> Değerleme %18, Kalite %30, Büyüme %15, Bilanço %10, Kâr Kalitesi %10, Sermaye %9, Hendek %8<br>
+<b style="color:var(--t1)">İvme Boyutları (3):</b> Momentum %40, Teknik Kırılım %35, Kurum Akışı %25<br>
+<b style="color:var(--t1)">Genel:</b> Değer×0.55 + İvme×0.35 + Stretch + Risk<br><br>
+<b style="color:var(--t1)">Modeller:</b> Piotroski F-Score, Altman Z, Beneish M, Graham, Buffett Filtresi, DCF<br>
+<b style="color:var(--t1)">Sektörler:</b> Banka, holding, sanayi, savunma, enerji, perakende, ulaştırma<br>
+<b style="color:var(--t1)">Kaynak:</b> borsapy (birincil) + yfinance (yedek), circuit breaker ile otomatik geçiş
+</div></details>`;
+
+h+=`<div style="text-align:center;padding:20px;color:var(--t4);font-size:var(--fs-sm)">
+Soru mu var? Sağ alttaki <span style="color:var(--acc);font-weight:700">Q</span> butonuna bas 💬
+</div>`;
 pg.innerHTML=h;}
 
 function renderPortfoyPage(){
@@ -1689,4 +1752,17 @@ Yapay Zekâ Destekli BIST Yatırım Terminali<br>
 <div style="padding:10px 12px;border-top:1px solid var(--bdr)"><div style="display:flex;gap:8px;margin-bottom:6px"><input id="agentInput" type="text" placeholder="THYAO nasıl? ya da kafana takılan..." style="flex:1;font-size:13px;padding:10px 12px;background:var(--bg0);border:1px solid var(--bdr);border-radius:6px;color:var(--t1);outline:0;font-family:'DM Sans',sans-serif;min-height:44px" onkeydown="if(event.key==='Enter')sendAgent()" enterkeyhint="send"><button onclick="sendAgent()" style="font-family:'JetBrains Mono',monospace;font-size:12px;padding:8px 14px;background:var(--acc);color:#000;border:0;border-radius:6px;cursor:pointer;font-weight:600;min-height:44px">Sor</button></div><div style="font-size:8px;color:var(--t4);line-height:1.3;padding-top:4px">⚠️ Q bilgi amaçlıdır. Yatırım tavsiyesi değildir.</div>
 </div>
 </div>
+
+<!-- FEEDBACK -->
+<div id="fbBtn" onclick="document.getElementById('fbPanel').style.display=document.getElementById('fbPanel').style.display==='none'?'block':'none'" style="position:fixed;bottom:calc(90px + var(--safe-b));right:20px;width:44px;height:44px;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 16px rgba(0,0,0,.4);z-index:149;border:1.5px solid var(--prp);background:linear-gradient(135deg,#1a1a2e,#0e131c);font-size:18px">💬</div>
+<div id="fbPanel" style="display:none;position:fixed;bottom:calc(140px + var(--safe-b));right:20px;width:320px;max-width:calc(100vw - 40px);background:var(--bg1);border:1px solid rgba(206,147,216,.25);border-radius:12px;box-shadow:0 8px 40px rgba(0,0,0,.5);z-index:149;overflow:hidden">
+<div style="padding:14px 16px;background:linear-gradient(135deg,rgba(206,147,216,.08),var(--bg1));border-bottom:1px solid var(--bdr)"><div style="display:flex;justify-content:space-between;align-items:center"><div><div style="font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:700;color:var(--prp)">💬 Geri Bildirim</div><div style="font-size:10px;color:var(--t4);margin-top:2px">Anonim · kimse bilmez 🤫</div></div><button onclick="document.getElementById('fbPanel').style.display='none'" style="background:0;border:0;color:var(--t3);font-size:16px;cursor:pointer">✕</button></div></div>
+<div style="padding:14px 16px">
+<div style="font-size:13px;color:var(--t2);margin-bottom:12px">Beğendin mi? Kızdın mı? Bir şey bozuk mu? 😄</div>
+<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px"><span onclick="document.getElementById('fbText').value='🔥 Çok iyi olmuş!'" style="cursor:pointer;font-size:12px;padding:6px 10px;background:var(--bg3);border:1px solid var(--bdr);border-radius:20px;color:var(--t2)">🔥 Harika</span><span onclick="document.getElementById('fbText').value='🤔 Anlamadım'" style="cursor:pointer;font-size:12px;padding:6px 10px;background:var(--bg3);border:1px solid var(--bdr);border-radius:20px;color:var(--t2)">🤔 Anlamadım</span><span onclick="document.getElementById('fbText').value='🐛 Bug buldum: '" style="cursor:pointer;font-size:12px;padding:6px 10px;background:var(--bg3);border:1px solid var(--bdr);border-radius:20px;color:var(--t2)">🐛 Bug</span><span onclick="document.getElementById('fbText').value='💡 Fikir: '" style="cursor:pointer;font-size:12px;padding:6px 10px;background:var(--bg3);border:1px solid var(--bdr);border-radius:20px;color:var(--t2)">💡 Fikir</span></div>
+<textarea id="fbText" placeholder="Aklına ne gelirse yaz... anonim, rahat ol 😊" style="width:100%;height:80px;font-size:13px;padding:10px;background:var(--bg0);border:1px solid var(--bdr);border-radius:8px;color:var(--t1);outline:0;resize:vertical;box-sizing:border-box;font-family:'DM Sans',sans-serif"></textarea>
+<button id="fbSendBtn" onclick="(async()=>{const t=document.getElementById('fbText').value.trim();if(!t){document.getElementById('fbSt').textContent='Bir şeyler yaz 😄';return;}document.getElementById('fbSendBtn').disabled=true;try{await fetch('/api/track?e=feedback_'+encodeURIComponent(t.slice(0,200)));document.getElementById('fbText').value='';document.getElementById('fbSt').innerHTML='<span style=color:var(--grn)>✅ Teşekkürler!</span>';setTimeout(()=>{document.getElementById('fbSt').textContent='';document.getElementById('fbPanel').style.display='none'},2000)}catch(e){document.getElementById('fbSt').innerHTML='<span style=color:var(--red)>Hata, tekrar dene</span>'}document.getElementById('fbSendBtn').disabled=false})()" style="margin-top:8px;width:100%;font-family:'JetBrains Mono',monospace;font-size:12px;padding:10px;background:var(--prp);color:#000;border:0;border-radius:8px;cursor:pointer;font-weight:700">GÖNDER 🚀</button>
+<div id="fbSt" style="margin-top:6px;font-size:11px;text-align:center;color:var(--t4)"></div>
+</div></div>
+
 </body></html>
