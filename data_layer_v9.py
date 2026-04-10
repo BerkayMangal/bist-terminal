@@ -349,10 +349,10 @@ def compute_metrics_v9(symbol: str) -> dict:
     beta = _safe_num(info.get("beta"))
 
     # ── SANITY PHASE 1: Hard outlier rejection ──────────────────
-    if pe is not None and (pe < 0 or pe > 500):
+    if pe is not None and (pe < 0 or pe > 200):
         log.warning(f"{symbol}: PE outlier={pe:.1f} → None")
         pe = None
-    if pb is not None and (pb < 0 or pb > 100):
+    if pb is not None and (pb < 0 or pb > 50):
         log.warning(f"{symbol}: PB outlier={pb:.1f} → None")
         pb = None
     if ev_ebitda is not None and (ev_ebitda < 0 or ev_ebitda > 200):
@@ -372,7 +372,7 @@ def compute_metrics_v9(symbol: str) -> dict:
     # ── SANITY PHASE 2: PE cross-validation ─────────────────────
     if price and trailing_eps and trailing_eps > 0:
         calc_pe = round(price / trailing_eps, 2)
-        if pe is None and 0 < calc_pe < 500:
+        if pe is None and 0 < calc_pe < 200:
             pe = calc_pe
         elif pe is not None and calc_pe > 0 and abs(pe - calc_pe) / max(calc_pe, 1) > 2.0:
             log.warning(f"{symbol}: PE mismatch src={pe:.1f} vs calc={calc_pe:.1f} → using calc")
