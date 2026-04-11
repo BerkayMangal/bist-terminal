@@ -136,7 +136,7 @@ WS_MAX_CONNECTIONS: int = 50
 RESPONSE_BUILD_VERSION: str = BOT_VERSION
 
 # ================================================================
-# UNIVERSE — BIST 108
+# UNIVERSE — TÜM BİST (260+ hisse)
 # ================================================================
 UNIVERSE_BIST30: list[str] = [
     "ASELS", "THYAO", "BIMAS", "KCHOL", "SISE", "EREGL", "TUPRS", "AKBNK", "ISCTR", "YKBNK",
@@ -158,7 +158,26 @@ UNIVERSE_EXTRA: list[str] = [
     "CANTE", "CEMTS", "NUHCM", "PRKME", "AKSA", "GOLTS", "ERBOS", "MIATK", "QUAGR", "FORTE", "RGYAS",
 ]
 
-UNIVERSE: list[str] = UNIVERSE_BIST30 + UNIVERSE_EXTRA
+UNIVERSE_EXTENDED: list[str] = [
+    "AKENR", "AKFYE", "AKGRT", "ALCTL", "ALKIM", "ANACM", "ARDYZ", "ARENA", "ARMDA", "ASUZU",
+    "ATAGY", "ATATP", "AVOD", "AVTUR", "BANVT", "BEYAZ", "BFREN", "BIENY", "BINHO", "BIOEN",
+    "BMELK", "BMSTL", "BRMEN", "BURVA", "CEMAS", "CONSE", "CRFSA", "DAGI", "DENIZ", "DESA",
+    "DESPC", "DGATE", "DOKTA", "DYOBY", "EDATA", "EGGUB", "EMNIS", "ESCOM", "ESEN", "ETILR",
+    "FADE", "FMIZP", "FONET", "GEDIK", "GENIL", "GLCVY", "GOODY", "GWIND", "HATEK", "HDFGS",
+    "HEDEF", "HTTBT", "HUNER", "ICBCT", "IHAAS", "INGRM", "INTEM", "IPEKE", "ISBIR", "ISFIN",
+    "IZENR", "KAREL", "KARSN", "KATMR", "KENT", "KEREV", "KERVT", "KFEIN", "KGYO", "KLMSN",
+    "KLNMA", "KONYA", "KOZAA", "KOZAL", "KRVGD", "KSTUR", "KUYAS", "LINK", "LMKDC", "LUKSK",
+    "MAALT", "MAGEN", "MARTI", "MEGAP", "MERCN", "METUR", "MIGRS", "MOBTL", "MRGYO", "MRSHL",
+    "MSGYO", "MTRKS", "MTRYO", "NATEN", "NTHOL", "NUGYO", "OLMIP", "OSMEN", "OYLUM", "OYYAT",
+    "OZGYO", "OZKGY", "PAGYO", "PARSN", "PCILT", "PENGD", "PINSU", "PKART", "PRKAB", "PRZMA",
+    "QNBFB", "RAYSG", "SAFKR", "SEKUR", "SELEC", "SILVR", "SMART", "SNGYO", "SNKRN", "SUNTK",
+    "SUWEN", "TAIHL", "TATGD", "TBORG", "TEKTU", "TICR", "TKNSA", "TMPOL", "TNZTP", "TRGYO",
+    "TRILC", "TRKCM", "TUCLK", "TUKAS", "TUREX", "UFUK", "ULUUN", "USAK", "UTPYA", "VAKKO",
+    "VERTU", "VKGYO", "VKING", "YAPRK", "YEOTK", "YGYO", "YKSLN", "YONGA", "YUNSA", "YYAPI",
+    "ZEDUR", "ZELOT",
+]
+
+UNIVERSE: list[str] = UNIVERSE_BIST30 + UNIVERSE_EXTRA + UNIVERSE_EXTENDED
 
 # ================================================================
 # FA SCORE AĞIRLIKLARI

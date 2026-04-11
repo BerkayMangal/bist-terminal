@@ -80,14 +80,14 @@ def generate_action_summary(
         # NEUTRAL
         s3 = "Mevcut pozisyonları koru, yeni alım için sinyal bekle."
 
-    # --- Sentence 4: Contradiction, event, or data quality note ---
+    # --- Sentence 4: Event takes priority, then contradiction, then estimated ---
     s4 = ""
-    if contradictions:
-        s4 = f"Dikkat: {contradictions[0].message.split('.')[0]}."
-    elif n_estimated >= 2:
-        s4 = "Not: Bazı veriler tahmini — teyit gerekiyor."
-    elif upcoming_event:
+    if upcoming_event:
         s4 = f"Bu hafta önemli: {upcoming_event}."
+    elif contradictions:
+        s4 = f"Dikkat: {contradictions[0].message.split('.')[0]}."
+    elif n_estimated >= 2 and confidence != "LOW":
+        s4 = "Not: Bazı veriler tahmini — teyit gerekiyor."
 
     parts = [s1, s2, s3]
     if s4:

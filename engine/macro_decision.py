@@ -177,20 +177,33 @@ def compute_regime(inputs: dict[str, Any]) -> RegimeResult:
     else:
         regime = "NEUTRAL"
 
-    # --- Confidence (accounts for data quality) ---
+    # --- Confidence ---
+    # CRITICAL: Confidence = data quality, NOT signal agreement.
+    # Mixed signals with good data = MEDIUM (AI should comment on the mix).
+    # Poor data with any signals = LOW (AI should stay quiet).
     n_signals = len(signals)
+    n_trusted = sum(1 for s in signals if s.source in ("günlük",))
     n_estimated = sum(1 for s in signals if s.source in ("tahmini", "eski"))
     n_missing = sum(1 for s in signals if s.note == "veri yok")
     abs_ws = abs(weighted_score)
 
-    if n_signals == 0 or n_missing >= n_signals - 1:
-        confidence = "LOW"
-    elif abs_ws >= 4.0 and n_estimated <= 1:
-        confidence = "HIGH"
-    elif abs_ws >= 2.0:
-        confidence = "MEDIUM" if n_estimated <= 2 else "LOW"
+    # Data quality tier (floor)
+    if n_signals == 0 or n_missing >= 4:
+        data_quality = "LOW"
+    elif n_trusted >= 4 and n_missing == 0:
+        data_quality = "HIGH" if n_estimated <= 1 else "MEDIUM"
+    elif n_trusted >= 3:
+        data_quality = "MEDIUM"
     else:
+        data_quality = "LOW"
+
+    # Final confidence: data quality is the floor, strong signal can lift
+    if data_quality == "LOW":
         confidence = "LOW"
+    elif data_quality == "HIGH" and abs_ws >= 3.5:
+        confidence = "HIGH"
+    else:
+        confidence = "MEDIUM"
 
     # --- Explanation (plain Turkish) ---
     explanation = _build_explanation(regime, weighted_score, signals, confidence)
