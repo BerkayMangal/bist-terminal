@@ -82,7 +82,7 @@ class Contradiction:
 @dataclass
 class RegimeResult:
     regime: str         # "RISK_ON", "NEUTRAL", "RISK_OFF"
-    score: int          # sum of signal scores (-7 to +7)
+    score: float        # weighted score (-5.0 to +5.0 typical)
     confidence: str     # "HIGH", "MEDIUM", "LOW"
     explanation: str    # plain Turkish
     signals: list[SignalScore] = field(default_factory=list)
@@ -128,23 +128,13 @@ SCORE_LABELS = {1: "Olumlu", 0: "Nötr", -1: "Olumsuz"}
 # ================================================================
 def compute_regime(inputs: dict[str, Any]) -> RegimeResult:
     """
-    inputs keys:
-        cds: float (bps)
-        usdtry_5d_pct: float (%)
-        vix: float
-        dxy_20d_pct: float (%)
-        yield_spread: float (10Y - 2Y, pct points)
-        foreign_flow: float (net, million TL)
-        global_idx_5d_pct: float (S&P 500 5d %)
-        bist_5d_pct: float (%) — for contradiction detection
-        --- source metadata (optional) ---
-        cds_source: str
-        cds_fetched_at: str
-        ...
+    6-signal regime engine with weighted scoring.
+    Trusted signals = full weight (1.0), estimated = half weight (0.5).
     """
     signals: list[SignalScore] = []
-    total_score = 0
+    weighted_score = 0.0
 
+    # (key, display_name, unit, default_source)
     signal_defs = [
         ("cds",               "Türkiye CDS",        "bps",  "tahmini"),
         ("usdtry_5d_pct",     "USD/TRY (5 gün)",    "%",    "günlük"),
@@ -154,6 +144,9 @@ def compute_regime(inputs: dict[str, Any]) -> RegimeResult:
         ("global_idx_5d_pct", "S&P 500 (5 gün)",    "%",    "günlük"),
     ]
 
+    # Weight by source quality
+    WEIGHT_MAP = {"günlük": 1.0, "tahmini": 0.5, "eski": 0.25, "yok": 0.0}
+
     for key, display, unit, default_source in signal_defs:
         raw = inputs.get(key)
         missing = raw is None
@@ -161,9 +154,10 @@ def compute_regime(inputs: dict[str, Any]) -> RegimeResult:
         thresh = THRESHOLDS.get(key)
         if thresh is None:
             continue
-        sc = 0 if missing else _score_signal(key, val, thresh)
-        total_score += sc
         source = inputs.get(f"{key}_source", "yok" if missing else default_source)
+        sc = 0 if missing else _score_signal(key, val, thresh)
+        weight = WEIGHT_MAP.get(source, 0.5)
+        weighted_score += sc * weight
         fetched = inputs.get(f"{key}_fetched_at")
         note = "veri yok" if missing else (f"{val:+.1f}{unit}" if unit else f"{val:.1f}")
         signals.append(SignalScore(
@@ -172,38 +166,41 @@ def compute_regime(inputs: dict[str, Any]) -> RegimeResult:
             fetched_at=fetched, note=note,
         ))
 
-    # --- Regime ---
-    if total_score >= REGIME_THRESHOLDS["risk_on"]:
+    # --- Regime (using weighted score) ---
+    # Max possible = 6.0 (all trusted bullish), min = -6.0
+    # With 2 estimated signals at 0.5 weight: max = 4*1.0 + 2*0.5 = 5.0
+    # Thresholds: ±2.5 gives ~50% weighted agreement for regime change
+    if weighted_score >= 2.5:
         regime = "RISK_ON"
-    elif total_score <= REGIME_THRESHOLDS["risk_off"]:
+    elif weighted_score <= -2.5:
         regime = "RISK_OFF"
     else:
         regime = "NEUTRAL"
 
     # --- Confidence (accounts for data quality) ---
-    abs_score = abs(total_score)
     n_signals = len(signals)
-    n_estimated = sum(1 for s in signals if s.source in ("tahmini", "yok"))
+    n_estimated = sum(1 for s in signals if s.source in ("tahmini", "eski"))
     n_missing = sum(1 for s in signals if s.note == "veri yok")
+    abs_ws = abs(weighted_score)
 
     if n_signals == 0 or n_missing >= n_signals - 1:
         confidence = "LOW"
-    elif abs_score >= n_signals - 1 and n_estimated <= 1:
+    elif abs_ws >= 4.0 and n_estimated <= 1:
         confidence = "HIGH"
-    elif abs_score >= n_signals // 2:
+    elif abs_ws >= 2.0:
         confidence = "MEDIUM" if n_estimated <= 2 else "LOW"
     else:
         confidence = "LOW"
 
     # --- Explanation (plain Turkish) ---
-    explanation = _build_explanation(regime, total_score, signals, confidence)
+    explanation = _build_explanation(regime, weighted_score, signals, confidence)
 
     # --- Contradiction detection ---
     contradictions = _detect_contradictions(inputs, regime, signals)
 
     return RegimeResult(
         regime=regime,
-        score=total_score,
+        score=round(weighted_score, 1),
         confidence=confidence,
         explanation=explanation,
         signals=signals,
@@ -215,7 +212,7 @@ def compute_regime(inputs: dict[str, Any]) -> RegimeResult:
 # ================================================================
 # EXPLANATION BUILDER
 # ================================================================
-def _build_explanation(regime: str, score: int,
+def _build_explanation(regime: str, score: float,
                        signals: list[SignalScore], confidence: str) -> str:
     neg = [s for s in signals if s.score == -1]
     pos = [s for s in signals if s.score == 1]

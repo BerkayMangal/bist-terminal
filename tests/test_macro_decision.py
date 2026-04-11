@@ -69,7 +69,7 @@ class TestRegimeDetection:
     def test_all_neutral(self):
         r = compute_regime(self._base_inputs())
         assert r.regime == "NEUTRAL"
-        assert r.score == 0
+        assert abs(r.score) < 0.1
 
     def test_strong_risk_on(self):
         r = compute_regime(self._base_inputs(
@@ -78,7 +78,7 @@ class TestRegimeDetection:
             foreign_flow=100, global_idx_5d_pct=2.0,
         ))
         assert r.regime == "RISK_ON"
-        assert r.score >= 3
+        assert r.score >= 2.5
         assert r.confidence in ("HIGH", "MEDIUM")
 
     def test_strong_risk_off(self):
@@ -88,7 +88,7 @@ class TestRegimeDetection:
             foreign_flow=-100, global_idx_5d_pct=-3.0,
         ))
         assert r.regime == "RISK_OFF"
-        assert r.score <= -3
+        assert r.score <= -2.5
         assert r.confidence in ("HIGH", "MEDIUM")
 
     def test_borderline_neutral(self):
@@ -97,7 +97,7 @@ class TestRegimeDetection:
             cds=200, usdtry_5d_pct=0.5,  # two bullish
         ))
         assert r.regime == "NEUTRAL"
-        assert r.score == 2
+        assert 1.5 <= r.score <= 2.5
 
     def test_borderline_risk_on(self):
         """Score of exactly +3 → RISK_ON."""
@@ -105,7 +105,7 @@ class TestRegimeDetection:
             cds=200, usdtry_5d_pct=0.5, vix=15,  # three bullish
         ))
         assert r.regime == "RISK_ON"
-        assert r.score == 3
+        assert r.score >= 2.5
 
     def test_explanation_not_empty(self):
         r = compute_regime(self._base_inputs())
@@ -182,7 +182,7 @@ class TestEdgeCases:
         """Missing data should not crash — defaults to neutral."""
         r = compute_regime({})
         assert r.regime == "NEUTRAL"
-        assert r.score == 0
+        assert abs(r.score) < 0.1
 
     def test_partial_data(self):
         """Only CDS provided."""

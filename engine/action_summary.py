@@ -33,7 +33,7 @@ def generate_action_summary(
 
     # --- Sentence 1: Regime + confidence-aware tone ---
     if confidence == "LOW":
-        s1 = "Veri sınırlı, tablo net değil."
+        s1 = "Tablo eksik, net bir yön vermek zor."
     elif regime == "RISK_OFF":
         s1 = "Piyasa temkinli, sen de ol."
     elif regime == "RISK_ON":
@@ -41,9 +41,17 @@ def generate_action_summary(
     else:
         s1 = "Sinyaller karışık, acele etme."
 
-    # --- Sentence 2: Key reason ---
+    # --- Sentence 2: Key reason (even in LOW, show what we have) ---
     if confidence == "LOW":
-        s2 = "Elimizdeki sinyaller yön vermek için yeterli değil."
+        # Still point to strongest available signals
+        if neg and pos:
+            s2 = f"Elimizdekiler: {pos[0].name} olumlu, {neg[0].name} olumsuz — ama veri sınırlı."
+        elif neg:
+            s2 = f"{neg[0].name} olumsuz görünüyor ama teyit için daha fazla veri gerekli."
+        elif pos:
+            s2 = f"{pos[0].name} olumlu görünüyor ama teyit için daha fazla veri gerekli."
+        else:
+            s2 = "Yeterli sinyal yok, bekle."
     elif regime == "RISK_OFF" and neg:
         drivers = " ve ".join(s.name for s in neg[:2])
         s2 = f"{drivers} olumsuz yönde."
@@ -56,16 +64,20 @@ def generate_action_summary(
         else:
             s2 = "Sinyaller net bir yön göstermiyor."
 
-    # --- Sentence 3: Action (with editorial caveat for sectors) ---
+    # --- Sentence 3: Action (softened for LOW/NEUTRAL) ---
     if confidence == "LOW":
-        s3 = "Yeni işlem için daha net veri bekle."
+        s3 = "Yeni işlem için daha net veri bekle. Mevcut pozisyonlarda sabırlı ol."
     elif regime == "RISK_OFF":
         strong = " ve ".join(sectors["strong"][:2])
         s3 = f"Yeni pozisyon açma. {strong} tarafı görece güçlü görünüyor."
     elif regime == "RISK_ON":
         strong = " ve ".join(sectors["strong"][:2])
-        s3 = f"Kademeli alım düşünülebilir. {strong} öne çıkıyor."
+        if confidence == "MEDIUM":
+            s3 = f"Kademeli alım düşünülebilir. {strong} yakından izlenebilir."
+        else:
+            s3 = f"Kademeli alım düşünülebilir. {strong} öne çıkıyor."
     else:
+        # NEUTRAL
         s3 = "Mevcut pozisyonları koru, yeni alım için sinyal bekle."
 
     # --- Sentence 4: Contradiction, event, or data quality note ---

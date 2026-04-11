@@ -25,7 +25,7 @@ def _signals_block(result: RegimeResult) -> str:
 
 def _base_context(result: RegimeResult) -> str:
     return (
-        f"Rejim: {result.regime} (skor: {result.score}/6, güven: {result.confidence})\n"
+        f"Rejim: {result.regime} (ağırlıklı skor: {result.score}/5.0, güven: {result.confidence})\n"
         f"Açıklama: {result.explanation}\n\n"
         f"Sinyaller:\n{_signals_block(result)}"
     )
@@ -112,6 +112,22 @@ SEKTÖR ROTASYONU (editöryal):
 Şimdi yaz:"""
 
 
+def reality_checker_prompt(result: RegimeResult) -> str:
+    ctx = _base_context(result)
+    return f"""Sen BistBull'un gerçeklik kontrolcüsüsün.
+
+ROL: Tabloda seni yanıltan ne olabilir? Çelişki veya zayıf nokta bul.
+Bu tavsiye DEĞİL. Bu bir uyarı.
+"Ama:" veya "Dikkat:" ile başla.
+{ANALYST_STYLE_RULES}
+MAX: 2-3 cümle. Başka bir şey yazma.
+
+VERİLER:
+{ctx}
+
+Şimdi yaz:"""
+
+
 MACRO_AI_ROLES = {
     "interpreter": {
         "label": "Makro Yorumcu",
@@ -127,5 +143,10 @@ MACRO_AI_ROLES = {
         "label": "Aksiyon Koçu",
         "icon": "🎯",
         "prompt_fn": action_coach_prompt,
+    },
+    "reality_checker": {
+        "label": "Gerçeklik Kontrolü",
+        "icon": "🔍",
+        "prompt_fn": reality_checker_prompt,
     },
 }

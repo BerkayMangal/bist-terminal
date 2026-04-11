@@ -312,17 +312,8 @@ async def api_macro():
 
 @app.get("/api/macro/commentary")
 async def api_macro_commentary(request: Request):
-    check_rate_limit(request, "macro_commentary")
-    if not AI_AVAILABLE: return success({"commentary": None, "error": "AI pasif"})
-    cached = macro_ai_cache.get("macro_ai")
-    if cached is not None: return success(cached, cache_status="hit")
-    try:
-        macro_data = macro_cache.get("macro_all")
-        if not macro_data or not macro_data.get("items"): return success({"commentary": "Makro veri henüz yüklenmedi.", "generated": False})
-        text = await asyncio.to_thread(generate_macro_commentary, macro_data["items"])
-        result = {"commentary": text, "generated": True, "timestamp": now_iso()}
-        macro_ai_cache.set("macro_ai", result); return success(result)
-    except Exception as e: return success({"commentary": None, "error": str(e)})
+    """DEPRECATED — use /api/macro/ai-roles instead."""
+    return success({"commentary": None, "deprecated": True, "message": "Bu endpoint kaldırıldı. /api/macro/ai-roles kullanın."})
 
 @app.get("/api/rates")
 async def api_rates(): return success({"rates": STATIC_RATES})
@@ -337,15 +328,20 @@ async def api_macro_decision():
     try:
         inputs = build_engine_inputs(macro_data.get("items",[]), macro_data.get("rates",STATIC_RATES), macro_data.get("timestamp"))
         result = compute_regime(inputs)
-        action = generate_action_summary(result)
+        from engine.calendar import get_next_important_event, format_event_for_action, get_calendar_summary
+        next_ev = get_next_important_event()
+        ev_label = format_event_for_action(next_ev) if next_ev else None
+        action = generate_action_summary(result, upcoming_event=ev_label)
         sectors = get_sector_rotation(result.regime)
         freshness = build_freshness_report(inputs)
+        calendar = get_calendar_summary()
         return success({
             "regime": result.regime, "score": result.score, "confidence": result.confidence,
             "explanation": result.explanation,
             "signals": [{"name":s.name,"value":s.value,"score":s.score,"label":s.label,"source":s.source,"note":s.note} for s in result.signals],
             "contradictions": [{"type":c.type,"message":c.message} for c in result.contradictions],
-            "action_summary": action, "sectors": sectors, "freshness": freshness, "computed_at": result.computed_at,
+            "action_summary": action, "sectors": sectors, "freshness": freshness,
+            "calendar": calendar, "computed_at": result.computed_at,
         })
     except Exception as e:
         log.error(f"macro decision: {e}"); return error("Karar motoru hesaplanamadı", status_code=500)
@@ -362,12 +358,17 @@ async def api_macro_ai_roles(request: Request):
         inputs = build_engine_inputs(macro_data.get("items",[]), macro_data.get("rates",STATIC_RATES), macro_data.get("timestamp"))
         regime_result = compute_regime(inputs)
         from ai.engine import ai_call
+        from engine.calendar import get_next_important_event, format_event_for_action
+        next_ev = get_next_important_event()
+        ev_label = format_event_for_action(next_ev) if next_ev else None
+        action_text = generate_action_summary(regime_result, upcoming_event=ev_label)
+
         roles_output = {}
         for role_key, role_def in MACRO_AI_ROLES.items():
             prompt = role_def["prompt_fn"](regime_result)
             text = await asyncio.to_thread(
                 safe_ai_generate, prompt, role_key,
-                regime_result.regime, regime_result.explanation,
+                regime_result.regime, action_text,
                 ai_call, 300, 2, regime_result.confidence
             )
             roles_output[role_key] = {
@@ -380,6 +381,28 @@ async def api_macro_ai_roles(request: Request):
         macro_ai_cache.set("macro_roles", result); return success(result)
     except Exception as e:
         log.error(f"macro ai roles: {e}"); return success({"roles": {}, "error": str(e)})
+
+@app.get("/api/macro/calendar")
+async def api_macro_calendar():
+    """Economic calendar — this week + upcoming 14 days."""
+    try:
+        from engine.calendar import get_calendar_summary
+        return success(get_calendar_summary())
+    except Exception as e:
+        log.error(f"calendar: {e}"); return error("Takvim yüklenemedi", status_code=500)
+
+@app.get("/api/macro/external-brief")
+async def api_macro_external_brief():
+    """Optional external market context. NOT part of decision engine.
+    Clearly separated from truth/decision layers."""
+    return success({
+        "brief": None,
+        "available": False,
+        "label": "Harici Piyasa Özeti",
+        "disclaimer": "Bu bölüm karar motorunu ETKİLEMEZ. Sadece ek bağlam sağlar.",
+        "feeds_decision": False,
+        "feeds_regime": False,
+    })
 
 
 # ================================================================

@@ -38,9 +38,10 @@ FILLER_PATTERNS = [
 
 # Max lengths per role
 MAX_LENGTHS = {
-    "interpreter": 4,   # max sentences
+    "interpreter": 4,
     "risk_controller": 3,
     "action_coach": 4,
+    "reality_checker": 3,
 }
 
 # Minimum trusted data points for AI to generate
@@ -54,6 +55,7 @@ FALLBACK_MESSAGES = {
     "interpreter": "Şu an yeterli piyasa verisi yok. Makro yorum üretmek doğru olmaz.",
     "risk_controller": "Veri yetersiz. Risk değerlendirmesi için daha fazla sinyal gerekiyor.",
     "action_coach": "Yeterli veri olmadan aksiyon önerisi vermek doğru olmaz. Veri güncellenince tekrar bak.",
+    "reality_checker": "Kontrol için yeterli veri yok. Daha fazla sinyal gerekli.",
     "generic": "Şu an yeterli veri yok. Yorum yapmak doğru olmaz.",
 }
 

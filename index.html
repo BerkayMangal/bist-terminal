@@ -773,7 +773,7 @@ h+=`<div style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-xs);co
 h+=`<div style="font-size:var(--fs-base);color:var(--t1);line-height:1.7">${esc(d.action_summary)}</div>`;
 h+=`</div>`;}
 // AI ROLES BUTTON
-h+=`<div style="margin-bottom:14px"><button class="btn btn-sm btn-blu" onclick="loadMacroRoles()">🤖 3 Farklı Bakış — AI Yorumları</button></div><div id="macroRolesBlock"></div>`;
+h+=`<div style="margin-bottom:14px"><button class="btn btn-sm btn-blu" onclick="loadMacroRoles()">🤖 4 Farklı Bakış — AI Yorumları</button></div><div id="macroRolesBlock"></div>`;
 // FRESHNESS
 if(d.freshness&&d.freshness.length){
 h+=`<div style="margin-top:8px;padding:10px;background:var(--bg3);border-radius:var(--rad)"><div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--t4);text-transform:uppercase;margin-bottom:6px">Veri Kaynakları</div><div style="display:flex;flex-wrap:wrap;gap:6px">`;
@@ -792,8 +792,8 @@ try{
 const d=await api('/api/macro/ai-roles');
 if(!d.roles||d.error){box.innerHTML=`<div class="aib" style="margin-bottom:14px;border-color:var(--ylw)"><div class="aib-tx" style="color:var(--ylw)">${esc(d.error||'AI kullanılamıyor')}</div></div>`;return;}
 let h='<div style="display:grid;grid-template-columns:1fr;gap:12px">';
-const order=['interpreter','risk_controller','action_coach'];
-const colors=['var(--blu)','var(--ylw)','var(--grn)'];
+const order=['interpreter','risk_controller','action_coach','reality_checker'];
+const colors=['var(--blu)','var(--ylw)','var(--grn)','var(--orn)'];
 order.forEach((key,i)=>{
 const r=d.roles[key];if(!r)return;
 const fb=r.is_fallback?'<span style="font-family:\'JetBrains Mono\',monospace;font-size:8px;color:var(--ylw);margin-left:6px;padding:1px 5px;border:1px solid var(--ylw);border-radius:3px">Veri yetersiz</span>':'<span style="font-family:\'JetBrains Mono\',monospace;font-size:8px;color:var(--t4);margin-left:6px;padding:1px 5px;border:1px solid var(--bdr);border-radius:3px">AI Yorum</span>';
@@ -805,7 +805,7 @@ h+=`</div>`;
 h+='</div>';
 box.innerHTML=h;
 }catch(e){box.innerHTML='';console.error('macro roles:',e);}}
-async function loadMacroAI(){const box=$('macroAI');if(!box)return;box.innerHTML='<div class="aib" style="margin-bottom:14px"><div class="aib-t">🤖 AI MAKRO YORUM</div><div class="aib-tx">Yükleniyor...</div></div>';try{const d=await api('/api/macro/commentary');box.innerHTML=d.commentary?`<div class="aib" style="margin-bottom:14px"><div class="aib-t">🤖 AI MAKRO YORUM</div><div class="aib-tx">${esc(d.commentary).replace(/\n/g,'<br>')}</div></div>`:`<div class="aib" style="margin-bottom:14px;border-color:var(--ylw)"><div class="aib-t" style="color:var(--ylw)">AI</div><div class="aib-tx" style="color:var(--ylw)">${esc(d.error||'OPENAI_KEY veya XAI_API_KEY ekleyin')}</div></div>`;}catch(e){box.innerHTML='';}}
+async function loadMacroAI(){/* DEPRECATED — replaced by loadMacroRoles */}
 
 // ===== RADAR PAGE =====
 function renderRadarPage(){const pg=$('pg-radar');const sc=S.scan;if(!sc||!sc.items||!sc.items.length){pg.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px"><h2 style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-lg);color:var(--cyn)">🏛️ Temel Analiz Radar</h2><button class="btn btn-grn" onclick="startScan()">▶ SCAN</button></div><div class="emp"><h3 style="color:var(--t2)">Henüz taranmadı</h3></div>`;return;}const sort=S._radarSort||'deger';pg.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px"><div><h2 style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-lg);color:var(--cyn)">🏛️ Temel Analiz Radar — ${sc.items.length} Hisse</h2><p style="font-size:var(--fs-sm);color:var(--t3);margin-top:2px">${sc.asof?new Date(sc.asof).toLocaleString('tr-TR'):''}</p></div><button class="btn btn-grn" onclick="startScan()">🔄</button></div><div style="padding:12px 16px;background:var(--bg3);border-radius:var(--rad);margin-bottom:14px;font-size:var(--fs-base);color:var(--t2);line-height:1.6"><b style="color:var(--cyn)">Radar nasıl çalışır?</b> Uzun vadeli değer tarayıcı. ${sc.items.length} BIST hissesi 7 temel boyutta analiz edilir: Değerleme (F/K, PD/DD, FD/FAVÖK), Kalite (ROE, marjlar), Büyüme, Bilanço sağlamlığı (Altman Z, borç), Kâr Kalitesi (Beneish, nakit akış), Sermaye Tahsisi ve Hendek (marj stabilitesi). <span style="color:var(--ylw)">Kısa vadeli momentum ve teknik sinyaller için → Cross Hunter.</span></div><div class="card"><div class="card-b" style="overflow-x:auto">${renderRadarTbl(sc.items,sort)}</div></div>`;}
