@@ -430,12 +430,12 @@ MACRO_SYMBOLS: dict[str, dict] = {
 # Son güncelleme: 25 Mart 2026
 # ================================================================
 STATIC_RATES: list[dict] = [
-    {"key": "TCMB", "name": "TCMB Politika", "rate": 37.00, "prev": 38.00, "unit": "%", "flag": "🇹🇷", "updated": "2026-03-12", "note": "Sabit tutuldu"},
-    {"key": "FED", "name": "Fed Funds", "rate": 3.625, "prev": 3.625, "unit": "%", "flag": "🇺🇸", "updated": "2026-03-18", "note": "3.50-3.75 bant"},
-    {"key": "ECB", "name": "ECB Refi", "rate": 2.15, "prev": 2.15, "unit": "%", "flag": "🇪🇺", "updated": "2026-03-19", "note": "Deposit: 2.00%"},
-    {"key": "CDS_TR", "name": "Türkiye 5Y CDS", "rate": 320, "prev": 280, "unit": "bps", "flag": "🇹🇷", "updated": "2026-03-25", "note": "Tahmini — savaş etkisi"},
-    {"key": "TR10Y", "name": "TR 10Y Tahvil", "rate": 30.5, "prev": 29.8, "unit": "%", "flag": "🇹🇷", "updated": "2026-03-25", "note": "Tahmini"},
-    {"key": "TR2Y", "name": "TR 2Y Tahvil", "rate": 34.0, "prev": 33.5, "unit": "%", "flag": "🇹🇷", "updated": "2026-03-25", "note": "Tahmini"},
+    {"key": "TCMB", "name": "TCMB Politika", "rate": 37.00, "prev": 38.00, "unit": "%", "flag": "🇹🇷", "updated": "2026-03-12", "note": "Sabit tutuldu — 22 Nisan kararı bekleniyor"},
+    {"key": "FED", "name": "Fed Funds", "rate": 3.75, "prev": 3.75, "unit": "%", "flag": "🇺🇸", "updated": "2026-03-18", "note": "3.50-3.75 bant, sabit — İran savaşı belirsizliği"},
+    {"key": "ECB", "name": "ECB Refi", "rate": 2.15, "prev": 2.15, "unit": "%", "flag": "🇪🇺", "updated": "2026-03-19", "note": "Sabit — bazı bankalar artırım bekliyor"},
+    {"key": "CDS_TR", "name": "Türkiye 5Y CDS", "rate": 295, "prev": 280, "unit": "bps", "flag": "🇹🇷", "updated": "2026-04-11", "note": "Tahmini — MacroMicro W14 referans"},
+    {"key": "TR10Y", "name": "TR 10Y Tahvil", "rate": 30.5, "prev": 29.8, "unit": "%", "flag": "🇹🇷", "updated": "2026-04-11", "note": "Tahmini — güncel teyit gerekli"},
+    {"key": "TR2Y", "name": "TR 2Y Tahvil", "rate": 34.0, "prev": 33.5, "unit": "%", "flag": "🇹🇷", "updated": "2026-04-11", "note": "Tahmini — güncel teyit gerekli"},
 ]
 
 # Statik oranların yaşını kontrol etmek için (gün cinsinden)
