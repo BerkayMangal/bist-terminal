@@ -16,7 +16,7 @@ import logging
 from typing import Optional
 
 from config import (
-    GROK_KEY, OPENAI_KEY, ANTHROPIC_KEY,
+    GROK_KEY, OPENAI_KEY, ANTHROPIC_KEY, PERPLEXITY_KEY,
 )
 
 log = logging.getLogger("bistbull.ai.clients")
@@ -27,6 +27,23 @@ log = logging.getLogger("bistbull.ai.clients")
 _grok_client = None
 _openai_client = None
 _anthropic_client = None
+_perplexity_client = None
+
+
+def get_perplexity_client():
+    """Lazy singleton for Perplexity Sonar client (OpenAI-compatible)."""
+    global _perplexity_client
+    if _perplexity_client is None and PERPLEXITY_KEY:
+        try:
+            from openai import OpenAI
+            _perplexity_client = OpenAI(
+                api_key=PERPLEXITY_KEY,
+                base_url="https://api.perplexity.ai",
+            )
+            log.info("Perplexity client initialized (singleton)")
+        except ImportError:
+            pass
+    return _perplexity_client
 
 
 def get_grok_client():

@@ -15,21 +15,23 @@ import logging
 from typing import Optional
 
 from config import (
-    GROK_MODEL, OPENAI_MODEL, ANTHROPIC_MODEL,
+    GROK_MODEL, OPENAI_MODEL, ANTHROPIC_MODEL, PERPLEXITY_MODEL,
 )
-from core.circuit_breaker import cb_grok, cb_openai, cb_anthropic, CircuitBreakerOpen
-from ai.clients import get_grok_client, get_openai_client, get_anthropic_client
+from core.circuit_breaker import cb_grok, cb_openai, cb_anthropic, cb_perplexity, CircuitBreakerOpen
+from ai.clients import get_grok_client, get_openai_client, get_anthropic_client, get_perplexity_client
 
 log = logging.getLogger("bistbull.ai")
 
 # ================================================================
-# PROVIDER DISCOVERY
+# PROVIDER DISCOVERY — Perplexity first, then Grok → OpenAI → Anthropic
 # ================================================================
 AI_PROVIDERS: list[str] = []
 
 try:
     from openai import OpenAI as _OpenAI
-    from config import GROK_KEY, OPENAI_KEY
+    from config import PERPLEXITY_KEY, GROK_KEY, OPENAI_KEY
+    if PERPLEXITY_KEY:
+        AI_PROVIDERS.append("perplexity")
     if GROK_KEY:
         AI_PROVIDERS.append("grok")
     if OPENAI_KEY:
@@ -49,8 +51,26 @@ AI_AVAILABLE: bool = len(AI_PROVIDERS) > 0
 
 
 # ================================================================
-# LOW-LEVEL CALLERS — singleton clients + circuit breakers
+# LOW-LEVEL CALLERS
 # ================================================================
+def _call_perplexity(prompt: str, max_tokens: int) -> str:
+    cb_perplexity.before_call()
+    try:
+        client = get_perplexity_client()
+        if client is None:
+            raise RuntimeError("Perplexity client not available")
+        resp = client.chat.completions.create(
+            model=PERPLEXITY_MODEL, max_tokens=max_tokens, temperature=0.4,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        result = resp.choices[0].message.content.strip()
+        cb_perplexity.on_success()
+        return result
+    except CircuitBreakerOpen:
+        raise
+    except Exception as e:
+        cb_perplexity.on_failure(e)
+        raise
 def _call_grok(prompt: str, max_tokens: int) -> str:
     cb_grok.before_call()
     try:
@@ -112,6 +132,7 @@ def _call_anthropic(prompt: str, max_tokens: int) -> str:
 
 
 _CALLERS = {
+    "perplexity": _call_perplexity,
     "grok": _call_grok,
     "openai": _call_openai,
     "anthropic": _call_anthropic,

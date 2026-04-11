@@ -23,6 +23,8 @@ OPENAI_KEY: str = os.environ.get("OPENAI_KEY", "") or os.environ.get("OPENAI_API
 OPENAI_MODEL: str = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
 ANTHROPIC_KEY: str = os.environ.get("ANTHROPIC_API_KEY", "") or os.environ.get("ANTHROPIC_KEY", "")
 ANTHROPIC_MODEL: str = os.environ.get("AI_MODEL", "claude-sonnet-4-20250514")
+PERPLEXITY_KEY: str = os.environ.get("PERPLEXITY_API_KEY", "")
+PERPLEXITY_MODEL: str = os.environ.get("PERPLEXITY_MODEL", "sonar")
 
 # ================================================================
 # REDIS CONFIG — L2 persistent cache
@@ -51,8 +53,8 @@ CB_HALF_OPEN_MAX_CALLS: int = 2
 CB_SUCCESS_THRESHOLD: int = 2
 
 # Provider-specific overrides
-CB_BORSAPY_FAILURE_THRESHOLD: int = 15
-CB_BORSAPY_RECOVERY_TIMEOUT: int = 120
+CB_BORSAPY_FAILURE_THRESHOLD: int = 30    # was 15 — more lenient for 260+ stocks
+CB_BORSAPY_RECOVERY_TIMEOUT: int = 60     # was 120 — recover faster
 CB_YFINANCE_FAILURE_THRESHOLD: int = 5
 CB_YFINANCE_RECOVERY_TIMEOUT: int = 90
 CB_AI_FAILURE_THRESHOLD: int = 3

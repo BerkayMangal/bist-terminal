@@ -372,6 +372,12 @@ cb_yfinance = CircuitBreaker(
     recovery_timeout=CB_YFINANCE_RECOVERY_TIMEOUT,
 )
 
+cb_perplexity = CircuitBreaker(
+    name="perplexity",
+    failure_threshold=CB_AI_FAILURE_THRESHOLD,
+    recovery_timeout=CB_AI_RECOVERY_TIMEOUT,
+)
+
 cb_grok = CircuitBreaker(
     name="grok",
     failure_threshold=CB_AI_FAILURE_THRESHOLD,
@@ -390,10 +396,10 @@ cb_anthropic = CircuitBreaker(
     recovery_timeout=CB_AI_RECOVERY_TIMEOUT,
 )
 
-# Tüm CB instance'larının listesi — toplu health check için
 ALL_CIRCUIT_BREAKERS: list[CircuitBreaker] = [
     cb_borsapy,
     cb_yfinance,
+    cb_perplexity,
     cb_grok,
     cb_openai,
     cb_anthropic,
