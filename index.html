@@ -705,7 +705,6 @@ async function refreshAlerts(){const el=$('alertPanel');if(!el)return;el.innerHT
 async function loadBook(){try{S.book=await api('/api/book');}catch(e){}}
 async function loadMarketStatus(){try{S.marketStatus=await api('/api/market-status');}catch(e){}}
 async function loadMacro(){try{S.macro=await api('/api/macro');const el=$('macMini');if(el)el.innerHTML=renderMacMini(S.macro.items||[]);const ng=$('nabGrid');if(ng)ng.innerHTML=renderNabiz(S.macro.items||[]);renderTickerBar(S.macro.items||[]);loadHomeAction();}catch(e){console.error('macro:',e);}}
-async function loadHomeAction(){const el=$('homeActionText');if(!el)return;try{const d=await api('/api/macro/decision');if(d.action_summary){const rc=d.regime==='RISK_ON'?'var(--grn)':d.regime==='RISK_OFF'?'var(--red)':'var(--ylw)';const rl=d.regime==='RISK_ON'?'Risk On':d.regime==='RISK_OFF'?'Risk Off':'Nötr';el.innerHTML=`<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><span style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;color:${rc}
 function renderTickerBar(items){const tb=$('tbar');const inner=items.map(m=>`<div class="tbar-i"><span style="color:var(--t2);font-weight:600">${esc(m.flag||'')} ${esc(m.key||m.name)}</span><span style="color:var(--t1)">${fN(m.price,m.key?.includes('TRY')?4:2)}</span><span style="color:${cC(m.change_pct)};font-size:10px">${cS(m.change_pct)}%</span></div>`).join('');tb.innerHTML=`<div class="tbar-inner">${inner}${inner}</div>`;}
 
 // ===== MAKRO PAGE =====
@@ -728,7 +727,8 @@ h+=`</div></div></div>`;
 }
 h+=`<div class="card" style="margin-bottom:14px"><div class="card-h"><span class="card-t">🏁 EM YTD Siralama</span></div><div class="card-b" style="overflow-x:auto"><div style="margin-bottom:6px;display:flex;padding:4px 10px;font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--t4);text-transform:uppercase"><span style="width:24px">#</span><span style="width:24px"></span><span style="flex:1">Endeks</span><span style="width:80px;text-align:right">Fiyat</span><span style="width:65px;text-align:right">Gun</span><span style="width:65px;text-align:right">1H</span><span style="width:65px;text-align:right">1A</span><span style="width:65px;text-align:right">YTD</span></div>`;
 emSorted.forEach((m,i)=>{const isTR=m.key==='XU030'||m.key==='XU100';h+=`<div class="em-row" style="${isTR?'background:rgba(0,230,118,.05);border-left:2px solid var(--grn)':''}"><span class="em-rank">${i+1}</span><span class="em-flag">${esc(m.flag||'')}</span><span class="em-name">${esc(m.name)}</span><span class="em-price">${fN(m.price,2)}</span><span class="em-chg" style="color:${cC(m.change_pct)}">${cS(m.change_pct)}%</span><span class="em-chg" style="color:${cC(m.w1_pct||0)}">${m.w1_pct!=null?cS(m.w1_pct)+'%':'—'}</span><span class="em-chg" style="color:${cC(m.m1_pct||0)}">${m.m1_pct!=null?cS(m.m1_pct)+'%':'—'}</span><span class="em-ytd" style="color:${cC(m.ytd_pct||0)}">${m.ytd_pct!=null?cS(m.ytd_pct)+'%':'—'}</span></div>`;});h+=`</div></div>`;
-for(const[cat,label]of[['turkiye','🇹🇷 Turkiye'],['global','🌐 Global'],['emtia','🛢️ Emtia']]){const list=cats[cat]||[];if(!list.length)continue;h+=`<h3 style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--t2);margin:14px 0 8px;text-transform:uppercase">${label}</h3><div class="g4" style="margin-bottom:12px">`;list.forEach(m=>{h+=`<div class="mac" style="padding:12px"><div class="mac-s">${esc(m.flag||'')} ${esc(m.name)}</div><div class="mac-p" style="font-size:18px">${fN(m.price,m.key?.includes('TRY')?4:2)}</div><div class="mac-c" style="color:${cC(m.change_pct)};font-size:12px">${cS(m.change_pct)}%</div><div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--t3);margin-top:4px">YTD: <span style="color:${cC(m.ytd_pct||0)};font-weight:700">${m.ytd_pct!=null?cS(m.ytd_pct)+'%':'—'}</span></div></div>`;});h+='</div>';}pg.innerHTML=h;}
+for(const[cat,label]of[['turkiye','🇹🇷 Turkiye'],['global','🌐 Global'],['emtia','🛢️ Emtia']]){const list=cats[cat]||[];if(!list.length)continue;h+=`<h3 style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--t2);margin:14px 0 8px;text-transform:uppercase">${label}</h3><div class="g4" style="margin-bottom:12px">`;list.forEach(m=>{h+=`<div class="mac" style="padding:12px"><div class="mac-s">${esc(m.flag||'')} ${esc(m.name)}</div><div class="mac-p" style="font-size:18px">${fN(m.price,m.key?.includes('TRY')?4:2)}</div><div class="mac-c" style="color:${cC(m.change_pct)};font-size:12px">${cS(m.change_pct)}%</div><div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--t3);margin-top:4px">YTD: <span style="color:${cC(m.ytd_pct||0)};font-weight:700">${m.ytd_pct!=null?cS(m.ytd_pct)+'%':'—'}</span></div></div>`;});h+='</div>';}pg.innerHTML=h;loadMacroDecision();}
+async function loadHomeAction(){const el=$('homeActionText');if(!el)return;try{const d=await api('/api/macro/decision');if(d.action_summary){const rc=d.regime==='RISK_ON'?'var(--grn)':d.regime==='RISK_OFF'?'var(--red)':'var(--ylw)';const rl=d.regime==='RISK_ON'?'Risk On':d.regime==='RISK_OFF'?'Risk Off':'Nötr';el.innerHTML=`<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><span style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;color:${rc};padding:2px 8px;border:1px solid ${rc};border-radius:4px">● ${esc(rl)}</span><span style="font-size:9px;color:var(--t4)">${d.confidence==='HIGH'?'Güven: Yüksek':d.confidence==='MEDIUM'?'Güven: Orta':'Güven: Düşük'}</span></div><div style="line-height:1.7">${esc(d.action_summary)}</div>${d.contradictions&&d.contradictions.length?`<div style="margin-top:8px;padding:8px 10px;background:rgba(255,179,0,.08);border-radius:4px;font-size:var(--fs-sm);color:var(--ylw)">⚠️ ${esc(d.contradictions[0].message)}</div>`:''}`;}else{el.innerHTML='<span style="color:var(--t3)">Makro veri yetersiz</span>';}}catch(e){el.innerHTML='<span style="color:var(--t3)">Yüklenemedi</span>';}}
 async function loadMacroDecision(){
 const box=$('macroDecisionBlock');if(!box)return;
 try{
@@ -784,7 +784,25 @@ h+=`<span style="font-family:'JetBrains Mono',monospace;font-size:9px;color:${co
 h+=`</div></div>`;}
 box.innerHTML=h;
 }catch(e){console.error('macro decision:',e);box.innerHTML=`<div class="card" style="margin-bottom:14px;border-color:var(--ylw)"><div class="card-b"><span style="color:var(--ylw)">Karar motoru yüklenemedi</span></div></div>`;}}
-
+async function loadMacroRoles(){
+const box=$('macroRolesBlock');if(!box)return;
+box.innerHTML='<div class="ld" style="padding:20px"><div class="sp"></div><div class="ld-t">3 AI perspektifi hazırlanıyor...</div></div>';
+try{
+const d=await api('/api/macro/ai-roles');
+if(!d.roles||d.error){box.innerHTML=`<div class="aib" style="margin-bottom:14px;border-color:var(--ylw)"><div class="aib-tx" style="color:var(--ylw)">${esc(d.error||'AI kullanılamıyor')}</div></div>`;return;}
+let h='<div style="display:grid;grid-template-columns:1fr;gap:12px">';
+const order=['interpreter','risk_controller','action_coach'];
+const colors=['var(--blu)','var(--ylw)','var(--grn)'];
+order.forEach((key,i)=>{
+const r=d.roles[key];if(!r)return;
+h+=`<div style="padding:14px;background:var(--bg3);border:1px solid ${colors[i]};border-radius:var(--rad)">`;
+h+=`<div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:${colors[i]};text-transform:uppercase;margin-bottom:8px">${esc(r.icon)} ${esc(r.label)}</div>`;
+h+=`<div style="font-size:var(--fs-sm);color:var(--t1);line-height:1.6">${esc(r.commentary).replace(/\n/g,'<br>')}</div>`;
+h+=`</div>`;
+});
+h+='</div>';
+box.innerHTML=h;
+}catch(e){box.innerHTML='';console.error('macro roles:',e);}}
 async function loadMacroAI(){const box=$('macroAI');if(!box)return;box.innerHTML='<div class="aib" style="margin-bottom:14px"><div class="aib-t">🤖 AI MAKRO YORUM</div><div class="aib-tx">Yükleniyor...</div></div>';try{const d=await api('/api/macro/commentary');box.innerHTML=d.commentary?`<div class="aib" style="margin-bottom:14px"><div class="aib-t">🤖 AI MAKRO YORUM</div><div class="aib-tx">${esc(d.commentary).replace(/\n/g,'<br>')}</div></div>`:`<div class="aib" style="margin-bottom:14px;border-color:var(--ylw)"><div class="aib-t" style="color:var(--ylw)">AI</div><div class="aib-tx" style="color:var(--ylw)">${esc(d.error||'OPENAI_KEY veya XAI_API_KEY ekleyin')}</div></div>`;}catch(e){box.innerHTML='';}}
 
 // ===== RADAR PAGE =====
