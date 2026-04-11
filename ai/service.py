@@ -31,24 +31,49 @@ log = logging.getLogger("bistbull.ai.service")
 # ================================================================
 # TRADER SUMMARY — per-stock investment thesis
 # ================================================================
-def generate_trader_summary(r: dict, tech: Optional[dict] = None) -> Optional[str]:
+def generate_trader_summary(r: dict, tech: Optional[dict] = None) -> dict:
     """Generate AI-powered investment thesis for a single stock.
-    Cached by symbol + overall + ivme + entry_label."""
+    Trust-aware: checks data quality, validates output, returns structured result.
+    Returns dict with 'summary', 'is_fallback', 'data_grade'."""
+    from ai.safety import validate_ai_output, FALLBACK_MESSAGES, FORBIDDEN_WORDS
+
+    data_health = r.get("data_health", {})
+    grade = data_health.get("grade", "A")
+    confidence = r.get("confidence", 50)
+    entry = r.get("entry_label", "?")
+
+    # Data quality too low → deterministic fallback, no AI
+    if grade == "D" or confidence < 25:
+        return {
+            "summary": f"{r.get('ticker', '?')}: Bilanço verisi eksik (kalite: {grade}). "
+                       f"Mevcut skor referans amaçlıdır, güvenle karar almak için yeterli değil.",
+            "is_fallback": True,
+            "data_grade": grade,
+        }
+
     if not AI_AVAILABLE:
-        return None
-    cache_key = f"{r['symbol']}_{r['overall']}_{r.get('ivme', 0)}_{r.get('entry_label', '')}"
+        return {"summary": None, "is_fallback": True, "data_grade": grade}
+
+    cache_key = f"{r['symbol']}_{r['overall']}_{r.get('ivme', 0)}_{entry}"
     cached = ai_cache.get(cache_key)
     if cached is not None:
-        return cached
+        return {"summary": cached, "is_fallback": False, "data_grade": grade}
+
     try:
         prompt = trader_summary_prompt(r, tech)
         text = ai_call(prompt, max_tokens=300)
         if text:
-            ai_cache.set(cache_key, text)
-        return text
+            # Validate: use interpreter role rules (forbidden words, length)
+            result = validate_ai_output(text, "interpreter")
+            if result.ok:
+                ai_cache.set(cache_key, result.text)
+                return {"summary": result.text, "is_fallback": False, "data_grade": grade}
+            else:
+                log.info(f"Stock AI summary rejected for {r.get('ticker')}: {result.reason}")
+        return {"summary": None, "is_fallback": True, "data_grade": grade}
     except Exception as e:
         log.warning(f"AI trader summary: {e}")
-        return None
+        return {"summary": None, "is_fallback": True, "data_grade": grade}
 
 
 # ================================================================

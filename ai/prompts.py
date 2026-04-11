@@ -227,15 +227,29 @@ def build_rich_context(r: dict, tech: Optional[dict] = None) -> str:
 # ================================================================
 def trader_summary_prompt(r: dict, tech: Optional[dict] = None) -> str:
     """Build the trader summary / investment thesis AI prompt.
-    Moved from ai/engine.py to centralize all prompt logic."""
+    Trust-aware: reflects data quality in prompt."""
     ctx = build_rich_context(r, tech)
     entry = r.get("entry_label", "?")
     is_hype = r.get("is_hype", False)
+    grade = r.get("data_health", {}).get("grade", "A")
+    confidence = r.get("confidence", 50)
+
+    quality_note = ""
+    if grade in ("C", "D"):
+        quality_note = (
+            "\n⚠️ VERİ KALİTESİ DÜŞÜK (grade: {grade}). "
+            "Bazı finansal veriler eksik. Bunu açıkça belirt.\n"
+        )
+    elif confidence < 50:
+        quality_note = "\n⚠️ Güven skoru düşük. Temkinli yaz, abartma.\n"
+
     return (
-        "Sen kurumsal BIST analisti ve portföy yöneticisisin. 20 yıllık tecrüben var. Türkiye piyasasını çok iyi bilirsin.\n"
+        "Sen kurumsal BIST analisti ve portföy yöneticisisin. 20 yıllık tecrüben var.\n"
         "Aşağıdaki veriye dayanarak bu hisse için yatırım tezi yaz. Türkçe.\n"
         "ASLA sallama, SADECE verideki rakamlara dayan. Gerçekçi, spesifik, kısa ol.\n"
-        f"{'⚠️ DİKKAT: Bu hisse HYPE/SPEKÜLATİF olarak işaretlenmiş — temel zayıf ama fiyat uçuyor.' if is_hype else ''}\n\n"
+        "YASAK KELİMELER: kesinlikle, garanti, kaçırma, patlayacak, uçacak, hemen al.\n"
+        f"{'⚠️ DİKKAT: Bu hisse HYPE/SPEKÜLATİF olarak işaretlenmiş — temel zayıf ama fiyat uçuyor.' if is_hype else ''}\n"
+        f"{quality_note}\n"
         f"{ctx}\n\n"
         "Şu formatta yaz (her satır ayrı, başka HİÇBİR ŞEY yazma):\n"
         f"GİRİŞ: {entry} — bu ne anlama geliyor? 1 cümle açıkla.\n"
@@ -243,4 +257,24 @@ def trader_summary_prompt(r: dict, tech: Optional[dict] = None) -> str:
         "RİSK: 1 spesifik cümle — en büyük risk? (rakam kullan)\n"
         "ZAMANLAMA: 1 cümle — giriş zamanı uygun mu, ne beklemeli?\n"
         "TÜRKİYE: 1 cümle — Türkiye piyasası bağlamında özel not (döviz, enflasyon, sektör)\n"
+    )
+
+# ================================================================
+# COMPARISON AI PROMPT — analyst-style, data-grounded
+# ================================================================
+def comparison_prompt(ai_context: str, deterministic_summary: str) -> str:
+    """Build AI comparison prompt from structured comparison data."""
+    return (
+        "Sen kurumsal BIST analisti ve portföy yöneticisisin.\n"
+        "İki hisseyi karşılaştıran yapısal veri var. Buna dayanarak keskin, kısa bir yorum yaz.\n\n"
+        "KURALLAR:\n"
+        "- SADECE verideki rakamlara dayan. Sallama, uydurmama.\n"
+        "- Max 4 cümle. Her cümle bir rakama referans versin.\n"
+        "- Bir hisseyi öv değil — farkları açıkla.\n"
+        "- 'Hangisini almalıyım?' sorusuna CEVAP VERME. Sadece farkları sun.\n"
+        "- Türkçe yaz, jargonsuz.\n"
+        "- YASAK: kesinlikle, garanti, kaçırma, patlayacak, uçacak, hemen al, muhteşem.\n\n"
+        f"VERİLER:\n{ai_context}\n\n"
+        f"DETERMİNİSTİK ÖZET (bununla çelişme):\n{deterministic_summary}\n\n"
+        "Şimdi kendi analist yorumunu yaz (4 cümle, rakam kullan):"
     )

@@ -215,8 +215,13 @@ async def api_ai_summary(request: Request, ticker: str):
     try:
         r = await asyncio.to_thread(analyze_symbol, symbol)
         tech = await asyncio.to_thread(compute_technical, symbol)
-        text = await asyncio.to_thread(generate_trader_summary, r, tech)
-        return success({"ticker": base_ticker(ticker), "summary": text or "AI özet oluşturulamadı"})
+        result = await asyncio.to_thread(generate_trader_summary, r, tech)
+        return success({
+            "ticker": base_ticker(ticker),
+            "summary": result.get("summary") or "AI özet oluşturulamadı.",
+            "is_fallback": result.get("is_fallback", True),
+            "data_grade": result.get("data_grade", "?"),
+        })
     except Exception as e:
         log.warning(f"ai-summary {ticker}: {e}"); return error("AI özet alınamadı", status_code=500)
 
@@ -393,16 +398,21 @@ async def api_macro_calendar():
 
 @app.get("/api/macro/external-brief")
 async def api_macro_external_brief():
-    """Optional external market context. NOT part of decision engine.
-    Clearly separated from truth/decision layers."""
-    return success({
-        "brief": None,
-        "available": False,
-        "label": "Harici Piyasa Özeti",
-        "disclaimer": "Bu bölüm karar motorunu ETKİLEMEZ. Sadece ek bağlam sağlar.",
-        "feeds_decision": False,
-        "feeds_regime": False,
-    })
+    """External market context via Perplexity web search. NOT part of decision engine."""
+    try:
+        from ai.perplexity import fetch_external_brief, PERPLEXITY_AVAILABLE
+        if not PERPLEXITY_AVAILABLE:
+            return success({
+                "brief": None, "available": False,
+                "label": "Harici Piyasa Özeti",
+                "disclaimer": "PERPLEXITY_API_KEY ayarlanmamış.",
+                "feeds_decision": False,
+            })
+        result = await asyncio.to_thread(fetch_external_brief)
+        return success(result)
+    except Exception as e:
+        log.warning(f"external brief: {e}")
+        return success({"brief": None, "available": False, "error": str(e)})
 
 
 # ================================================================
@@ -669,10 +679,90 @@ async def api_compare(request: Request, left: str = "", right: str = ""):
         l_analysis = await asyncio.to_thread(analyze_symbol, l_sym)
         r_analysis = await asyncio.to_thread(analyze_symbol, r_sym)
         comparison = compare_stocks(l_analysis, r_analysis)
-        return success({"left": l_analysis, "right": r_analysis, "comparison": comparison})
+
+        # AI commentary using smart context from compare engine + Perplexity news
+        ai_commentary = None
+        pplx_news = None
+        if AI_AVAILABLE and comparison.get("ai_context"):
+            try:
+                from ai.engine import ai_call
+                from ai.perplexity import fetch_compare_context, PERPLEXITY_AVAILABLE
+                # Enrich with recent news if Perplexity available
+                extra_ctx = ""
+                if PERPLEXITY_AVAILABLE:
+                    pplx_news = await asyncio.to_thread(fetch_compare_context, left, right)
+                    if pplx_news:
+                        extra_ctx = f"\n\nSON GELİŞMELER (web araması — karar motoruna girmez):\n{pplx_news}"
+                prompt = _compare_prompt(
+                    comparison["ai_context"] + extra_ctx,
+                    comparison.get("left_ticker", "?"),
+                    comparison.get("right_ticker", "?"),
+                    comparison.get("analyst_commentary", ""),
+                )
+                ai_commentary = await asyncio.to_thread(
+                    safe_ai_generate, prompt, "interpreter",
+                    confidence="MEDIUM", max_retries=2, ai_call_fn=ai_call, max_tokens=350
+                )
+            except Exception as e:
+                log.warning(f"compare AI: {e}")
+
+        return success({
+            "left": l_analysis, "right": r_analysis,
+            "comparison": comparison,
+            "ai_commentary": ai_commentary,
+            "pplx_news": pplx_news,
+        })
     except Exception as e:
         log.warning(f"compare {left} vs {right}: {e}")
         return error("Karşılaştırma yapılamadı", status_code=500)
+
+
+def _compare_prompt(ctx: str, lt: str, rt: str, det_summary: str = "") -> str:
+    return f"""Sen kurumsal BIST analisti ve portföy yöneticisisin. 20 yıllık tecrüben var.
+İki hisseyi karşılaştıran somut veri var. Buna dayanarak keskin bir yorum yaz.
+
+KURALLAR:
+- Max 4 cümle. Her cümle bir rakama referans versin.
+- Bir hisseyi öv değil — farkları açıkla, güçlü/zayıf tarafları göster.
+- "Hangisini almalıyım?" sorusuna CEVAP VERME.
+- Sonunda bir risk/uyarı notu ekle.
+- "Sen" dili kullan, "yatırımcılar" değil.
+
+YASAK: kesinlikle, garanti, kaçırma, patlayacak, uçacak, hemen al, büyük fırsat.
+YASAK KALIP: "karışık bir görünüm hakim", "dikkatli olunması önerilir".
+
+VERİLER:
+{ctx}
+
+{f'DETERMİNİSTİK ÖZET (bununla çelişme): {det_summary}' if det_summary else ''}
+
+Şimdi yaz (4 cümle, rakam kullan):"""
+
+@app.get("/api/stock-news/{ticker}")
+async def api_stock_news(ticker: str):
+    """Latest news about a BIST stock via Perplexity. NOT part of decision engine."""
+    try:
+        from ai.perplexity import fetch_stock_news, PERPLEXITY_AVAILABLE
+        if not PERPLEXITY_AVAILABLE:
+            return success({"available": False, "news": None, "reason": "PERPLEXITY_API_KEY not set"})
+        result = await asyncio.to_thread(fetch_stock_news, ticker)
+        return success(result)
+    except Exception as e:
+        log.warning(f"stock news {ticker}: {e}")
+        return success({"available": False, "news": None})
+
+@app.get("/api/macro/cds-search")
+async def api_cds_search():
+    """Search for latest Turkey CDS via Perplexity web search. Still classified as estimated."""
+    try:
+        from ai.perplexity import search_cds_data, PERPLEXITY_AVAILABLE
+        if not PERPLEXITY_AVAILABLE:
+            return success({"found": False, "reason": "PERPLEXITY_API_KEY not set"})
+        result = await asyncio.to_thread(search_cds_data)
+        return success(result)
+    except Exception as e:
+        log.warning(f"CDS search: {e}")
+        return success({"found": False})
 
 @app.get("/api/alerts")
 async def api_alerts_get(request: Request):
