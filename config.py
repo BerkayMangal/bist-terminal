@@ -53,8 +53,8 @@ CB_HALF_OPEN_MAX_CALLS: int = 2
 CB_SUCCESS_THRESHOLD: int = 2
 
 # Provider-specific overrides
-CB_BORSAPY_FAILURE_THRESHOLD: int = 30    # was 15 — more lenient for 260+ stocks
-CB_BORSAPY_RECOVERY_TIMEOUT: int = 60     # was 120 — recover faster
+CB_BORSAPY_FAILURE_THRESHOLD: int = 30
+CB_BORSAPY_RECOVERY_TIMEOUT: int = 60
 CB_YFINANCE_FAILURE_THRESHOLD: int = 5
 CB_YFINANCE_RECOVERY_TIMEOUT: int = 90
 CB_AI_FAILURE_THRESHOLD: int = 3
@@ -138,7 +138,7 @@ WS_MAX_CONNECTIONS: int = 50
 RESPONSE_BUILD_VERSION: str = BOT_VERSION
 
 # ================================================================
-# UNIVERSE — TÜM BİST (260+ hisse)
+# UNIVERSE — BIST 108
 # ================================================================
 UNIVERSE_BIST30: list[str] = [
     "ASELS", "THYAO", "BIMAS", "KCHOL", "SISE", "EREGL", "TUPRS", "AKBNK", "ISCTR", "YKBNK",
@@ -161,20 +161,20 @@ UNIVERSE_EXTRA: list[str] = [
 ]
 
 UNIVERSE_EXTENDED: list[str] = [
-    "AKENR", "AKFYE", "AKGRT", "ALCTL", "ALKIM", "ANACM", "ARDYZ", "ARENA", "ARMDA", "ASUZU",
+    "AKENR", "AKFYE", "AKGRT", "ALCTL", "ALKIM", "ANACM", "ARDYZ", "ARENA", "ASUZU",
     "ATAGY", "ATATP", "AVOD", "AVTUR", "BANVT", "BEYAZ", "BFREN", "BIENY", "BINHO", "BIOEN",
-    "BMELK", "BMSTL", "BRMEN", "BURVA", "CEMAS", "CONSE", "CRFSA", "DAGI", "DENIZ", "DESA",
+    "BMSTL", "BRMEN", "BURVA", "CEMAS", "CONSE", "CRFSA", "DAGI", "DESA",
     "DESPC", "DGATE", "DOKTA", "DYOBY", "EDATA", "EGGUB", "EMNIS", "ESCOM", "ESEN", "ETILR",
     "FADE", "FMIZP", "FONET", "GEDIK", "GENIL", "GLCVY", "GOODY", "GWIND", "HATEK", "HDFGS",
-    "HEDEF", "HTTBT", "HUNER", "ICBCT", "IHAAS", "INGRM", "INTEM", "IPEKE", "ISBIR", "ISFIN",
-    "IZENR", "KAREL", "KARSN", "KATMR", "KENT", "KEREV", "KERVT", "KFEIN", "KGYO", "KLMSN",
-    "KLNMA", "KONYA", "KOZAA", "KOZAL", "KRVGD", "KSTUR", "KUYAS", "LINK", "LMKDC", "LUKSK",
-    "MAALT", "MAGEN", "MARTI", "MEGAP", "MERCN", "METUR", "MIGRS", "MOBTL", "MRGYO", "MRSHL",
-    "MSGYO", "MTRKS", "MTRYO", "NATEN", "NTHOL", "NUGYO", "OLMIP", "OSMEN", "OYLUM", "OYYAT",
+    "HEDEF", "HTTBT", "HUNER", "ICBCT", "IHAAS", "INGRM", "INTEM", "ISBIR", "ISFIN",
+    "IZENR", "KAREL", "KARSN", "KATMR", "KENT", "KFEIN", "KGYO", "KLMSN",
+    "KLNMA", "KONYA", "KRVGD", "KSTUR", "KUYAS", "LINK", "LMKDC", "LUKSK",
+    "MAALT", "MAGEN", "MARTI", "MEGAP", "MERCN", "MOBTL", "MRGYO", "MRSHL",
+    "MSGYO", "MTRKS", "MTRYO", "NATEN", "NTHOL", "NUGYO", "OSMEN", "OYLUM", "OYYAT",
     "OZGYO", "OZKGY", "PAGYO", "PARSN", "PCILT", "PENGD", "PINSU", "PKART", "PRKAB", "PRZMA",
-    "QNBFB", "RAYSG", "SAFKR", "SEKUR", "SELEC", "SILVR", "SMART", "SNGYO", "SNKRN", "SUNTK",
-    "SUWEN", "TAIHL", "TATGD", "TBORG", "TEKTU", "TICR", "TKNSA", "TMPOL", "TNZTP", "TRGYO",
-    "TRILC", "TRKCM", "TUCLK", "TUKAS", "TUREX", "UFUK", "ULUUN", "USAK", "UTPYA", "VAKKO",
+    "RAYSG", "SAFKR", "SEKUR", "SELEC", "SILVR", "SMART", "SNGYO", "SUNTK",
+    "SUWEN", "TATGD", "TBORG", "TEKTU", "TKNSA", "TMPOL", "TNZTP", "TRGYO",
+    "TRILC", "TUCLK", "TUKAS", "TUREX", "UFUK", "ULUUN", "USAK", "VAKKO",
     "VERTU", "VKGYO", "VKING", "YAPRK", "YEOTK", "YGYO", "YKSLN", "YONGA", "YUNSA", "YYAPI",
     "ZEDUR", "ZELOT",
 ]
