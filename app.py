@@ -55,6 +55,10 @@ from engine.aggregation import (
     build_briefing_context, build_agent_context,
 )
 from data.macro import fetch_all_macro, is_yfinance_available
+from engine.macro_decision import compute_regime, get_sector_rotation
+from engine.macro_signals import build_engine_inputs, build_freshness_report
+from engine.action_summary import generate_action_summary
+from ai.macro_roles import MACRO_AI_ROLES
 from infra.storage import init_db
 from engine.watchlist import add as wl_add, remove as wl_remove, get_symbols as wl_symbols, get_enriched as wl_enriched
 from engine.alerts import generate_watchlist_alerts, get_user_alerts
@@ -321,6 +325,52 @@ async def api_macro_commentary(request: Request):
 
 @app.get("/api/rates")
 async def api_rates(): return success({"rates": STATIC_RATES})
+# ================================================================
+# MACRO DECISION ENGINE
+# ================================================================
+@app.get("/api/macro/decision")
+async def api_macro_decision():
+    macro_data = macro_cache.get("macro_all")
+    if not macro_data or not macro_data.get("items"):
+        return error("Makro veri henüz yüklenmedi.", status_code=503)
+    try:
+        inputs = build_engine_inputs(macro_data.get("items",[]), macro_data.get("rates",STATIC_RATES), macro_data.get("timestamp"))
+        result = compute_regime(inputs)
+        action = generate_action_summary(result)
+        sectors = get_sector_rotation(result.regime)
+        freshness = build_freshness_report(inputs)
+        return success({
+            "regime": result.regime, "score": result.score, "confidence": result.confidence,
+            "explanation": result.explanation,
+            "signals": [{"name":s.name,"value":s.value,"score":s.score,"label":s.label,"source":s.source,"note":s.note} for s in result.signals],
+            "contradictions": [{"type":c.type,"message":c.message} for c in result.contradictions],
+            "action_summary": action, "sectors": sectors, "freshness": freshness, "computed_at": result.computed_at,
+        })
+    except Exception as e:
+        log.error(f"macro decision: {e}"); return error("Karar motoru hesaplanamadı", status_code=500)
+
+@app.get("/api/macro/ai-roles")
+async def api_macro_ai_roles(request: Request):
+    check_rate_limit(request, "macro_commentary")
+    if not AI_AVAILABLE: return success({"roles": {}, "error": "AI pasif"})
+    cached = macro_ai_cache.get("macro_roles")
+    if cached is not None: return success(cached, cache_status="hit")
+    macro_data = macro_cache.get("macro_all")
+    if not macro_data or not macro_data.get("items"): return success({"roles": {}, "error": "Makro veri henüz yüklenmedi."})
+    try:
+        inputs = build_engine_inputs(macro_data.get("items",[]), macro_data.get("rates",STATIC_RATES), macro_data.get("timestamp"))
+        regime_result = compute_regime(inputs)
+        roles_output = {}
+        for role_key, role_def in MACRO_AI_ROLES.items():
+            prompt = role_def["prompt_fn"](regime_result)
+            from ai.engine import ai_call
+            text = await asyncio.to_thread(ai_call, prompt, 300)
+            roles_output[role_key] = {"label": role_def["label"], "icon": role_def["icon"], "commentary": text or "Yorum üretilemedi."}
+        result = {"roles": roles_output, "timestamp": now_iso(), "regime": regime_result.regime}
+        macro_ai_cache.set("macro_roles", result); return success(result)
+    except Exception as e:
+        log.error(f"macro ai roles: {e}"); return success({"roles": {}, "error": str(e)})
+
 
 # ================================================================
 # DASHBOARD

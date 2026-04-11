@@ -624,6 +624,7 @@ if(hr){
     const topIvme=sc.items.reduce((a,b)=>(b.ivme||0)>(a.ivme||0)?b:a,sc.items[0]);
     h+=`<div style="margin-bottom:18px;padding:16px;background:linear-gradient(135deg,rgba(255,179,0,.06),rgba(100,181,246,.04));border:1px solid rgba(255,179,0,.2);border-radius:var(--rad)">`;
     h+=`<div style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-xs);color:var(--acc);text-transform:uppercase;letter-spacing:1px;margin-bottom:12px">📋 Bugün Ne Yapmalı?</div>`;
+    h+=`<div id="homeActionText" style="font-size:var(--fs-base);color:var(--t1);line-height:1.7;margin-bottom:12px"><span style="color:var(--t3)">Makro analiz yükleniyor...</span></div>`;
     h+=`<div style="display:flex;flex-direction:column;gap:10px;font-size:var(--fs-base);line-height:1.6">`;
     h+=`<div style="display:flex;gap:8px;align-items:flex-start"><span style="color:var(--grn);font-weight:700;flex-shrink:0">✓</span><span style="color:var(--t1)"><span class="clk-t" onclick="loadTicker('${esc(best.ticker)}')">${esc(best.ticker)}</span> değer skoru <b style="color:var(--grn)">${(best.deger||best.overall).toFixed(0)}</b> ile en güçlü — takip et</span></div>`;
     if(topIvme.ticker!==best.ticker){h+=`<div style="display:flex;gap:8px;align-items:flex-start"><span style="color:var(--blu);font-weight:700;flex-shrink:0">⚡</span><span style="color:var(--t1)"><span class="clk-t" onclick="loadTicker('${esc(topIvme.ticker)}')">${esc(topIvme.ticker)}</span> ivme skoru <b style="color:var(--blu)">${(topIvme.ivme||50).toFixed(0)}</b> — momentum güçlü</span></div>`;}
@@ -703,11 +704,12 @@ async function loadWatchlistEnriched(){const el=$('wlPanel');if(!el)return;el.in
 async function refreshAlerts(){const el=$('alertPanel');if(!el)return;el.innerHTML='<p style="color:var(--t3);font-size:var(--fs-sm)">Kontrol ediliyor...</p>';try{await api('/api/alerts/refresh',{method:'POST'});const d=await api('/api/alerts');S._alerts=d.alerts||[];const items=S._alerts.slice(0,5);if(items.length){el.innerHTML=items.map(a=>{const sc=a.severity==='high'?'var(--red)':a.severity==='warning'?'var(--ylw)':'var(--blu)';return`<div style="padding:5px 0;border-bottom:1px solid var(--bdr);font-size:var(--fs-xs)"><div style="display:flex;justify-content:space-between"><span style="color:${sc};font-weight:600;cursor:pointer" onclick="loadTicker('${esc(a.symbol)}')">${esc(a.title)}</span></div><div style="color:var(--t3);font-size:10px;margin-top:1px">${esc(a.message||'')}</div></div>`;}).join('');}else{el.innerHTML='<p style="color:var(--t3);font-size:var(--fs-sm)">Yeni uyarı yok</p>';}}catch(e){el.innerHTML='<p style="color:var(--t3);font-size:var(--fs-sm)">Hata</p>';}}
 async function loadBook(){try{S.book=await api('/api/book');}catch(e){}}
 async function loadMarketStatus(){try{S.marketStatus=await api('/api/market-status');}catch(e){}}
-async function loadMacro(){try{S.macro=await api('/api/macro');const el=$('macMini');if(el)el.innerHTML=renderMacMini(S.macro.items||[]);const ng=$('nabGrid');if(ng)ng.innerHTML=renderNabiz(S.macro.items||[]);renderTickerBar(S.macro.items||[]);}catch(e){console.error('macro:',e);}}
+async function loadMacro(){try{S.macro=await api('/api/macro');const el=$('macMini');if(el)el.innerHTML=renderMacMini(S.macro.items||[]);const ng=$('nabGrid');if(ng)ng.innerHTML=renderNabiz(S.macro.items||[]);renderTickerBar(S.macro.items||[]);loadHomeAction();}catch(e){console.error('macro:',e);}}
+async function loadHomeAction(){const el=$('homeActionText');if(!el)return;try{const d=await api('/api/macro/decision');if(d.action_summary){const rc=d.regime==='RISK_ON'?'var(--grn)':d.regime==='RISK_OFF'?'var(--red)':'var(--ylw)';const rl=d.regime==='RISK_ON'?'Risk On':d.regime==='RISK_OFF'?'Risk Off':'Nötr';el.innerHTML=`<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><span style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;color:${rc}
 function renderTickerBar(items){const tb=$('tbar');const inner=items.map(m=>`<div class="tbar-i"><span style="color:var(--t2);font-weight:600">${esc(m.flag||'')} ${esc(m.key||m.name)}</span><span style="color:var(--t1)">${fN(m.price,m.key?.includes('TRY')?4:2)}</span><span style="color:${cC(m.change_pct)};font-size:10px">${cS(m.change_pct)}%</span></div>`).join('');tb.innerHTML=`<div class="tbar-inner">${inner}${inner}</div>`;}
 
 // ===== MAKRO PAGE =====
-function renderMakroPage(){const pg=$('pg-makro');if(!S.macro){pg.innerHTML='<div class="ld"><div class="sp"></div><div class="ld-t">Makro verileri yükleniyor...</div></div>';loadMacro().then(()=>renderMakroPage());return;}const items=S.macro.items||[];if(!items.length){pg.innerHTML='<div class="emp"><h3 style="color:var(--t2)">Makro veri alınamadı</h3></div>';return;}const cats={turkiye:[],em:[],global:[],emtia:[]};items.forEach(m=>cats[m.category]?.push(m));const emSorted=[...cats.em,...cats.turkiye.filter(m=>m.key==='XU030'||m.key==='XU100')].sort((a,b)=>(b.ytd_pct||0)-(a.ytd_pct||0));let h=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px"><h2 style="font-family:'JetBrains Mono',monospace;font-size:15px;color:var(--blu)">🌍 Makro Radar</h2><button class="btn btn-sm btn-blu" onclick="loadMacroAI()">🤖 AI YORUM</button></div><div id="macroAI"></div>`;
+function renderMakroPage(){const pg=$('pg-makro');if(!S.macro){pg.innerHTML='<div class="ld"><div class="sp"></div><div class="ld-t">Makro verileri yükleniyor...</div></div>';loadMacro().then(()=>renderMakroPage());return;}const items=S.macro.items||[];if(!items.length){pg.innerHTML='<div class="emp"><h3 style="color:var(--t2)">Makro veri alınamadı</h3></div>';return;}const cats={turkiye:[],em:[],global:[],emtia:[]};items.forEach(m=>cats[m.category]?.push(m));const emSorted=[...cats.em,...cats.turkiye.filter(m=>m.key==='XU030'||m.key==='XU100')].sort((a,b)=>(b.ytd_pct||0)-(a.ytd_pct||0));let h='<div id="macroDecisionBlock"><div class="ld"><div class="sp"></div><div class="ld-t">Karar motoru hesaplanıyor...</div></div></div>';
 // === FAİZ & RİSK KARTI ===
 const rates=S.macro.rates||[];
 if(rates.length){
@@ -727,6 +729,62 @@ h+=`</div></div></div>`;
 h+=`<div class="card" style="margin-bottom:14px"><div class="card-h"><span class="card-t">🏁 EM YTD Siralama</span></div><div class="card-b" style="overflow-x:auto"><div style="margin-bottom:6px;display:flex;padding:4px 10px;font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--t4);text-transform:uppercase"><span style="width:24px">#</span><span style="width:24px"></span><span style="flex:1">Endeks</span><span style="width:80px;text-align:right">Fiyat</span><span style="width:65px;text-align:right">Gun</span><span style="width:65px;text-align:right">1H</span><span style="width:65px;text-align:right">1A</span><span style="width:65px;text-align:right">YTD</span></div>`;
 emSorted.forEach((m,i)=>{const isTR=m.key==='XU030'||m.key==='XU100';h+=`<div class="em-row" style="${isTR?'background:rgba(0,230,118,.05);border-left:2px solid var(--grn)':''}"><span class="em-rank">${i+1}</span><span class="em-flag">${esc(m.flag||'')}</span><span class="em-name">${esc(m.name)}</span><span class="em-price">${fN(m.price,2)}</span><span class="em-chg" style="color:${cC(m.change_pct)}">${cS(m.change_pct)}%</span><span class="em-chg" style="color:${cC(m.w1_pct||0)}">${m.w1_pct!=null?cS(m.w1_pct)+'%':'—'}</span><span class="em-chg" style="color:${cC(m.m1_pct||0)}">${m.m1_pct!=null?cS(m.m1_pct)+'%':'—'}</span><span class="em-ytd" style="color:${cC(m.ytd_pct||0)}">${m.ytd_pct!=null?cS(m.ytd_pct)+'%':'—'}</span></div>`;});h+=`</div></div>`;
 for(const[cat,label]of[['turkiye','🇹🇷 Turkiye'],['global','🌐 Global'],['emtia','🛢️ Emtia']]){const list=cats[cat]||[];if(!list.length)continue;h+=`<h3 style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--t2);margin:14px 0 8px;text-transform:uppercase">${label}</h3><div class="g4" style="margin-bottom:12px">`;list.forEach(m=>{h+=`<div class="mac" style="padding:12px"><div class="mac-s">${esc(m.flag||'')} ${esc(m.name)}</div><div class="mac-p" style="font-size:18px">${fN(m.price,m.key?.includes('TRY')?4:2)}</div><div class="mac-c" style="color:${cC(m.change_pct)};font-size:12px">${cS(m.change_pct)}%</div><div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--t3);margin-top:4px">YTD: <span style="color:${cC(m.ytd_pct||0)};font-weight:700">${m.ytd_pct!=null?cS(m.ytd_pct)+'%':'—'}</span></div></div>`;});h+='</div>';}pg.innerHTML=h;}
+async function loadMacroDecision(){
+const box=$('macroDecisionBlock');if(!box)return;
+try{
+const d=await api('/api/macro/decision');
+const rc=d.regime==='RISK_ON'?'var(--grn)':d.regime==='RISK_OFF'?'var(--red)':'var(--ylw)';
+const rl=d.regime==='RISK_ON'?'RİSK ON':d.regime==='RISK_OFF'?'RİSK OFF':'NÖTR';
+const cc=d.confidence==='HIGH'?'Yüksek':d.confidence==='MEDIUM'?'Orta':'Düşük';
+let h='';
+// HERO: Regime
+h+=`<div style="margin-bottom:14px;padding:20px;background:linear-gradient(135deg,rgba(${d.regime==='RISK_ON'?'0,230,118':d.regime==='RISK_OFF'?'255,82,82':'255,179,0'},.08),transparent);border:1px solid ${rc};border-radius:var(--rad)">`;
+h+=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><div style="display:flex;align-items:center;gap:10px"><span style="font-size:28px;font-weight:900;font-family:'JetBrains Mono',monospace;color:${rc}">● ${rl}</span><span style="font-size:11px;color:var(--t3);font-family:'JetBrains Mono',monospace">Güven: ${cc}</span></div><span style="font-size:9px;color:var(--t4);font-family:'JetBrains Mono',monospace">${d.computed_at?new Date(d.computed_at).toLocaleString('tr-TR'):''}</span></div>`;
+h+=`<div style="font-size:var(--fs-base);color:var(--t1);line-height:1.6">${esc(d.explanation)}</div>`;
+h+=`</div>`;
+// SIGNALS TABLE
+if(d.signals&&d.signals.length){
+h+=`<div class="card" style="margin-bottom:14px"><div class="card-h"><span class="card-t">📡 Temel Sinyaller</span></div><div class="card-b">`;
+d.signals.forEach(s=>{
+const sc=s.score===1?'var(--grn)':s.score===-1?'var(--red)':'var(--t3)';
+const icon=s.score===1?'🟢':s.score===-1?'🔴':'⚪';
+const src=s.source==='canlı'?'🟢':s.source==='günlük'?'🔵':s.source==='tahmini'?'🟡':s.source==='eski'?'🔴':'⚫';
+h+=`<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--bdr)"><div style="display:flex;align-items:center;gap:8px"><span>${icon}</span><span style="color:var(--t1);font-size:var(--fs-sm)">${esc(s.name)}</span></div><div style="display:flex;align-items:center;gap:12px"><span style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-sm);color:${sc}">${esc(s.note)}</span><span style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-sm);color:${sc};font-weight:700">${esc(s.label)}</span><span title="${esc(s.source)}" style="font-size:8px">${src}</span></div></div>`;
+});
+h+=`</div></div>`;}
+// CONTRADICTIONS (conditional)
+if(d.contradictions&&d.contradictions.length){
+h+=`<div style="margin-bottom:14px;padding:14px;background:rgba(255,179,0,.08);border:1px solid rgba(255,179,0,.3);border-radius:var(--rad)"><div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--ylw);text-transform:uppercase;margin-bottom:8px">⚠️ Dikkat: Çelişkili Sinyal</div>`;
+d.contradictions.forEach(c=>{h+=`<div style="font-size:var(--fs-sm);color:var(--t1);line-height:1.6;margin-bottom:6px">${esc(c.message)}</div>`;});
+h+=`</div>`;}
+// SECTOR ROTATION
+if(d.sectors){
+h+=`<div class="card" style="margin-bottom:14px"><div class="card-h"><span class="card-t">🔄 Bu Ortamda Hangi Sektörler?</span></div><div class="card-b"><div style="display:flex;gap:12px;flex-wrap:wrap">`;
+h+=`<div style="flex:1;min-width:140px"><div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--grn);text-transform:uppercase;margin-bottom:6px">Güçlü</div>`;
+(d.sectors.strong||[]).forEach(s=>{h+=`<div style="padding:4px 10px;margin-bottom:4px;background:rgba(0,230,118,.08);border-radius:4px;font-size:var(--fs-sm);color:var(--t1)">${esc(s)}</div>`;});
+h+=`</div><div style="flex:1;min-width:140px"><div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--red);text-transform:uppercase;margin-bottom:6px">Zayıf</div>`;
+(d.sectors.weak||[]).forEach(s=>{h+=`<div style="padding:4px 10px;margin-bottom:4px;background:rgba(255,82,82,.08);border-radius:4px;font-size:var(--fs-sm);color:var(--t2)">${esc(s)}</div>`;});
+h+=`</div></div></div></div>`;}
+// ACTION SUMMARY
+if(d.action_summary){
+h+=`<div style="margin-bottom:14px;padding:16px;background:linear-gradient(135deg,rgba(255,179,0,.06),rgba(100,181,246,.04));border:1px solid rgba(255,179,0,.2);border-radius:var(--rad)">`;
+h+=`<div style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-xs);color:var(--acc);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">📋 Bugün Ne Yapmalı?</div>`;
+h+=`<div style="font-size:var(--fs-base);color:var(--t1);line-height:1.7">${esc(d.action_summary)}</div>`;
+h+=`</div>`;}
+// AI ROLES BUTTON
+h+=`<div style="margin-bottom:14px"><button class="btn btn-sm btn-blu" onclick="loadMacroRoles()">🤖 3 Farklı Bakış — AI Yorumları</button></div><div id="macroRolesBlock"></div>`;
+// FRESHNESS
+if(d.freshness&&d.freshness.length){
+h+=`<div style="margin-top:8px;padding:10px;background:var(--bg3);border-radius:var(--rad)"><div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--t4);text-transform:uppercase;margin-bottom:6px">Veri Kaynakları</div><div style="display:flex;flex-wrap:wrap;gap:6px">`;
+d.freshness.forEach(f=>{
+const col=f.stale?'var(--red)':'var(--t3)';
+const src=f.source==='canlı'?'🟢':f.source==='günlük'?'🔵':f.source==='tahmini'?'🟡':f.source==='eski'?'🔴':'⚫';
+h+=`<span style="font-family:'JetBrains Mono',monospace;font-size:9px;color:${col}">${src} ${esc(f.signal)}</span>`;
+});
+h+=`</div></div>`;}
+box.innerHTML=h;
+}catch(e){console.error('macro decision:',e);box.innerHTML=`<div class="card" style="margin-bottom:14px;border-color:var(--ylw)"><div class="card-b"><span style="color:var(--ylw)">Karar motoru yüklenemedi</span></div></div>`;}}
+
 async function loadMacroAI(){const box=$('macroAI');if(!box)return;box.innerHTML='<div class="aib" style="margin-bottom:14px"><div class="aib-t">🤖 AI MAKRO YORUM</div><div class="aib-tx">Yükleniyor...</div></div>';try{const d=await api('/api/macro/commentary');box.innerHTML=d.commentary?`<div class="aib" style="margin-bottom:14px"><div class="aib-t">🤖 AI MAKRO YORUM</div><div class="aib-tx">${esc(d.commentary).replace(/\n/g,'<br>')}</div></div>`:`<div class="aib" style="margin-bottom:14px;border-color:var(--ylw)"><div class="aib-t" style="color:var(--ylw)">AI</div><div class="aib-tx" style="color:var(--ylw)">${esc(d.error||'OPENAI_KEY veya XAI_API_KEY ekleyin')}</div></div>`;}catch(e){box.innerHTML='';}}
 
 // ===== RADAR PAGE =====

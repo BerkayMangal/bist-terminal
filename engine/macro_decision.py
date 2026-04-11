@@ -1,0 +1,303 @@
+# ================================================================
+# BISTBULL TERMINAL — MACRO DECISION ENGINE
+# engine/macro_decision.py
+#
+# Rule-based, explainable regime detection.
+# No black boxes. Every score traceable.
+# ================================================================
+
+from __future__ import annotations
+
+import logging
+import datetime as dt
+from typing import Optional, Any
+from dataclasses import dataclass, field, asdict
+
+log = logging.getLogger("bistbull.macro_decision")
+
+# ================================================================
+# SCORING THRESHOLDS — all visible, no magic numbers
+# ================================================================
+
+THRESHOLDS = {
+    "cds": {"bull": 250, "bear": 350},           # bps
+    "usdtry_5d_pct": {"bull": 1.0, "bear": 3.0}, # %
+    "vix": {"bull": 18, "bear": 25},
+    "dxy_20d_pct": {"bull": -1.0, "bear": 1.0},   # % change — negative = weaker dollar = good for EM
+    "yield_spread": {"bull": 0.0, "bear": -1.0},   # 10Y - 2Y in pct points; negative = inverted
+    "foreign_flow": {"bull": 0, "bear": 0},         # net million TL; >0 = inflow
+    "global_idx_5d_pct": {"bull": 0.5, "bear": -1.0},  # S&P 500 5d %
+}
+
+REGIME_THRESHOLDS = {"risk_on": 3, "risk_off": -3}
+REGIME_CONFIRM_DAYS = 2  # require N consecutive days before regime flip
+
+# Contradiction detection
+CONTRADICTION_BIST_THRESHOLD = 3.0   # BIST 5d % move that contradicts regime
+CONTRADICTION_CDS_FX_SPLIT = True    # CDS up but TL strengthening
+
+
+# ================================================================
+# SAFETY GUARDS (Phase 7)
+# ================================================================
+def _safe_float(val: Any, default: float = 0.0,
+                lo: float = -9999, hi: float = 9999) -> float:
+    """Safely convert to float, clamp to [lo, hi]. Never returns None."""
+    if val is None:
+        return default
+    try:
+        v = float(val)
+    except (TypeError, ValueError):
+        return default
+    if v != v:  # NaN check
+        return default
+    return max(lo, min(hi, v))
+
+
+def _safe_pct(val: Any, default: float = 0.0) -> float:
+    return _safe_float(val, default, lo=-100.0, hi=500.0)
+
+
+# ================================================================
+# SIGNAL SCORING
+# ================================================================
+@dataclass
+class SignalScore:
+    name: str
+    value: float
+    score: int          # -1, 0, +1
+    label: str          # "Olumlu", "Nötr", "Olumsuz"
+    source: str         # "canlı", "günlük", "haftalık", "tahmini"
+    fetched_at: Optional[str] = None
+    note: str = ""
+
+
+@dataclass
+class Contradiction:
+    type: str           # "bist_vs_macro", "cds_vs_fx", "global_vs_local"
+    message: str        # plain Turkish
+
+
+@dataclass
+class RegimeResult:
+    regime: str         # "RISK_ON", "NEUTRAL", "RISK_OFF"
+    score: int          # sum of signal scores (-7 to +7)
+    confidence: str     # "HIGH", "MEDIUM", "LOW"
+    explanation: str    # plain Turkish
+    signals: list[SignalScore] = field(default_factory=list)
+    contradictions: list[Contradiction] = field(default_factory=list)
+    computed_at: str = ""
+    regime_since: Optional[str] = None
+
+    def to_dict(self) -> dict:
+        d = asdict(self)
+        d["signals"] = [asdict(s) for s in self.signals]
+        d["contradictions"] = [asdict(c) for c in self.contradictions]
+        return d
+
+
+# ================================================================
+# CORE: score one signal
+# ================================================================
+def _score_signal(name: str, value: float, thresholds: dict) -> int:
+    bull = thresholds["bull"]
+    bear = thresholds["bear"]
+
+    if bull < bear:
+        # lower is better (CDS, VIX, USDTRY change, DXY)
+        if value < bull:
+            return 1
+        elif value > bear:
+            return -1
+        return 0
+    else:
+        # higher is better (yield_spread, foreign_flow, global_idx)
+        if value > bull:
+            return 1
+        elif value < bear:
+            return -1
+        return 0
+
+
+SCORE_LABELS = {1: "Olumlu", 0: "Nötr", -1: "Olumsuz"}
+
+
+# ================================================================
+# MAIN: compute regime
+# ================================================================
+def compute_regime(inputs: dict[str, Any]) -> RegimeResult:
+    """
+    inputs keys:
+        cds: float (bps)
+        usdtry_5d_pct: float (%)
+        vix: float
+        dxy_20d_pct: float (%)
+        yield_spread: float (10Y - 2Y, pct points)
+        foreign_flow: float (net, million TL)
+        global_idx_5d_pct: float (S&P 500 5d %)
+        bist_5d_pct: float (%) — for contradiction detection
+        --- source metadata (optional) ---
+        cds_source: str
+        cds_fetched_at: str
+        ...
+    """
+    signals: list[SignalScore] = []
+    total_score = 0
+
+    signal_defs = [
+        ("cds",               "Türkiye CDS",        "bps",  "tahmini"),
+        ("usdtry_5d_pct",     "USD/TRY (5 gün)",    "%",    "canlı"),
+        ("vix",               "VIX",                "",     "canlı"),
+        ("dxy_20d_pct",       "Dolar Endeksi (20g)", "%",   "günlük"),
+        ("yield_spread",      "Verim Eğrisi",       "puan", "tahmini"),
+        ("foreign_flow",      "Yabancı Akış",       "M₺",  "haftalık"),
+        ("global_idx_5d_pct", "S&P 500 (5 gün)",    "%",    "canlı"),
+    ]
+
+    for key, display, unit, default_source in signal_defs:
+        raw = inputs.get(key)
+        missing = raw is None
+        val = _safe_float(raw, default=0.0)
+        thresh = THRESHOLDS.get(key)
+        if thresh is None:
+            continue
+        sc = 0 if missing else _score_signal(key, val, thresh)
+        total_score += sc
+        source = inputs.get(f"{key}_source", "yok" if missing else default_source)
+        fetched = inputs.get(f"{key}_fetched_at")
+        note = "veri yok" if missing else (f"{val:+.1f}{unit}" if unit else f"{val:.1f}")
+        signals.append(SignalScore(
+            name=display, value=round(val, 2), score=sc,
+            label=SCORE_LABELS[sc], source=source,
+            fetched_at=fetched, note=note,
+        ))
+
+    # --- Regime ---
+    if total_score >= REGIME_THRESHOLDS["risk_on"]:
+        regime = "RISK_ON"
+    elif total_score <= REGIME_THRESHOLDS["risk_off"]:
+        regime = "RISK_OFF"
+    else:
+        regime = "NEUTRAL"
+
+    # --- Confidence ---
+    abs_score = abs(total_score)
+    n_signals = len(signals)
+    if n_signals == 0:
+        confidence = "LOW"
+    elif abs_score >= n_signals - 1:
+        confidence = "HIGH"
+    elif abs_score >= n_signals // 2:
+        confidence = "MEDIUM"
+    else:
+        confidence = "LOW"
+
+    # --- Explanation (plain Turkish) ---
+    explanation = _build_explanation(regime, total_score, signals, confidence)
+
+    # --- Contradiction detection ---
+    contradictions = _detect_contradictions(inputs, regime, signals)
+
+    return RegimeResult(
+        regime=regime,
+        score=total_score,
+        confidence=confidence,
+        explanation=explanation,
+        signals=signals,
+        contradictions=contradictions,
+        computed_at=dt.datetime.now(dt.timezone.utc).isoformat(),
+    )
+
+
+# ================================================================
+# EXPLANATION BUILDER
+# ================================================================
+def _build_explanation(regime: str, score: int,
+                       signals: list[SignalScore], confidence: str) -> str:
+    neg = [s for s in signals if s.score == -1]
+    pos = [s for s in signals if s.score == 1]
+
+    if regime == "RISK_OFF":
+        drivers = ", ".join(s.name for s in neg[:3]) or "birden fazla sinyal"
+        return (f"{drivers} olumsuz yönde. "
+                f"Piyasa ortamı temkinli olmayı gerektiriyor.")
+    elif regime == "RISK_ON":
+        drivers = ", ".join(s.name for s in pos[:3]) or "birden fazla sinyal"
+        return (f"{drivers} olumlu yönde. "
+                f"Risk iştahı destekli bir ortam var.")
+    else:
+        return ("Sinyaller karışık. "
+                "Net bir yön yok — bekle-gör stratejisi mantıklı.")
+
+
+# ================================================================
+# CONTRADICTION DETECTION
+# ================================================================
+def _detect_contradictions(inputs: dict, regime: str,
+                           signals: list[SignalScore]) -> list[Contradiction]:
+    conds: list[Contradiction] = []
+
+    bist_5d = _safe_pct(inputs.get("bist_5d_pct"), 0.0)
+
+    # 1. BIST vs Regime
+    if regime == "RISK_OFF" and bist_5d > CONTRADICTION_BIST_THRESHOLD:
+        conds.append(Contradiction(
+            type="bist_vs_macro",
+            message=f"BIST 5 günde %{bist_5d:.1f} yükseldi ama makro ortam olumsuz. "
+                    "Bu yükselişin arkasını sorgula.",
+        ))
+    elif regime == "RISK_ON" and bist_5d < -CONTRADICTION_BIST_THRESHOLD:
+        conds.append(Contradiction(
+            type="bist_vs_macro",
+            message=f"BIST 5 günde %{bist_5d:.1f} düştü ama makro ortam olumlu. "
+                    "Yerel bir sorun olabilir.",
+        ))
+
+    # 2. CDS vs FX
+    cds = _safe_float(inputs.get("cds"), 0)
+    usdtry_5d = _safe_pct(inputs.get("usdtry_5d_pct"), 0)
+    if cds > 300 and usdtry_5d < -1.0:
+        conds.append(Contradiction(
+            type="cds_vs_fx",
+            message="CDS yüksek ama TL güçleniyor — bu ayrışma sürdürülebilir olmayabilir.",
+        ))
+
+    # 3. Global vs Local
+    global_5d = _safe_pct(inputs.get("global_idx_5d_pct"), 0)
+    if global_5d > 1.0 and bist_5d < -1.0:
+        conds.append(Contradiction(
+            type="global_vs_local",
+            message="Küresel endeksler yükseliyor ama BIST geride kalıyor. "
+                    "Türkiye'ye özgü bir baskı olabilir.",
+        ))
+    elif global_5d < -2.0 and bist_5d > 1.0:
+        conds.append(Contradiction(
+            type="global_vs_local",
+            message="Küresel piyasalar düşerken BIST yükseliyor — "
+                    "ayrışma genellikle kısa ömürlü olur.",
+        ))
+
+    return conds
+
+
+# ================================================================
+# SECTOR ROTATION MAP
+# ================================================================
+SECTOR_ROTATION = {
+    "RISK_ON": {
+        "strong": ["Bankacılık", "Sanayi", "Holding"],
+        "weak":   ["Gıda", "Telekom"],
+    },
+    "NEUTRAL": {
+        "strong": ["Gıda", "Teknoloji", "Enerji"],
+        "weak":   ["Holding", "İnşaat"],
+    },
+    "RISK_OFF": {
+        "strong": ["Gıda", "Telekom", "Enerji", "Savunma"],
+        "weak":   ["Bankacılık", "Sanayi", "İnşaat"],
+    },
+}
+
+
+def get_sector_rotation(regime: str) -> dict:
+    return SECTOR_ROTATION.get(regime, SECTOR_ROTATION["NEUTRAL"])
