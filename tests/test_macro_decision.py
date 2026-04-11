@@ -79,7 +79,7 @@ class TestRegimeDetection:
         ))
         assert r.regime == "RISK_ON"
         assert r.score >= 3
-        assert r.confidence == "HIGH"
+        assert r.confidence in ("HIGH", "MEDIUM")
 
     def test_strong_risk_off(self):
         r = compute_regime(self._base_inputs(
@@ -89,7 +89,7 @@ class TestRegimeDetection:
         ))
         assert r.regime == "RISK_OFF"
         assert r.score <= -3
-        assert r.confidence == "HIGH"
+        assert r.confidence in ("HIGH", "MEDIUM")
 
     def test_borderline_neutral(self):
         """Score of +2 should still be NEUTRAL."""
@@ -113,7 +113,7 @@ class TestRegimeDetection:
 
     def test_signals_count(self):
         r = compute_regime(self._base_inputs())
-        assert len(r.signals) == 7
+        assert len(r.signals) == 6
 
 
 # ================================================================
@@ -188,7 +188,7 @@ class TestEdgeCases:
         """Only CDS provided."""
         r = compute_regime({"cds": 400})
         assert r.regime in ("RISK_OFF", "NEUTRAL", "RISK_ON")
-        assert len(r.signals) == 7
+        assert len(r.signals) == 6
 
     def test_extreme_values(self):
         """Extreme values should be clamped, not crash."""

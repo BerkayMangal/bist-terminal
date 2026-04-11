@@ -59,6 +59,7 @@ from engine.macro_decision import compute_regime, get_sector_rotation
 from engine.macro_signals import build_engine_inputs, build_freshness_report
 from engine.action_summary import generate_action_summary
 from ai.macro_roles import MACRO_AI_ROLES
+from ai.safety import safe_ai_generate, validate_ai_output, FALLBACK_MESSAGES
 from infra.storage import init_db
 from engine.watchlist import add as wl_add, remove as wl_remove, get_symbols as wl_symbols, get_enriched as wl_enriched
 from engine.alerts import generate_watchlist_alerts, get_user_alerts
@@ -360,12 +361,21 @@ async def api_macro_ai_roles(request: Request):
     try:
         inputs = build_engine_inputs(macro_data.get("items",[]), macro_data.get("rates",STATIC_RATES), macro_data.get("timestamp"))
         regime_result = compute_regime(inputs)
+        from ai.engine import ai_call
         roles_output = {}
         for role_key, role_def in MACRO_AI_ROLES.items():
             prompt = role_def["prompt_fn"](regime_result)
-            from ai.engine import ai_call
-            text = await asyncio.to_thread(ai_call, prompt, 300)
-            roles_output[role_key] = {"label": role_def["label"], "icon": role_def["icon"], "commentary": text or "Yorum üretilemedi."}
+            text = await asyncio.to_thread(
+                safe_ai_generate, prompt, role_key,
+                regime_result.regime, regime_result.explanation,
+                ai_call, 300, 2, regime_result.confidence
+            )
+            roles_output[role_key] = {
+                "label": role_def["label"],
+                "icon": role_def["icon"],
+                "commentary": text,
+                "is_fallback": text in FALLBACK_MESSAGES.values(),
+            }
         result = {"roles": roles_output, "timestamp": now_iso(), "regime": regime_result.regime}
         macro_ai_cache.set("macro_roles", result); return success(result)
     except Exception as e:

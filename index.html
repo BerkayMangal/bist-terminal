@@ -741,6 +741,7 @@ let h='';
 h+=`<div style="margin-bottom:14px;padding:20px;background:linear-gradient(135deg,rgba(${d.regime==='RISK_ON'?'0,230,118':d.regime==='RISK_OFF'?'255,82,82':'255,179,0'},.08),transparent);border:1px solid ${rc};border-radius:var(--rad)">`;
 h+=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><div style="display:flex;align-items:center;gap:10px"><span style="font-size:28px;font-weight:900;font-family:'JetBrains Mono',monospace;color:${rc}">● ${rl}</span><span style="font-size:11px;color:var(--t3);font-family:'JetBrains Mono',monospace">Güven: ${cc}</span></div><span style="font-size:9px;color:var(--t4);font-family:'JetBrains Mono',monospace">${d.computed_at?new Date(d.computed_at).toLocaleString('tr-TR'):''}</span></div>`;
 h+=`<div style="font-size:var(--fs-base);color:var(--t1);line-height:1.6">${esc(d.explanation)}</div>`;
+if(d.confidence==='LOW'){h+=`<div style="margin-top:8px;padding:6px 10px;background:rgba(255,179,0,.1);border-radius:4px;font-size:var(--fs-xs);color:var(--ylw)">⚠️ Veri kalitesi düşük — bu rejim değerlendirmesi sınırlı veriye dayanıyor.</div>`;}
 h+=`</div>`;
 // SIGNALS TABLE
 if(d.signals&&d.signals.length){
@@ -748,8 +749,8 @@ h+=`<div class="card" style="margin-bottom:14px"><div class="card-h"><span class
 d.signals.forEach(s=>{
 const sc=s.score===1?'var(--grn)':s.score===-1?'var(--red)':'var(--t3)';
 const icon=s.score===1?'🟢':s.score===-1?'🔴':'⚪';
-const src=s.source==='canlı'?'🟢':s.source==='günlük'?'🔵':s.source==='tahmini'?'🟡':s.source==='eski'?'🔴':'⚫';
-h+=`<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--bdr)"><div style="display:flex;align-items:center;gap:8px"><span>${icon}</span><span style="color:var(--t1);font-size:var(--fs-sm)">${esc(s.name)}</span></div><div style="display:flex;align-items:center;gap:12px"><span style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-sm);color:${sc}">${esc(s.note)}</span><span style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-sm);color:${sc};font-weight:700">${esc(s.label)}</span><span title="${esc(s.source)}" style="font-size:8px">${src}</span></div></div>`;
+const srcBadge=s.source==='tahmini'?`<span style="font-family:'JetBrains Mono',monospace;font-size:7px;color:var(--ylw);padding:1px 4px;border:1px solid var(--ylw);border-radius:2px">TAHMİNİ</span>`:s.source==='günlük'?`<span style="font-family:'JetBrains Mono',monospace;font-size:7px;color:var(--blu);padding:1px 4px;border:1px solid var(--bdr);border-radius:2px">GÜNLÜK</span>`:s.source==='eski'?`<span style="font-family:'JetBrains Mono',monospace;font-size:7px;color:var(--red);padding:1px 4px;border:1px solid var(--red);border-radius:2px">ESKİ</span>`:`<span style="font-family:'JetBrains Mono',monospace;font-size:7px;color:var(--t4);padding:1px 4px;border:1px solid var(--bdr);border-radius:2px">${esc(s.source).toUpperCase()}</span>`;
+h+=`<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--bdr)"><div style="display:flex;align-items:center;gap:8px"><span>${icon}</span><span style="color:var(--t1);font-size:var(--fs-sm)">${esc(s.name)}</span></div><div style="display:flex;align-items:center;gap:8px"><span style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-sm);color:${sc}">${esc(s.note)}</span><span style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-sm);color:${sc};font-weight:700">${esc(s.label)}</span>${srcBadge}</div></div>`;
 });
 h+=`</div></div>`;}
 // CONTRADICTIONS (conditional)
@@ -759,7 +760,7 @@ d.contradictions.forEach(c=>{h+=`<div style="font-size:var(--fs-sm);color:var(--
 h+=`</div>`;}
 // SECTOR ROTATION
 if(d.sectors){
-h+=`<div class="card" style="margin-bottom:14px"><div class="card-h"><span class="card-t">🔄 Bu Ortamda Hangi Sektörler?</span></div><div class="card-b"><div style="display:flex;gap:12px;flex-wrap:wrap">`;
+h+=`<div class="card" style="margin-bottom:14px"><div class="card-h"><span class="card-t">🔄 Bu Ortamda Hangi Sektörler?</span><span style="font-family:'JetBrains Mono',monospace;font-size:8px;color:var(--ylw);padding:2px 6px;border:1px solid var(--ylw);border-radius:3px">Editöryal görüş</span></div><div class="card-b"><div style="display:flex;gap:12px;flex-wrap:wrap">`;
 h+=`<div style="flex:1;min-width:140px"><div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--grn);text-transform:uppercase;margin-bottom:6px">Güçlü</div>`;
 (d.sectors.strong||[]).forEach(s=>{h+=`<div style="padding:4px 10px;margin-bottom:4px;background:rgba(0,230,118,.08);border-radius:4px;font-size:var(--fs-sm);color:var(--t1)">${esc(s)}</div>`;});
 h+=`</div><div style="flex:1;min-width:140px"><div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--red);text-transform:uppercase;margin-bottom:6px">Zayıf</div>`;
@@ -778,8 +779,8 @@ if(d.freshness&&d.freshness.length){
 h+=`<div style="margin-top:8px;padding:10px;background:var(--bg3);border-radius:var(--rad)"><div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--t4);text-transform:uppercase;margin-bottom:6px">Veri Kaynakları</div><div style="display:flex;flex-wrap:wrap;gap:6px">`;
 d.freshness.forEach(f=>{
 const col=f.stale?'var(--red)':'var(--t3)';
-const src=f.source==='canlı'?'🟢':f.source==='günlük'?'🔵':f.source==='tahmini'?'🟡':f.source==='eski'?'🔴':'⚫';
-h+=`<span style="font-family:'JetBrains Mono',monospace;font-size:9px;color:${col}">${src} ${esc(f.signal)}</span>`;
+const src=f.source==='günlük'?'🔵':f.source==='tahmini'?'🟡':f.source==='eski'?'🔴':f.source==='yok'?'⚫':'🔵';
+h+=`<span style="font-family:'JetBrains Mono',monospace;font-size:9px;color:${col}">${src} ${esc(f.signal)} · ${esc(f.source)}</span>`;
 });
 h+=`</div></div>`;}
 box.innerHTML=h;
@@ -795,8 +796,9 @@ const order=['interpreter','risk_controller','action_coach'];
 const colors=['var(--blu)','var(--ylw)','var(--grn)'];
 order.forEach((key,i)=>{
 const r=d.roles[key];if(!r)return;
+const fb=r.is_fallback?'<span style="font-family:\'JetBrains Mono\',monospace;font-size:8px;color:var(--ylw);margin-left:6px;padding:1px 5px;border:1px solid var(--ylw);border-radius:3px">Veri yetersiz</span>':'<span style="font-family:\'JetBrains Mono\',monospace;font-size:8px;color:var(--t4);margin-left:6px;padding:1px 5px;border:1px solid var(--bdr);border-radius:3px">AI Yorum</span>';
 h+=`<div style="padding:14px;background:var(--bg3);border:1px solid ${colors[i]};border-radius:var(--rad)">`;
-h+=`<div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:${colors[i]};text-transform:uppercase;margin-bottom:8px">${esc(r.icon)} ${esc(r.label)}</div>`;
+h+=`<div style="display:flex;align-items:center;font-family:'JetBrains Mono',monospace;font-size:11px;color:${colors[i]};text-transform:uppercase;margin-bottom:8px">${esc(r.icon)} ${esc(r.label)}${fb}</div>`;
 h+=`<div style="font-size:var(--fs-sm);color:var(--t1);line-height:1.6">${esc(r.commentary).replace(/\n/g,'<br>')}</div>`;
 h+=`</div>`;
 });

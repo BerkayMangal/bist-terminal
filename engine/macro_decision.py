@@ -25,16 +25,17 @@ THRESHOLDS = {
     "vix": {"bull": 18, "bear": 25},
     "dxy_20d_pct": {"bull": -1.0, "bear": 1.0},   # % change — negative = weaker dollar = good for EM
     "yield_spread": {"bull": 0.0, "bear": -1.0},   # 10Y - 2Y in pct points; negative = inverted
-    "foreign_flow": {"bull": 0, "bear": 0},         # net million TL; >0 = inflow
     "global_idx_5d_pct": {"bull": 0.5, "bear": -1.0},  # S&P 500 5d %
 }
 
+# 6 signals → range [-6, +6]. ±3 = 50% directional agreement.
+# Deliberately conservative: NEUTRAL is honest when signals are mixed.
+# 2 of 6 signals (CDS, yield_spread) are "tahmini" — regime is primarily
+# driven by the 4 live signals (USDTRY, VIX, DXY, S&P500).
 REGIME_THRESHOLDS = {"risk_on": 3, "risk_off": -3}
-REGIME_CONFIRM_DAYS = 2  # require N consecutive days before regime flip
 
 # Contradiction detection
 CONTRADICTION_BIST_THRESHOLD = 3.0   # BIST 5d % move that contradicts regime
-CONTRADICTION_CDS_FX_SPLIT = True    # CDS up but TL strengthening
 
 
 # ================================================================
@@ -146,12 +147,11 @@ def compute_regime(inputs: dict[str, Any]) -> RegimeResult:
 
     signal_defs = [
         ("cds",               "Türkiye CDS",        "bps",  "tahmini"),
-        ("usdtry_5d_pct",     "USD/TRY (5 gün)",    "%",    "canlı"),
-        ("vix",               "VIX",                "",     "canlı"),
+        ("usdtry_5d_pct",     "USD/TRY (5 gün)",    "%",    "günlük"),
+        ("vix",               "VIX",                "",     "günlük"),
         ("dxy_20d_pct",       "Dolar Endeksi (20g)", "%",   "günlük"),
         ("yield_spread",      "Verim Eğrisi",       "puan", "tahmini"),
-        ("foreign_flow",      "Yabancı Akış",       "M₺",  "haftalık"),
-        ("global_idx_5d_pct", "S&P 500 (5 gün)",    "%",    "canlı"),
+        ("global_idx_5d_pct", "S&P 500 (5 gün)",    "%",    "günlük"),
     ]
 
     for key, display, unit, default_source in signal_defs:
@@ -180,15 +180,18 @@ def compute_regime(inputs: dict[str, Any]) -> RegimeResult:
     else:
         regime = "NEUTRAL"
 
-    # --- Confidence ---
+    # --- Confidence (accounts for data quality) ---
     abs_score = abs(total_score)
     n_signals = len(signals)
-    if n_signals == 0:
+    n_estimated = sum(1 for s in signals if s.source in ("tahmini", "yok"))
+    n_missing = sum(1 for s in signals if s.note == "veri yok")
+
+    if n_signals == 0 or n_missing >= n_signals - 1:
         confidence = "LOW"
-    elif abs_score >= n_signals - 1:
+    elif abs_score >= n_signals - 1 and n_estimated <= 1:
         confidence = "HIGH"
     elif abs_score >= n_signals // 2:
-        confidence = "MEDIUM"
+        confidence = "MEDIUM" if n_estimated <= 2 else "LOW"
     else:
         confidence = "LOW"
 

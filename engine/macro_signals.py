@@ -67,7 +67,7 @@ def build_engine_inputs(
     usdtry = _find_item(macro_items, "USDTRY")
     if usdtry and usdtry.get("w1_pct") is not None:
         inputs["usdtry_5d_pct"] = usdtry["w1_pct"]
-        inputs["usdtry_5d_pct_source"] = "canlı"
+        inputs["usdtry_5d_pct_source"] = "günlük"
         inputs["usdtry_5d_pct_fetched_at"] = macro_timestamp
     elif usdtry:
         # fallback to daily change * 5 estimate
@@ -78,7 +78,7 @@ def build_engine_inputs(
     vix = _find_item(macro_items, "VIX")
     if vix:
         inputs["vix"] = vix["price"]
-        inputs["vix_source"] = "canlı"
+        inputs["vix_source"] = "günlük"
         inputs["vix_fetched_at"] = macro_timestamp
 
     # --- DXY 20-day trend (approximate with m1_pct or w1_pct) ---
@@ -101,17 +101,11 @@ def build_engine_inputs(
         if age > 14:
             inputs["yield_spread_source"] = "eski"
 
-    # --- Foreign flow (not available from yfinance — use placeholder) ---
-    # In production, this would come from MKK/TCMB weekly data
-    inputs["foreign_flow"] = 0
-    inputs["foreign_flow_source"] = "yok"
-    inputs["foreign_flow_note"] = "Veri kaynağı henüz entegre değil"
-
     # --- S&P 500 5-day ---
     sp500 = _find_item(macro_items, "SP500")
     if sp500 and sp500.get("w1_pct") is not None:
         inputs["global_idx_5d_pct"] = sp500["w1_pct"]
-        inputs["global_idx_5d_pct_source"] = "canlı"
+        inputs["global_idx_5d_pct_source"] = "günlük"
         inputs["global_idx_5d_pct_fetched_at"] = macro_timestamp
 
     # --- BIST 100 5-day (for contradiction detection) ---
