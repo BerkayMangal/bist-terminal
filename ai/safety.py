@@ -38,10 +38,10 @@ FILLER_PATTERNS = [
 
 # Max lengths per role
 MAX_LENGTHS = {
-    "interpreter": 4,
-    "risk_controller": 3,
-    "action_coach": 4,
-    "reality_checker": 3,
+    "interpreter": 6,
+    "risk_controller": 5,
+    "action_coach": 6,
+    "reality_checker": 5,
 }
 
 # Minimum trusted data points for AI to generate

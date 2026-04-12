@@ -838,9 +838,10 @@ function renderSosyalPage(){const pg=$('pg-sosyal');if(!S.social){pg.innerHTML='
 async function loadSocial(){try{S.social=await api('/api/social');renderSosyalPage();}catch(e){S.social={trending:[],summary:'Hata: '+e.message};renderSosyalPage();}}
 
 // ===== SCAN + BRIEFING =====
-async function startScan(){const btn=$('scanBtn');if(btn){btn.disabled=true;btn.textContent='⏳ Tarama başlatılıyor...';}try{const st=await api('/api/scan-status').catch(()=>({running:false}));if(st.running){if(btn)btn.textContent='⏳ Tarama devam ediyor...';await pollScanProgress(btn);return;}S.scan=await api('/api/scan');S.dash=await api('/api/dashboard');try{S.hero=await api('/api/hero-summary');}catch(e){}updCnt(S.dash);renderHome();}catch(e){const t=$('scanBtn');if(t){t.textContent='HATA';}}if(btn){btn.disabled=false;btn.textContent='🔄 YENİLE';}}
-async function pollScanProgress(btn){for(let i=0;i<60;i++){await new Promise(r=>setTimeout(r,3000));try{const st=await api('/api/scan-status');if(btn){const pct=st.total>0?Math.round(st.progress/st.total*100):0;btn.textContent=`⏳ ${st.phase==='raw_fetch'?'Veri çekiliyor':'Analiz ediliyor'} ${pct}%`;}if(!st.running&&st.has_data){S.scan=await api('/api/top10');S.dash=await api('/api/dashboard').catch(()=>null);try{S.hero=await api('/api/hero-summary');}catch(e){}if(S.dash)updCnt(S.dash);renderHome();break;}}catch(e){}}if(btn){btn.disabled=false;btn.textContent='🔄 YENİLE';}}
+async function startScan(){const btn=$('scanBtn');if(btn){btn.disabled=true;btn.textContent='⏳ Tarama başlatılıyor...';}try{const st=await api('/api/scan-status').catch(()=>({running:false}));if(st.running){if(btn)btn.textContent='⏳ Tarama devam ediyor...';await pollScanProgress(btn);return;}S.scan=await api('/api/scan');S.dash=await api('/api/dashboard');try{S.hero=await api('/api/hero-summary');}catch(e){}updCnt(S.dash);_reRender();}catch(e){const t=$('scanBtn');if(t){t.textContent='HATA';}}if(btn){btn.disabled=false;btn.textContent='🔄 YENİLE';}}
+async function pollScanProgress(btn){for(let i=0;i<60;i++){await new Promise(r=>setTimeout(r,3000));try{const st=await api('/api/scan-status');if(btn){const pct=st.total>0?Math.round(st.progress/st.total*100):0;btn.textContent=`⏳ ${st.phase==='raw_fetch'?'Veri çekiliyor':'Analiz ediliyor'} ${pct}%`;}if(!st.running&&st.has_data){S.scan=await api('/api/top10');S.dash=await api('/api/dashboard').catch(()=>null);try{S.hero=await api('/api/hero-summary');}catch(e){}if(S.dash)updCnt(S.dash);_reRender();break;}}catch(e){}}if(btn){btn.disabled=false;btn.textContent='🔄 YENİLE';}}
 function updCnt(d){if(!d)return;const c=d.counters||{};const _s=(id,v)=>{const e=$(id);if(e)e.textContent=v;};_s('cnt-a',c.total_analyzed||0);_s('cnt-s',c.cross_signals||0);_s('cnt-c',c.cache_raw||0);if(d.asof)_s('cnt-u',new Date(d.asof).toLocaleTimeString('tr-TR',{hour:'2-digit',minute:'2-digit'}));}
+function _reRender(){renderHome();if(S.page==='radar')renderRadarPage();if(S.page==='cross')renderCrossPage();if(S.page==='makro')renderMakroPage();}
 async function loadBriefing(){const box=$('hSt');if(!box)return;box.innerHTML='<div class="hero-strat" style="border-color:var(--prp);background:var(--prpd);color:var(--prp)">🤖 AI brifing yükleniyor...</div>';try{const d=await api('/api/briefing');box.innerHTML=d.briefing?`<div class="hero-strat">${esc(d.briefing).replace(/\n/g,'<br>')}</div>`:`<div class="hero-strat" style="border-color:var(--ylw);background:var(--ylwd);color:var(--ylw)">${esc(d.error||'AI key ekleyin')}</div>`;}catch(e){box.innerHTML='';}}
 
 // ===== TICKER DETAIL =====
@@ -1678,9 +1679,9 @@ api('/api/health').catch(()=>null);
   async function loadScanData(){
     const d=await api('/api/top10');
     if(d.items&&d.items.length>0){
-      S.scan=d;renderAlphaQuadrant();renderHome();
+      S.scan=d;renderAlphaQuadrant();_reRender();
       Promise.all([api('/api/dashboard').catch(()=>null),api('/api/hero-summary').catch(()=>null)]).then(([dashR,heroR])=>{
-        if(dashR)S.dash=dashR;if(heroR)S.hero=heroR;updCnt(S.dash);renderHome();
+        if(dashR)S.dash=dashR;if(heroR)S.hero=heroR;updCnt(S.dash);_reRender();
       });
       return true;
     }
