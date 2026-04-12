@@ -329,7 +329,15 @@ async def api_rates(): return success({"rates": STATIC_RATES})
 async def api_macro_decision():
     macro_data = macro_cache.get("macro_all")
     if not macro_data or not macro_data.get("items"):
-        return error("Makro veri henüz yüklenmedi.", status_code=503)
+        try:
+            results = await asyncio.to_thread(fetch_all_macro)
+            macro_data = {"timestamp": now_iso(), "items": clean_for_json(results), "rates": clean_for_json(STATIC_RATES)}
+            if macro_data.get("items"):
+                macro_cache.set("macro_all", macro_data)
+        except Exception:
+            pass
+        if not macro_data or not macro_data.get("items"):
+            return error("Makro veri henüz yüklenmedi.", status_code=503)
     try:
         inputs = build_engine_inputs(macro_data.get("items",[]), macro_data.get("rates",STATIC_RATES), macro_data.get("timestamp"))
         result = compute_regime(inputs)
