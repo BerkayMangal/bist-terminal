@@ -22,8 +22,8 @@ log = logging.getLogger("bistbull.ai.safety")
 FORBIDDEN_WORDS = [
     "kesinlikle", "garanti", "garantili", "kaçırma", "kaçırmayın",
     "çok büyük fırsat", "şimdi alınmalı", "hemen al", "hemen sat",
-    "patlayacak", "patlama", "uçacak", "uçuş", "roket",
-    "trend başlıyor", "büyük kırılım", "tarihsel fırsat",
+    "patlayacak", "uçacak", "roket",
+    "büyük kırılım", "tarihsel fırsat",
     "acil", "son şans", "mutlaka",
 ]
 
@@ -38,10 +38,10 @@ FILLER_PATTERNS = [
 
 # Max lengths per role
 MAX_LENGTHS = {
-    "interpreter": 6,
-    "risk_controller": 5,
-    "action_coach": 6,
-    "reality_checker": 5,
+    "interpreter": 10,
+    "risk_controller": 8,
+    "action_coach": 10,
+    "reality_checker": 8,
 }
 
 # Minimum trusted data points for AI to generate
@@ -226,7 +226,7 @@ def safe_ai_generate(
     action_summary: Optional[str] = None,
     ai_call_fn=None,
     max_tokens: int = 300,
-    max_retries: int = 2,
+    max_retries: int = 3,
     confidence: Optional[str] = None,
 ) -> str:
     """
