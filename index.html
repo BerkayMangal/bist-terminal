@@ -732,7 +732,7 @@ async function loadHomeAction(){const el=$('homeActionText');if(!el)return;try{c
 async function loadMacroDecision(){
 const box=$('macroDecisionBlock');if(!box)return;
 try{
-const d=await api('/api/macro/decision');
+let d;for(let _r=0;_r<3;_r++){try{d=await api('/api/macro/decision');break;}catch(e){if(_r<2){await new Promise(r=>setTimeout(r,3000));box.innerHTML='<div class="ld" style="padding:14px"><div class="sp"></div><div class="ld-t">Makro veri bekleniyor...</div></div>';}else throw e;}}
 const rc=d.regime==='RISK_ON'?'var(--grn)':d.regime==='RISK_OFF'?'var(--red)':'var(--ylw)';
 const rl=d.regime==='RISK_ON'?'RİSK ON':d.regime==='RISK_OFF'?'RİSK OFF':'NÖTR';
 const cc=d.confidence==='HIGH'?'Yüksek':d.confidence==='MEDIUM'?'Orta':'Düşük';
@@ -1757,7 +1757,7 @@ const ONB_STEPS = [
   },
   {
     title: 'Adım 2 / 3 · Sosyal Nabız',
-    text: 'Bu bölüm X/Twitter\'da bu hisse hakkında atılan tweet sayısını gösteriyor. Ani artış = piyasa bu hisseyi konuşuyor demek.',
+    text: 'Bu bölüm X/Twitter platformunda bu hisse hakkında atılan tweet sayısını gösteriyor. Ani artış = piyasa bu hisseyi konuşuyor demek.',
     targetId: null,
     targetBox: {top:64,left:20,width:200,height:80},
     cardPos: 'bottom',
