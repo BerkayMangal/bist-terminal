@@ -1162,7 +1162,6 @@ if(c.analyst_commentary){h+='<div style="margin-top:14px;padding:10px;background
 if(d.ai_commentary&&!d.ai_commentary.includes('yeterli veri yok')){h+='<div style="margin-top:8px;padding:10px;background:linear-gradient(135deg,#140e30,var(--bg2));border:1px solid var(--prp);border-radius:var(--rad)"><div style="display:flex;align-items:center;gap:6px;margin-bottom:6px"><span style="font-family:\'JetBrains Mono\',monospace;font-size:9px;color:var(--prp);text-transform:uppercase">🤖 AI Karşılaştırma</span><span style="font-size:7px;color:var(--t4);padding:1px 4px;border:1px solid var(--bdr);border-radius:2px">AI Yorum</span></div><div style="font-size:var(--fs-sm);color:var(--t1);line-height:1.6">'+esc(d.ai_commentary)+'</div></div>';}
 // Conclusion
 h+='<div style="margin-top:10px;padding:10px;background:var(--bg3);border-radius:var(--rad);font-size:var(--fs-sm);color:var(--t2);line-height:1.6;font-style:italic">'+esc(c.conclusion||'')+'</div>';
-if(d.ai_commentary){h+='<div style="margin-top:12px;padding:12px;background:linear-gradient(135deg,#140e30,var(--bg2));border:1px solid var(--prp);border-radius:var(--rad)"><div style="display:flex;align-items:center;gap:6px;margin-bottom:8px"><span style="font-family:\'JetBrains Mono\',monospace;font-size:10px;color:var(--prp);text-transform:uppercase">🤖 AI Karşılaştırma</span><span style="font-family:\'JetBrains Mono\',monospace;font-size:7px;color:var(--t4);padding:1px 4px;border:1px solid var(--bdr);border-radius:2px">AI Yorum</span></div><div style="font-size:var(--fs-sm);color:var(--t1);line-height:1.7">'+esc(d.ai_commentary).replace(/\n/g,'<br>')+'</div></div>';}
 if(d.pplx_news){h+='<div style="margin-top:10px;padding:10px;background:var(--bg3);border:1px solid var(--bdr);border-radius:var(--rad)"><div style="display:flex;align-items:center;gap:6px;margin-bottom:6px"><span style="font-family:\'JetBrains Mono\',monospace;font-size:9px;color:var(--cyn);text-transform:uppercase">🌍 Son Gelişmeler</span><span style="font-family:\'JetBrains Mono\',monospace;font-size:7px;color:var(--ylw);padding:1px 4px;border:1px solid var(--ylw);border-radius:2px">Karar motoruna girmez</span></div><div style="font-size:var(--fs-xs);color:var(--t2);line-height:1.6">'+esc(d.pplx_news).replace(/\n/g,'<br>')+'</div></div>';}
 h+='<div style="margin-top:10px;font-size:9px;color:var(--t4);text-align:center">Bu bir karşılaştırma çerçevesidir, yatırım tavsiyesi değildir.</div>';
 h+='</div>';ov.innerHTML=h;document.body.appendChild(ov);};
@@ -1403,6 +1402,7 @@ async function loadHeatmap(){
     h2+=`</div></div>`;
     S.heatmapHtml=h2;
   }catch(e){S.heatmapHtml='<p style="color:var(--red);font-size:11px">Heatmap yüklenemedi</p>';}
+  if(S.page==='home')renderHome();
 }
 // Glassmorphism tooltip builder — scan data enriched
 function _heatTip(e,idx){
@@ -1664,7 +1664,7 @@ renderHome(); // skeleton anında göster
 try{var _up=new URLSearchParams(window.location.search);var _ut=_up.get('t');if(_ut&&_ut.length>=2){setTimeout(function(){api('/api/resolve-ticker?q='+encodeURIComponent(_ut.trim())).then(function(d){if(d&&d.tickers&&d.tickers.length){loadTicker(d.tickers[0]);}else{loadTicker(_ut.trim().toUpperCase());}}).catch(function(){loadTicker(_ut.trim().toUpperCase());});},1500);}}catch(e){}
 
 let _renderTimer=null;
-function scheduleRender(){if(_renderTimer)return;_renderTimer=setTimeout(()=>{_renderTimer=null;renderHome();},150);}
+function scheduleRender(){if(_renderTimer)return;_renderTimer=setTimeout(()=>{_renderTimer=null;_reRender();},150);}
 
 // Phase 1: Tümü paralel — biten render eder
 loadQuote().then(scheduleRender);
@@ -1757,7 +1757,7 @@ const ONB_STEPS = [
   },
   {
     title: 'Adım 2 / 3 · Sosyal Nabız',
-    text: 'Bu bölüm X/Twitter'da bu hisse hakkında atılan tweet sayısını gösteriyor. Ani artış = piyasa bu hisseyi konuşuyor demek.',
+    text: 'Bu bölüm X/Twitter\'da bu hisse hakkında atılan tweet sayısını gösteriyor. Ani artış = piyasa bu hisseyi konuşuyor demek.',
     targetId: null,
     targetBox: {top:64,left:20,width:200,height:80},
     cardPos: 'bottom',
