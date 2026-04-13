@@ -1,8 +1,8 @@
 # ================================================================
-# BISTBULL TERMINAL V10.0 — ANALYSIS ENGINE
+# BISTBULL TERMINAL V10.1 — ANALYSIS ENGINE (EODHD)
 # compute_metrics, Piotroski, Altman, Beneish, analyze_symbol
-# yfinance + borsapy unified data path.
-# V9.1 birebir korunmuş + V10 applicability flags eklendi.
+# EODHD tek kaynak — yfinance/borsapy kaldırıldı.
+# analyze_symbol() ve sonrası V10.0'dan AYNEN korunmuştur.
 # ================================================================
 
 from __future__ import annotations
@@ -23,72 +23,37 @@ from engine.explainability import build_explanation
 log = logging.getLogger("bistbull.analysis")
 
 # ================================================================
-# OPTIONAL IMPORTS
+# EODHD IMPORT — tek veri kaynağı
 # ================================================================
 try:
-    import yfinance as yf
-    os.makedirs("/tmp/yf-cache", exist_ok=True)
-    yf.set_tz_cache_location("/tmp/yf-cache")
-    YF_AVAILABLE = True
+    from data.providers import fetch_raw_v9, compute_metrics_v9, EODHD_AVAILABLE
+    BORSAPY_AVAILABLE = EODHD_AVAILABLE  # backward compat alias
 except ImportError:
-    yf = None  # type: ignore
-    YF_AVAILABLE = False
-
-try:
-    from data.providers import fetch_raw_v9, compute_metrics_v9, BORSAPY_AVAILABLE
-except ImportError:
+    EODHD_AVAILABLE = False
     BORSAPY_AVAILABLE = False
     fetch_raw_v9 = None  # type: ignore
     compute_metrics_v9 = None  # type: ignore
 
 
 # ================================================================
-# RAW FETCH
+# RAW FETCH — EODHD tek kaynak
 # ================================================================
 def fetch_raw(symbol: str) -> dict:
-    """V9: borsapy → gerçek KAP verisi. yfinance fallback."""
+    """EODHD üzerinden ham veri çek. Tek kaynak, fallback yok."""
     cached = raw_cache.get(symbol)
     if cached is not None:
         return cached
 
-    if BORSAPY_AVAILABLE and fetch_raw_v9 is not None:
+    if EODHD_AVAILABLE and fetch_raw_v9 is not None:
         try:
             raw = fetch_raw_v9(symbol)
-            log.debug(f"fetch_raw V9 OK: {symbol} (source: borsapy)")
+            log.debug(f"fetch_raw OK: {symbol} (source: eodhd)")
             return raw
         except Exception as e:
-            log.warning(f"fetch_raw V9 failed for {symbol}: {e}, trying yfinance...")
+            log.warning(f"fetch_raw failed for {symbol}: {e}")
+            raise
 
-    if not YF_AVAILABLE:
-        raise RuntimeError(f"Ne borsapy ne yfinance çalışıyor — {symbol} verisi alınamadı")
-
-    tk = yf.Ticker(symbol)
-    info = tk.get_info() or {}
-    try:
-        fast = getattr(tk, "fast_info", {}) or {}
-    except Exception:
-        fast = {}
-    try:
-        financials = tk.financials
-    except Exception:
-        financials = None
-    try:
-        balance = tk.balance_sheet
-    except Exception:
-        balance = None
-    try:
-        cashflow = tk.cashflow
-    except Exception:
-        cashflow = None
-
-    raw = {
-        "info": info, "fast": fast,
-        "financials": financials, "balance": balance, "cashflow": cashflow,
-        "source": "yfinance",
-        "_fetched_at": dt.datetime.now(dt.timezone.utc).isoformat(),
-    }
-    raw_cache.set(symbol, raw)
-    return raw
+    raise RuntimeError(f"EODHD veri sağlayıcı kullanılamıyor — {symbol} verisi alınamadı")
 
 
 # ================================================================
@@ -175,158 +140,20 @@ def compute_beneish(m: dict) -> Optional[float]:
 
 
 # ================================================================
-# COMPUTE METRICS — yfinance fallback path
+# COMPUTE METRICS — EODHD tek kaynak
 # ================================================================
 def compute_metrics(symbol: str) -> dict:
-    """V9: borsapy primary → yfinance fallback → metric dict."""
+    """EODHD provider → metric dict + Piotroski/Altman/Beneish."""
     raw = fetch_raw(symbol)
 
-    # borsapy path
-    if raw.get("source") == "borsapy" and BORSAPY_AVAILABLE and compute_metrics_v9 is not None:
+    if EODHD_AVAILABLE and compute_metrics_v9 is not None:
         m = compute_metrics_v9(symbol)
         m["piotroski_f"] = compute_piotroski(m)
         m["altman_z"] = compute_altman(m)
         m["beneish_m"] = compute_beneish(m)
         return m
 
-    # yfinance fallback
-    info = raw["info"]
-    fast = raw["fast"]
-    fin = raw["financials"]
-    bal = raw["balance"]
-    cf = raw["cashflow"]
-
-    revenue, revenue_prev = pick_row_pair(fin, ["Total Revenue", "Operating Revenue"])
-    gross_profit, gross_profit_prev = pick_row_pair(fin, ["Gross Profit"])
-    operating_income, _ = pick_row_pair(fin, ["Operating Income", "EBIT"])
-    ebit, _ = pick_row_pair(fin, ["EBIT", "Operating Income"])
-    ebitda, ebitda_prev = pick_row_pair(fin, ["EBITDA"])
-    net_income, net_income_prev = pick_row_pair(fin, ["Net Income", "Net Income Common Stockholders"])
-    interest_exp, _ = pick_row_pair(fin, ["Interest Expense", "Interest Expense Non Operating"])
-    dil_shares, dil_shares_prev = pick_row_pair(fin, ["Diluted Average Shares", "Basic Average Shares"])
-    eps_row, eps_row_prev = pick_row_pair(fin, ["Diluted EPS", "Basic EPS"])
-    sga, sga_prev = pick_row_pair(fin, ["Selling General And Administration"])
-
-    op_cf, _ = pick_row_pair(cf, ["Operating Cash Flow", "Cash Flow From Continuing Operating Activities"])
-    capex, _ = pick_row_pair(cf, ["Capital Expenditure"])
-    dep, dep_prev = pick_row_pair(cf, ["Depreciation", "Depreciation And Amortization"])
-
-    total_assets, total_assets_prev = pick_row_pair(bal, ["Total Assets"])
-    total_liab, _ = pick_row_pair(bal, ["Total Liabilities Net Minority Interest", "Total Liabilities"])
-    total_debt, total_debt_prev = pick_row_pair(bal, ["Total Debt"])
-    cash, _ = pick_row_pair(bal, ["Cash Cash Equivalents And Short Term Investments", "Cash And Cash Equivalents"])
-    cur_assets, cur_assets_prev = pick_row_pair(bal, ["Current Assets", "Total Current Assets"])
-    cur_liab, cur_liab_prev = pick_row_pair(bal, ["Current Liabilities", "Total Current Liabilities"])
-    ret_earn, _ = pick_row_pair(bal, ["Retained Earnings"])
-    equity, _ = pick_row_pair(bal, ["Stockholders Equity", "Total Stockholder Equity"])
-    receivables, rec_prev = pick_row_pair(bal, ["Accounts Receivable", "Receivables"])
-    ppe, ppe_prev = pick_row_pair(bal, ["Net PPE", "Property Plant Equipment Net"])
-
-    price = first_valid(safe_num(fast.get("last_price")), safe_num(info.get("currentPrice")))
-    market_cap = first_valid(safe_num(fast.get("market_cap")), safe_num(info.get("marketCap")))
-    pe = safe_num(info.get("trailingPE"))
-    pb = safe_num(info.get("priceToBook"))
-    ev_ebitda = safe_num(info.get("enterpriseToEbitda"))
-    div_yield = safe_num(info.get("dividendYield"))
-    beta = safe_num(info.get("beta"))
-    trailing_eps = first_valid(safe_num(info.get("trailingEps")), safe_num(eps_row))
-    book_val_ps = first_valid(safe_num(info.get("bookValue")), (equity / dil_shares) if equity and dil_shares else None)
-
-    roe = first_valid(safe_num(info.get("returnOnEquity")), (net_income / equity) if net_income is not None and equity not in (None, 0) else None)
-    roa = first_valid(safe_num(info.get("returnOnAssets")), (net_income / total_assets) if net_income is not None and total_assets not in (None, 0) else None)
-    roa_prev = (net_income_prev / total_assets_prev) if net_income_prev is not None and total_assets_prev not in (None, 0) else None
-    gross_margin = (gross_profit / revenue) if gross_profit is not None and revenue not in (None, 0) and revenue > 0 else None
-    gross_margin_prev = (gross_profit_prev / revenue_prev) if gross_profit_prev is not None and revenue_prev not in (None, 0) and revenue_prev > 0 else None
-    op_margin = first_valid(safe_num(info.get("operatingMargins")), (operating_income / revenue) if operating_income is not None and revenue not in (None, 0) and revenue > 0 else None)
-    net_margin = first_valid(safe_num(info.get("profitMargins")), (net_income / revenue) if net_income is not None and revenue not in (None, 0) and revenue > 0 else None)
-    cur_ratio = first_valid(safe_num(info.get("currentRatio")), (cur_assets / cur_liab) if cur_assets is not None and cur_liab not in (None, 0) and cur_liab > 0 else None)
-    cur_ratio_prev = (cur_assets_prev / cur_liab_prev) if cur_assets_prev is not None and cur_liab_prev not in (None, 0) and cur_liab_prev > 0 else None
-    debt_eq = first_valid(safe_num(info.get("debtToEquity")), (total_debt / equity * 100) if total_debt is not None and equity not in (None, 0) and abs(equity) > 1e4 else None)
-
-    net_debt = (total_debt - cash) if total_debt is not None and cash is not None else None
-    net_debt_ebit = (net_debt / ebitda) if net_debt is not None and ebitda not in (None, 0) else None
-    _ebit_val = ebit if ebit is not None else operating_income
-    int_cov = (_ebit_val / abs(interest_exp)) if _ebit_val is not None and interest_exp not in (None, 0) else None
-
-    free_cf = first_valid((op_cf + capex) if op_cf is not None and capex is not None else None, safe_num(info.get("freeCashflow")))
-    fcf_yield = (free_cf / market_cap) if free_cf is not None and market_cap not in (None, 0) else None
-    fcf_margin = (free_cf / revenue) if free_cf is not None and revenue not in (None, 0) else None
-    cfo_to_ni = (op_cf / net_income) if op_cf is not None and net_income not in (None, 0) else None
-
-    rev_growth = first_valid(safe_num(info.get("revenueGrowth")), growth(revenue, revenue_prev))
-    eps_growth = first_valid(safe_num(info.get("earningsGrowth")), growth(eps_row, eps_row_prev), growth(net_income, net_income_prev))
-    ebit_growth = growth(ebitda, ebitda_prev)
-
-    wc = (cur_assets - cur_liab) if cur_assets is not None and cur_liab is not None else None
-    _tax_raw = safe_num(info.get("effectiveTaxRate"))
-    tax_rate = _tax_raw if _tax_raw is not None else 0.20
-    inv_cap = (total_debt + equity - cash) if total_debt is not None and equity is not None and cash is not None else None
-    _ebit_nopat = ebit if ebit is not None else operating_income
-    nopat = (_ebit_nopat * (1 - min(max(tax_rate, 0), 0.35))) if _ebit_nopat is not None else None
-    roic = (nopat / inv_cap) if nopat is not None and inv_cap not in (None, 0) else None
-
-    peg = (pe / (eps_growth * 100)) if pe not in (None, 0) and eps_growth is not None and eps_growth > 0.01 else None
-    graham_fv = ((22.5 * trailing_eps * book_val_ps) ** 0.5) if trailing_eps is not None and book_val_ps is not None and trailing_eps > 0.5 and book_val_ps > 0.5 else None
-    mos = ((graham_fv - price) / graham_fv) if graham_fv not in (None, 0) and price is not None else None
-    share_ch = growth(dil_shares, dil_shares_prev)
-    asset_to = (revenue / total_assets) if revenue is not None and total_assets not in (None, 0) else None
-    asset_to_p = (revenue_prev / total_assets_prev) if revenue_prev is not None and total_assets_prev not in (None, 0) else None
-    inst_holders_pct = safe_num(info.get("heldPercentInstitutions"))
-
-    # Data quality diagnostics
-    has_fin = fin is not None and hasattr(fin, 'empty') and not fin.empty
-    has_bal = bal is not None and hasattr(bal, 'empty') and not bal.empty
-    has_cf = cf is not None and hasattr(cf, 'empty') and not cf.empty
-    stmt_count = sum([has_fin, has_bal, has_cf])
-    if stmt_count == 0:
-        log.warning(f"DATA QUALITY [{base_ticker(symbol)}]: No financial statements via yfinance — using info-dict only")
-    elif stmt_count < 3:
-        missing = [s for s, ok in [("income", has_fin), ("balance", has_bal), ("cashflow", has_cf)] if not ok]
-        log.info(f"DATA QUALITY [{base_ticker(symbol)}]: yfinance missing {', '.join(missing)}")
-
-    m = {
-        "symbol": symbol, "ticker": base_ticker(symbol),
-        "name": str(info.get("shortName") or info.get("longName") or symbol),
-        "currency": str(info.get("currency") or ""),
-        "sector": str(info.get("sector") or ""),
-        "industry": str(info.get("industry") or ""),
-        "price": price, "market_cap": market_cap,
-        "pe": pe, "pb": pb, "ev_ebitda": ev_ebitda, "dividend_yield": div_yield, "beta": beta,
-        "revenue": revenue, "revenue_prev": revenue_prev,
-        "gross_profit": gross_profit, "gross_profit_prev": gross_profit_prev,
-        "operating_income": operating_income, "ebit": ebit or operating_income,
-        "ebitda": ebitda, "ebitda_prev": ebitda_prev,
-        "net_income": net_income, "net_income_prev": net_income_prev,
-        "operating_cf": op_cf, "free_cf": free_cf,
-        "total_assets": total_assets, "total_assets_prev": total_assets_prev,
-        "total_liabilities": total_liab, "total_debt": total_debt, "total_debt_prev": total_debt_prev,
-        "cash": cash, "current_assets": cur_assets, "current_assets_prev": cur_assets_prev,
-        "current_liabilities": cur_liab, "current_liabilities_prev": cur_liab_prev,
-        "working_capital": wc, "retained_earnings": ret_earn, "equity": equity,
-        "receivables": receivables, "receivables_prev": rec_prev,
-        "ppe": ppe, "ppe_prev": ppe_prev,
-        "depreciation": dep, "depreciation_prev": dep_prev,
-        "sga": sga, "sga_prev": sga_prev,
-        "trailing_eps": trailing_eps, "book_value_ps": book_val_ps,
-        "roe": roe, "roa": roa, "roa_prev": roa_prev, "roic": roic,
-        "gross_margin": gross_margin, "gross_margin_prev": gross_margin_prev,
-        "operating_margin": op_margin, "net_margin": net_margin,
-        "current_ratio": cur_ratio, "current_ratio_prev": cur_ratio_prev,
-        "debt_equity": debt_eq, "net_debt_ebitda": net_debt_ebit,
-        "interest_coverage": int_cov,
-        "fcf_yield": fcf_yield, "fcf_margin": fcf_margin, "cfo_to_ni": cfo_to_ni,
-        "revenue_growth": rev_growth, "eps_growth": eps_growth, "ebitda_growth": ebit_growth,
-        "peg": peg, "graham_fv": graham_fv, "margin_safety": mos,
-        "share_change": share_ch, "asset_turnover": asset_to, "asset_turnover_prev": asset_to_p,
-        "inst_holders_pct": inst_holders_pct,
-        "ciro_pd": (revenue / market_cap) if revenue is not None and market_cap not in (None, 0) else None,
-        "data_source": "yfinance",
-        "data_quality": {"income_stmt": has_fin, "balance_sheet": has_bal, "cashflow": has_cf, "fast_info": bool(price)},
-    }
-    m["piotroski_f"] = compute_piotroski(m)
-    m["altman_z"] = compute_altman(m)
-    m["beneish_m"] = compute_beneish(m)
-    return m
+    raise RuntimeError(f"EODHD provider kullanılamıyor — {symbol} metrikleri hesaplanamadı")
 
 
 # ================================================================
@@ -535,61 +362,6 @@ def analyze_symbol(symbol: str) -> dict:
         r["v11_labels"] = compute_all_labels(r, tech)
     except Exception as e:
         log.debug(f"V11 enrichment skipped for {symbol}: {e}")
-
-    # V12: Turkey Realities — 4 makro filtre (never blocks)
-    try:
-        from engine.turkey_realities import compute_turkey_realities
-        from config import STATIC_RATES
-        _tcmb = next((s for s in STATIC_RATES if s["key"] == "TCMB"), None)
-        _policy_rate = _tcmb["rate"] if _tcmb else 37.0
-
-        tr_result = compute_turkey_realities(
-            m=m, sector_group=sector_group,
-            fa_pure=fa_pure, deger_score=deger_score,
-            policy_rate=_policy_rate,
-        )
-        r["turkey_realities"] = tr_result
-
-        if tr_result.get("adjusted_fa") is not None:
-            r["tr_adjusted_fa"] = tr_result["adjusted_fa"]
-        if tr_result.get("adjusted_deger") is not None:
-            r["tr_adjusted_deger"] = tr_result["adjusted_deger"]
-
-        for _fval in tr_result.get("filters", {}).values():
-            if isinstance(_fval, dict) and _fval.get("grade") in ("D", "F"):
-                r["risk_reasons"].append(f"\U0001f1f9\U0001f1f7 {_fval['explanation']}")
-                r["negatives"].append(f"\U0001f1f9\U0001f1f7 {_fval['explanation']}")
-    except Exception as e:
-        log.debug(f"Turkey realities skipped for {symbol}: {e}")
-
-    # V13: Academic Layer — Damodaran + Greenwald (never blocks)
-    try:
-        from engine.academic_layer import compute_academic_adjustments
-        from config import STATIC_RATES as _SR2
-        _tcmb2 = next((s for s in _SR2 if s["key"] == "TCMB"), None)
-        _pr2 = _tcmb2["rate"] if _tcmb2 else 37.0
-
-        _ac_fa = r.get("tr_adjusted_fa", fa_pure)
-        _ac_deger = r.get("tr_adjusted_deger", deger_score)
-
-        ac_result = compute_academic_adjustments(
-            m=m, sector_group=sector_group,
-            fa_input=_ac_fa, deger_input=_ac_deger,
-            policy_rate=_pr2, inflation_rate=0.40,
-        )
-        r["academic"] = ac_result
-
-        if ac_result.get("adjusted_fa") is not None:
-            r["ac_adjusted_fa"] = ac_result["adjusted_fa"]
-        if ac_result.get("adjusted_deger") is not None:
-            r["ac_adjusted_deger"] = ac_result["adjusted_deger"]
-
-        for _aval in ac_result.get("filters", {}).values():
-            if isinstance(_aval, dict) and _aval.get("grade") in ("D", "F"):
-                r["risk_reasons"].append(f"\U0001f393 {_aval['explanation']}")
-                r["negatives"].append(f"\U0001f393 {_aval['explanation']}")
-    except Exception as e:
-        log.debug(f"Academic layer skipped for {symbol}: {e}")
 
     analysis_cache.set(symbol, r)
     return r

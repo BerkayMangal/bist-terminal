@@ -27,6 +27,12 @@ PERPLEXITY_KEY: str = os.environ.get("PERPLEXITY_API_KEY", "")
 PERPLEXITY_MODEL: str = os.environ.get("PERPLEXITY_MODEL", "sonar")
 
 # ================================================================
+# EODHD API CONFIG — Tek veri kaynağı
+# ================================================================
+EODHD_API_KEY: str = os.environ.get("EODHD_API_KEY", "")
+EODHD_BASE_URL: str = "https://eodhd.com/api"
+
+# ================================================================
 # REDIS CONFIG — L2 persistent cache
 # Railway sets REDIS_URL automatically when Redis add-on is attached.
 # If empty, system falls back to RAM-only (L1) cache — V9.1 behavior.
@@ -57,6 +63,8 @@ CB_BORSAPY_FAILURE_THRESHOLD: int = 30
 CB_BORSAPY_RECOVERY_TIMEOUT: int = 60
 CB_YFINANCE_FAILURE_THRESHOLD: int = 5
 CB_YFINANCE_RECOVERY_TIMEOUT: int = 90
+CB_EODHD_FAILURE_THRESHOLD: int = 10
+CB_EODHD_RECOVERY_TIMEOUT: int = 60
 CB_AI_FAILURE_THRESHOLD: int = 3
 CB_AI_RECOVERY_TIMEOUT: int = 45
 
@@ -419,31 +427,31 @@ CONFIDENCE_KEYS: list[str] = [
 # MACRO SYMBOLS
 # ================================================================
 MACRO_SYMBOLS: dict[str, dict] = {
-    "XU030": {"symbol": "XU030.IS", "name": "BIST 30", "category": "turkiye", "flag": "🇹🇷"},
-    "XU100": {"symbol": "XU100.IS", "name": "BIST 100", "category": "turkiye", "flag": "🇹🇷"},
-    "USDTRY": {"symbol": "USDTRY=X", "name": "USD/TRY", "category": "turkiye", "flag": "🇹🇷"},
-    "EURTRY": {"symbol": "EURTRY=X", "name": "EUR/TRY", "category": "turkiye", "flag": "🇹🇷"},
-    "EEM": {"symbol": "EEM", "name": "iShares EM ETF", "category": "em", "flag": "🌍"},
-    "IBOV": {"symbol": "^BVSP", "name": "Bovespa (Brezilya)", "category": "em", "flag": "🇧🇷"},
-    "SENSEX": {"symbol": "^BSESN", "name": "Sensex (Hindistan)", "category": "em", "flag": "🇮🇳"},
-    "MEXIPC": {"symbol": "^MXX", "name": "IPC (Meksika)", "category": "em", "flag": "🇲🇽"},
-    "JCI": {"symbol": "^JKSE", "name": "JCI (Endonezya)", "category": "em", "flag": "🇮🇩"},
-    "JSE": {"symbol": "^JN0U.JO", "name": "JSE Top40 (G.Afrika)", "category": "em", "flag": "🇿🇦"},
-    "KOSPI": {"symbol": "^KS11", "name": "KOSPI (G.Kore)", "category": "em", "flag": "🇰🇷"},
-    "TWSE": {"symbol": "^TWII", "name": "TAIEX (Tayvan)", "category": "em", "flag": "🇹🇼"},
-    "WIG20": {"symbol": "WIG20.WA", "name": "WIG20 (Polonya)", "category": "em", "flag": "🇵🇱"},
-    "CSI300": {"symbol": "000300.SS", "name": "CSI 300 (Çin)", "category": "em", "flag": "🇨🇳"},
-    "SP500": {"symbol": "^GSPC", "name": "S&P 500", "category": "global", "flag": "🇺🇸"},
-    "NASDAQ": {"symbol": "^IXIC", "name": "Nasdaq", "category": "global", "flag": "🇺🇸"},
-    "DAX": {"symbol": "^GDAXI", "name": "DAX (Almanya)", "category": "global", "flag": "🇩🇪"},
-    "FTSE": {"symbol": "^FTSE", "name": "FTSE 100 (UK)", "category": "global", "flag": "🇬🇧"},
-    "NIKKEI": {"symbol": "^N225", "name": "Nikkei 225 (Japonya)", "category": "global", "flag": "🇯🇵"},
-    "BRENT": {"symbol": "BZ=F", "name": "Brent Petrol", "category": "emtia", "flag": "🛢️"},
-    "GOLD": {"symbol": "GC=F", "name": "Altın (oz)", "category": "emtia", "flag": "🥇"},
-    "SILVER": {"symbol": "SI=F", "name": "Gümüş (oz)", "category": "emtia", "flag": "🥈"},
-    "DXY": {"symbol": "DX-Y.NYB", "name": "Dolar Endeksi", "category": "emtia", "flag": "💵"},
-    "VIX": {"symbol": "^VIX", "name": "VIX (Korku)", "category": "emtia", "flag": "😱"},
-    "US10Y": {"symbol": "^TNX", "name": "ABD 10Y Tahvil", "category": "global", "flag": "🇺🇸"},
+    "XU030": {"symbol": "XU030.IS", "eodhd_symbol": "XU030.INDX", "name": "BIST 30", "category": "turkiye", "flag": "🇹🇷"},
+    "XU100": {"symbol": "XU100.IS", "eodhd_symbol": "XU100.INDX", "name": "BIST 100", "category": "turkiye", "flag": "🇹🇷"},
+    "USDTRY": {"symbol": "USDTRY=X", "eodhd_symbol": "USDTRY.FOREX", "name": "USD/TRY", "category": "turkiye", "flag": "🇹🇷"},
+    "EURTRY": {"symbol": "EURTRY=X", "eodhd_symbol": "EURTRY.FOREX", "name": "EUR/TRY", "category": "turkiye", "flag": "🇹🇷"},
+    "EEM": {"symbol": "EEM", "eodhd_symbol": "EEM.US", "name": "iShares EM ETF", "category": "em", "flag": "🌍"},
+    "IBOV": {"symbol": "^BVSP", "eodhd_symbol": "BVSP.INDX", "name": "Bovespa (Brezilya)", "category": "em", "flag": "🇧🇷"},
+    "SENSEX": {"symbol": "^BSESN", "eodhd_symbol": "BSESN.INDX", "name": "Sensex (Hindistan)", "category": "em", "flag": "🇮🇳"},
+    "MEXIPC": {"symbol": "^MXX", "eodhd_symbol": "MXX.INDX", "name": "IPC (Meksika)", "category": "em", "flag": "🇲🇽"},
+    "JCI": {"symbol": "^JKSE", "eodhd_symbol": "JKSE.INDX", "name": "JCI (Endonezya)", "category": "em", "flag": "🇮🇩"},
+    "JSE": {"symbol": "^JN0U.JO", "eodhd_symbol": "JN0U.JO", "name": "JSE Top40 (G.Afrika)", "category": "em", "flag": "🇿🇦"},
+    "KOSPI": {"symbol": "^KS11", "eodhd_symbol": "KS11.INDX", "name": "KOSPI (G.Kore)", "category": "em", "flag": "🇰🇷"},
+    "TWSE": {"symbol": "^TWII", "eodhd_symbol": "TWII.INDX", "name": "TAIEX (Tayvan)", "category": "em", "flag": "🇹🇼"},
+    "WIG20": {"symbol": "WIG20.WA", "eodhd_symbol": "WIG20.WA", "name": "WIG20 (Polonya)", "category": "em", "flag": "🇵🇱"},
+    "CSI300": {"symbol": "000300.SS", "eodhd_symbol": "000300.SHG", "name": "CSI 300 (Çin)", "category": "em", "flag": "🇨🇳"},
+    "SP500": {"symbol": "^GSPC", "eodhd_symbol": "GSPC.INDX", "name": "S&P 500", "category": "global", "flag": "🇺🇸"},
+    "NASDAQ": {"symbol": "^IXIC", "eodhd_symbol": "IXIC.INDX", "name": "Nasdaq", "category": "global", "flag": "🇺🇸"},
+    "DAX": {"symbol": "^GDAXI", "eodhd_symbol": "GDAXI.INDX", "name": "DAX (Almanya)", "category": "global", "flag": "🇩🇪"},
+    "FTSE": {"symbol": "^FTSE", "eodhd_symbol": "FTSE.INDX", "name": "FTSE 100 (UK)", "category": "global", "flag": "🇬🇧"},
+    "NIKKEI": {"symbol": "^N225", "eodhd_symbol": "N225.INDX", "name": "Nikkei 225 (Japonya)", "category": "global", "flag": "🇯🇵"},
+    "BRENT": {"symbol": "BZ=F", "eodhd_symbol": "BZ.COMM", "name": "Brent Petrol", "category": "emtia", "flag": "🛢️"},
+    "GOLD": {"symbol": "GC=F", "eodhd_symbol": "GC.COMM", "name": "Altın (oz)", "category": "emtia", "flag": "🥇"},
+    "SILVER": {"symbol": "SI=F", "eodhd_symbol": "SI.COMM", "name": "Gümüş (oz)", "category": "emtia", "flag": "🥈"},
+    "DXY": {"symbol": "DX-Y.NYB", "eodhd_symbol": "DX-Y.NYB", "name": "Dolar Endeksi", "category": "emtia", "flag": "💵"},
+    "VIX": {"symbol": "^VIX", "eodhd_symbol": "VIX.INDX", "name": "VIX (Korku)", "category": "emtia", "flag": "😱"},
+    "US10Y": {"symbol": "^TNX", "eodhd_symbol": "US10Y.BOND", "name": "ABD 10Y Tahvil", "category": "global", "flag": "🇺🇸"},
 }
 
 # ================================================================
