@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BistBull Skorlama Mimarisi — V13 Final</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:'Inter',sans-serif; background:#0a0a0f; color:#e2e8f0; line-height:1.7; }
+.container { max-width:960px; margin:0 auto; padding:40px 24px; }
+
+/* Header */
+.hero { text-align:center; padding:80px 0 60px; border-bottom:1px solid #1e293b; margin-bottom:60px; }
+.hero h1 { font-size:2.8rem; font-weight:900; letter-spacing:-1px; background:linear-gradient(135deg,#3b82f6,#8b5cf6,#ec4899); -webkit-background-clip:text; -webkit-text-fill-color:transparent; margin-bottom:12px; }
+.hero .sub { font-size:1.1rem; color:#94a3b8; font-weight:300; }
+.hero .version { display:inline-block; margin-top:16px; padding:6px 16px; border-radius:20px; background:#1e293b; color:#60a5fa; font-size:0.85rem; font-weight:600; }
+
+/* Sections */
+.section { margin-bottom:64px; }
+.section h2 { font-size:1.6rem; font-weight:800; color:#f8fafc; margin-bottom:24px; padding-bottom:12px; border-bottom:2px solid #1e293b; }
+.section h3 { font-size:1.15rem; font-weight:700; color:#cbd5e1; margin:28px 0 12px; }
+
+p { margin-bottom:16px; color:#94a3b8; }
+strong { color:#e2e8f0; }
+
+/* Code */
+code { font-family:'JetBrains Mono',monospace; background:#1e293b; padding:2px 6px; border-radius:4px; font-size:0.85em; color:#7dd3fc; }
+pre { background:#0f172a; border:1px solid #1e293b; border-radius:12px; padding:20px; overflow-x:auto; margin:16px 0 24px; font-family:'JetBrains Mono',monospace; font-size:0.82rem; line-height:1.6; color:#94a3b8; }
+
+/* Flow diagram */
+.flow { background:#0f172a; border:1px solid #1e293b; border-radius:16px; padding:32px; margin:24px 0; }
+.flow-step { display:flex; align-items:flex-start; margin-bottom:20px; }
+.flow-badge { flex-shrink:0; width:48px; height:48px; border-radius:12px; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:0.9rem; margin-right:16px; }
+.flow-badge.blue { background:#1e3a5f; color:#60a5fa; }
+.flow-badge.purple { background:#3b1f5e; color:#a78bfa; }
+.flow-badge.red { background:#5f1e1e; color:#f87171; }
+.flow-badge.green { background:#1e5f3b; color:#4ade80; }
+.flow-badge.orange { background:#5f3b1e; color:#fb923c; }
+.flow-content h4 { font-size:1rem; font-weight:700; color:#e2e8f0; margin-bottom:4px; }
+.flow-content p { margin:0; font-size:0.9rem; color:#64748b; }
+.flow-arrow { text-align:center; color:#334155; font-size:1.5rem; margin:4px 0; padding-left:20px; }
+
+/* Tables */
+table { width:100%; border-collapse:collapse; margin:16px 0 24px; font-size:0.88rem; }
+th { background:#1e293b; color:#94a3b8; font-weight:600; text-align:left; padding:10px 14px; font-size:0.8rem; text-transform:uppercase; letter-spacing:0.5px; }
+td { padding:10px 14px; border-bottom:1px solid #1e293b; color:#cbd5e1; }
+tr:hover td { background:#0f172a; }
+
+/* Grade badges */
+.grade { display:inline-block; padding:2px 10px; border-radius:6px; font-weight:700; font-size:0.8rem; }
+.grade-a { background:#065f46; color:#34d399; }
+.grade-b { background:#1e3a5f; color:#60a5fa; }
+.grade-c { background:#4a3728; color:#fbbf24; }
+.grade-d { background:#5f2e1e; color:#fb923c; }
+.grade-f { background:#5f1e1e; color:#f87171; }
+
+/* Callouts */
+.callout { border-radius:12px; padding:20px 24px; margin:20px 0; }
+.callout-blue { background:#0f172a; border-left:4px solid #3b82f6; }
+.callout-red { background:#1a0f0f; border-left:4px solid #ef4444; }
+.callout-green { background:#0f1a0f; border-left:4px solid #22c55e; }
+.callout-title { font-weight:700; font-size:0.95rem; margin-bottom:6px; }
+.callout-blue .callout-title { color:#60a5fa; }
+.callout-red .callout-title { color:#f87171; }
+.callout-green .callout-title { color:#4ade80; }
+
+/* Example box */
+.example { background:#0f172a; border:1px solid #1e293b; border-radius:16px; padding:24px; margin:24px 0; }
+.example-title { font-size:0.85rem; font-weight:700; color:#94a3b8; text-transform:uppercase; letter-spacing:1px; margin-bottom:12px; }
+.score-chain { display:flex; align-items:center; flex-wrap:wrap; gap:8px; margin:12px 0; }
+.score-box { padding:8px 14px; border-radius:8px; font-weight:700; font-size:0.95rem; }
+.score-box.neutral { background:#1e293b; color:#94a3b8; }
+.score-box.bad { background:#5f1e1e; color:#f87171; }
+.score-box.good { background:#065f46; color:#34d399; }
+.score-arrow { color:#475569; font-weight:700; }
+
+/* Footer */
+.footer { text-align:center; padding:40px 0; border-top:1px solid #1e293b; margin-top:60px; color:#475569; font-size:0.85rem; }
+</style>
+</head>
+<body>
+<div class="container">
+
+<div class="hero">
+  <h1>BistBull Skorlama Mimarisi</h1>
+  <p class="sub">Değer Skoru nasıl hesaplanır? Her katman ne yapar? Son formül ne?</p>
+  <span class="version">V13 — Academic Tier — Final Doküman</span>
+</div>
+
+<!-- ═══════════════════════════════════════ -->
+<div class="section">
+<h2>1. Büyük Resim — Skor Zinciri</h2>
+<p>BistBull'un Değer Skoru tek bir sayı gösterir (ör: 72/100). Ama arka planda bu sayı <strong>5 katmanlı bir zincirden</strong> geçer. Her katman bir öncekinin üzerine biner, hiçbiri diğerini bozmaz.</p>
+
+<div class="flow">
+  <div class="flow-step">
+    <div class="flow-badge blue">K1</div>
+    <div class="flow-content">
+      <h4>7 Boyutlu Temel Analiz (FA Pure)</h4>
+      <p>Kalite, Değerleme, Büyüme, Bilanço, Kâr Kalitesi, Hendek, Sermaye → ağırlıklı ortalama → 0-99 puan</p>
+    </div>
+  </div>
+  <div class="flow-arrow">↓</div>
+  <div class="flow-step">
+    <div class="flow-badge purple">K2</div>
+    <div class="flow-content">
+      <h4>Risk Penaltileri + İvme</h4>
+      <p>Negatif özsermaye, sahte kâr, seyreltme, hype → ceza. Momentum, teknik kırılım, kurumsal akış → İvme skoru.</p>
+    </div>
+  </div>
+  <div class="flow-arrow">↓</div>
+  <div class="flow-step">
+    <div class="flow-badge orange">K3</div>
+    <div class="flow-content">
+      <h4>Türkiye Gerçekleri Filtresi (V12)</h4>
+      <p>4 filtre: Döviz Kalkanı, Faiz Direnci, Fiyat Geçişkenliği, TMS 29. Çarpan: 0.70–1.15</p>
+    </div>
+  </div>
+  <div class="flow-arrow">↓</div>
+  <div class="flow-step">
+    <div class="flow-badge red">K4</div>
+    <div class="flow-content">
+      <h4>Akademik Katman (V13)</h4>
+      <p>3 filtre: Değer Yaratımı (ROE vs Ke), Büyüme Tuzağı (FCF test), Yaşam Döngüsü. Etki: -15 ile +6 puan.</p>
+    </div>
+  </div>
+  <div class="flow-arrow">↓</div>
+  <div class="flow-step">
+    <div class="flow-badge green">SON</div>
+    <div class="flow-content">
+      <h4>Final Değer Skoru</h4>
+      <p>Kullanıcının gördüğü tek sayı. Tüm katmanların birleşik sonucu.</p>
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- ═══════════════════════════════════════ -->
+<div class="section">
+<h2>2. Katman 1 — 7 Boyutlu Temel Analiz</h2>
+<p>Her hisse 7 boyutta 0-100 arası puanlanır. Her boyutun ağırlığı farklıdır. V11'de bilanço ve kâr kalitesi ağırlıkları artırılmıştır.</p>
+
+<table>
+<tr><th>Boyut</th><th>Ağırlık</th><th>Girdiler</th><th>Ne Ölçer?</th></tr>
+<tr><td><strong>Kalite</strong></td><td>%25</td><td>ROE, ROIC, Net Marj</td><td>Şirket kârlı mı, verimli mi?</td></tr>
+<tr><td><strong>Değerleme</strong></td><td>%18</td><td>F/K, PD/DD, FD/FAVÖK, FCF Yield</td><td>Ucuz mu pahalı mı?</td></tr>
+<tr><td><strong>Bilanço</strong></td><td>%15</td><td>NB/FAVÖK, D/E, Cari Oran, Altman Z</td><td>Borç riski var mı?</td></tr>
+<tr><td><strong>Kâr Kalitesi</strong></td><td>%13</td><td>CFO/NI, FCF Marj, Beneish M</td><td>Kâr gerçek mi sahte mi?</td></tr>
+<tr><td><strong>Büyüme</strong></td><td>%12</td><td>Gelir, HBK, FAVÖK büyüme, PEG</td><td>Büyüyor mu?</td></tr>
+<tr><td><strong>Sermaye</strong></td><td>%10</td><td>Temettü, FCF, Seyreltme, ROIC</td><td>Sermayeyi iyi kullanıyor mu?</td></tr>
+<tr><td><strong>Hendek</strong></td><td>%7</td><td>Marj stabilitesi, Fiyatlama gücü</td><td>Rekabet avantajı var mı?</td></tr>
+</table>
+
+<pre>FA Pure = Σ (boyut_skoru × boyut_ağırlığı)
+Örnek: Kalite(82)×0.25 + Değerleme(65)×0.18 + ... = 68.3</pre>
+</div>
+
+<!-- ═══════════════════════════════════════ -->
+<div class="section">
+<h2>3. Katman 2 — Risk ve İvme</h2>
+
+<h3>Risk Penaltileri</h3>
+<table>
+<tr><th>Durum</th><th>Ceza</th></tr>
+<tr><td>Negatif özsermaye</td><td>-15</td></tr>
+<tr><td>Net zarar</td><td>-10</td></tr>
+<tr><td>Sahte kâr (CFO&lt;0, NI&gt;0)</td><td>-12</td></tr>
+<tr><td>NB/FAVÖK > 5x</td><td>-25</td></tr>
+<tr><td>Beneish > -1.5</td><td>-18</td></tr>
+</table>
+
+<h3>İvme Skoru (3 Boyut)</h3>
+<table>
+<tr><th>Boyut</th><th>Ağırlık</th><th>Girdiler</th></tr>
+<tr><td>Momentum</td><td>%40</td><td>RSI, MA50/200, Hacim, 20g değişim</td></tr>
+<tr><td>Teknik Kırılım</td><td>%35</td><td>52W High, Golden Cross, BB, MACD</td></tr>
+<tr><td>Kurumsal Akış</td><td>%25</td><td>Kurumsal sahiplik, Hacim+Fiyat</td></tr>
+</table>
+
+<h3>Overall Formül</h3>
+<pre>Değer Skoru = FA × 0.58
+            + İvme × gate(FA) × 0.28
+            + Valuation Stretch
+            + Risk × 0.38</pre>
+
+<div class="callout callout-blue">
+<div class="callout-title">Non-Linear Momentum Gate (V11)</div>
+<p>FA &lt; 35 olan hisselerde momentum neredeyse sıfırlanır. Hype koruması. FA ≥ 65 olunca tam etki.</p>
+</div>
+</div>
+
+<!-- ═══════════════════════════════════════ -->
+<div class="section">
+<h2>4. Katman 3 — Türkiye Gerçekleri (V12)</h2>
+<p><strong>Felsefe:</strong> İsviçre'de %1 faizle çalışan bir modeli Türkiye'de %50 faizle kullanmak aptallıktır. Bu katman her şirkete bir "Türkiye çarpanı" uygular.</p>
+
+<table>
+<tr><th>Filtre</th><th>Ne Ölçer?</th><th>Çarpan Aralığı</th></tr>
+<tr><td><strong>Döviz Kalkanı</strong></td><td>İhracat oranı, döviz borcu, reel büyüme</td><td>0.75 – 1.15</td></tr>
+<tr><td><strong>Faiz Direnci</strong></td><td>Efektif borç maliyeti = NB/FAVÖK × %58</td><td>0.70 – 1.10</td></tr>
+<tr><td><strong>Fiyat Geçişkenliği</strong></td><td>Marj stabilitesi, operasyonel kaldıraç</td><td>0.80 – 1.10</td></tr>
+<tr><td><strong>TMS 29</strong></td><td>Enflasyon muhasebesi sahte kâr tespiti</td><td>0.75 – 1.05</td></tr>
+</table>
+
+<pre>Birleşik çarpan = ⁴√(fx × faiz × geçişkenlik × tms29)  ← geometrik ortalama
+Turkey-Adjusted FA = FA Pure × birleşik çarpan</pre>
+
+<div class="callout callout-red">
+<div class="callout-title">Efektif Borç Maliyeti — En Kritik Metrik</div>
+<p>NB/FAVÖK = 3 olan şirket: İsviçre'de 3×%2 = %6 (sorun yok). Türkiye'de 3×%58 = %174 (FAVÖK faizi bile ödeyemiyor). Mevcut sistem bunu "orta risk" diyor, V12 "KIRILGAN" diyor.</p>
+</div>
+</div>
+
+<!-- ═══════════════════════════════════════ -->
+<div class="section">
+<h2>5. Katman 4 — Akademik Filtre (V13)</h2>
+<p>Damodaran (NYU Stern) + Greenwald (Columbia) çerçevesi. Türkiye'nin %50 faiz ortamına kalibre edilmiş.</p>
+
+<h3>Filtre 1: Değer Yaratımı (Damodaran)</h3>
+<div class="callout callout-blue">
+<div class="callout-title">"Bir şirketin değeri, sermaye maliyetinin üzerinde kazandığı fazla getiriden gelir."</div>
+<p><code>Excess Return = ROE - Ke</code> &nbsp; Türkiye'de <code>Ke = %50 + β×%8 ≈ %58</code></p>
+</div>
+
+<table>
+<tr><th>Durum</th><th>Puan</th><th>Not</th><th>Etki</th></tr>
+<tr><td>ROE ≤ 0</td><td>5</td><td><span class="grade grade-f">F</span></td><td>-10p</td></tr>
+<tr><td>ROE &lt; %25</td><td>12</td><td><span class="grade grade-f">F</span></td><td>-10p — mevduatın yarısı bile değil</td></tr>
+<tr><td>ROE &lt; %50 (mevduat)</td><td>25</td><td><span class="grade grade-d">D</span></td><td>-7p — değer yıkımı</td></tr>
+<tr><td>ROE &lt; Ke (%58)</td><td>42</td><td><span class="grade grade-c">C</span></td><td>-3p — risk primi yok</td></tr>
+<tr><td>ROE ≈ Ke</td><td>62</td><td><span class="grade grade-b">B</span></td><td>0p</td></tr>
+<tr><td>ROE &gt; Ke + %5</td><td>88</td><td><span class="grade grade-a">A</span></td><td>+3p — elit</td></tr>
+</table>
+
+<h3>Filtre 2: Büyüme Tuzağı (Greenwald)</h3>
+<div class="callout callout-blue">
+<div class="callout-title">"Büyüme sadece nakit yaratıyorsa değerlidir. Nakit yutuyorsa bir sorundur."</div>
+<p>Reel büyüme = nominal - %40 enflasyon. FCF negatifken büyüme = nakit kara deliği.</p>
+</div>
+
+<table>
+<tr><th>Durum</th><th>Not</th><th>Etki</th></tr>
+<tr><td>Reel büyüme + FCF pozitif</td><td><span class="grade grade-a">A</span></td><td>+3p — Greenwald'un ideali</td></tr>
+<tr><td>Dengeli büyüme</td><td><span class="grade grade-b">B</span></td><td>0p</td></tr>
+<tr><td>Reel küçülme</td><td><span class="grade grade-d">D</span></td><td>-3p</td></tr>
+<tr><td>BÜYÜME TUZAĞI (3+ sinyal)</td><td><span class="grade grade-f">F</span></td><td>-5p — büyüyor ama nakit yakıyor</td></tr>
+</table>
+
+<h3>Filtre 3: Yaşam Döngüsü</h3>
+<table>
+<tr><th>Faz</th><th>Doğru Strateji</th><th>Yanlış Yapılırsa</th></tr>
+<tr><td><strong>Genç Büyüme</strong></td><td>Yüksek ROIC'le yatırım, düşük temettü OK</td><td>Düşük ROIC ama ağır CAPEX → D</td></tr>
+<tr><td><strong>Olgun</strong></td><td>Nakdi dağıt (temettü/buyback)</td><td>FCF yüksek ama dağıtmıyor → -5p ceza</td></tr>
+<tr><td><strong>Düşüş</strong></td><td>Nakdi dağıt, yatırımı azalt</td><td>Küçülürken ağır yatırım → D</td></tr>
+</table>
+</div>
+
+<!-- ═══════════════════════════════════════ -->
+<div class="section">
+<h2>6. Gerçek Örnek — Tüm Zincir</h2>
+
+<div class="example">
+<div class="example-title">Senaryo: ROE %15 Borçlu İç Piyasa Sanayi</div>
+<p style="color:#64748b;margin-bottom:16px;">F/K 5, NB/FAVÖK 4.5x, gelir büyüme %25 (nominal), döviz geliri %5</p>
+
+<div class="score-chain">
+  <span class="score-box neutral">Ham FA: 62</span>
+  <span class="score-arrow">→</span>
+  <span class="score-box bad">V12: ×0.75</span>
+  <span class="score-arrow">→</span>
+  <span class="score-box neutral">TR-Adj: ~47</span>
+  <span class="score-arrow">→</span>
+  <span class="score-box bad">V13: -15p</span>
+  <span class="score-arrow">→</span>
+  <span class="score-box bad">Final: 32</span>
+</div>
+
+<p style="color:#94a3b8;font-size:0.9rem;margin-top:12px;"><strong>Neden düştü?</strong></p>
+<p style="color:#64748b;font-size:0.88rem;">V12: Efektif borç maliyeti FAVÖK'ün %261'i. Döviz geliri yok, kur riski yüksek. TMS 29 kârı şişirmiş.</p>
+<p style="color:#64748b;font-size:0.88rem;">V13: ROE %15 &lt; mevduat %50 → değer yıkımı (-10). Reel küçülme %-15 (-3). Düşüş fazı (-2).</p>
+<p style="color:#64748b;font-size:0.88rem;"><strong>AI'ın söyleyeceği:</strong> "F/K 5 ucuz görünüyor ama parasını bankaya koysan 3.3 kat daha çok kazanırsın. Faizini bile ödeyemiyor. Nominal %25 büyüme aslında reel %-15 küçülme."</p>
+</div>
+
+<div class="example">
+<div class="example-title">Senaryo: ROE %70 Net Nakit İhracatçı Savunma</div>
+<p style="color:#64748b;margin-bottom:16px;">F/K 18, NB/FAVÖK -1.5 (net nakit), gelir büyüme %65, döviz %60</p>
+
+<div class="score-chain">
+  <span class="score-box neutral">Ham FA: 74</span>
+  <span class="score-arrow">→</span>
+  <span class="score-box good">V12: ×1.10</span>
+  <span class="score-arrow">→</span>
+  <span class="score-box neutral">TR-Adj: ~81</span>
+  <span class="score-arrow">→</span>
+  <span class="score-box good">V13: +6p</span>
+  <span class="score-arrow">→</span>
+  <span class="score-box good">Final: 87</span>
+</div>
+
+<p style="color:#64748b;font-size:0.88rem;">V12: Güçlü döviz kalkanı, net nakit, fiyatlama gücü var. V13: ROE %70 &gt; Ke %56 → gerçek excess return. Reel %25 büyüme + FCF pozitif → nakit yaratan büyüme.</p>
+</div>
+</div>
+
+<!-- ═══════════════════════════════════════ -->
+<div class="section">
+<h2>7. Dosya Haritası</h2>
+<pre>
+engine/
+├── scoring.py          ← K1: 7 boyut FA + risk penaltileri
+├── scoring_v11.py      ← K1+: Non-linear gate, fatal triggers, Ciro/PD
+├── technical.py        ← K2: İvme (momentum, teknik, kurumsal)
+├── turkey_realities.py ← K3: V12 Türkiye Gerçekleri (4 filtre)
+├── turkey_enhancements.py ← K3+: Reel büyüme, getiri testi, borç riski
+├── academic_layer.py   ← K4: V13 Akademik (3 filtre)     ← YENİ
+├── analysis.py         ← HEPSİNİ BİRLEŞTİREN ana fonksiyon
+└── ...
+
+ai/
+├── prompts_v12.py      ← AI prompt şablonları (V12 Turkey-aware)
+├── engine.py           ← AI provider chain (Grok→OpenAI→Anthropic)
+└── service.py          ← AI servis katmanı
+</pre>
+</div>
+
+<div class="footer">
+  <p>BistBull V13 Academic Tier — Damodaran + Greenwald + Turkey Realities</p>
+  <p style="margin-top:8px;">Skorlama zinciri: FA → Risk → Türkiye Filtresi → Akademik Filtre → Final Skor</p>
+</div>
+
+</div>
+</body>
+</html>

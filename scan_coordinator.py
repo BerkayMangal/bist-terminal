@@ -289,7 +289,7 @@ class ScanCoordinator:
             # ---- PHASE: scoring (raw_fetch + technical + scoring combined) ----
             self._set_phase("scoring")
             ranked: list[dict] = []
-            from concurrent.futures import ThreadPoolExecutor, as_completed
+            from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError as FuturesTimeout
 
             def _safe_analyze(ticker: str) -> Optional[dict]:
                 try:
@@ -302,14 +302,31 @@ class ScanCoordinator:
                     return None
 
             workers = min(SCAN_MAX_WORKERS, len(universe))
+            _scan_timeout = 420  # 7 dakika — yfinance fallback'ler yavaş olabiliyor
+            _timed_out = False
             with ThreadPoolExecutor(max_workers=workers) as pool:
                 futures = {pool.submit(_safe_analyze, t): t for t in universe}
-                for future in as_completed(futures, timeout=600):
-                    try:
-                        r = future.result(timeout=60)
-                    except Exception:
-                        r = None
-                    if r and r.get("confidence", 0) >= CONFIDENCE_MIN:
+                try:
+                    for future in as_completed(futures, timeout=_scan_timeout):
+                        try:
+                            r = future.result(timeout=60)
+                        except Exception:
+                            r = None
+                        if r and r.get("confidence", 0) >= CONFIDENCE_MIN:
+                            ranked.append(r)
+                except FuturesTimeout:
+                    # Timeout oldu ama elimizdeki sonuçlarla devam et
+                    _timed_out = True
+                    _done = len(ranked)
+                    _total = len(universe)
+                    log.warning(
+                        f"Scan timeout ({_scan_timeout}s): {_done}/{_total} hisse tamamlandı, "
+                        f"{_total - self._progress} hisse zamanaşımı. Kısmi sonuçlarla devam ediliyor.",
+                        extra={"scan_id": scan_id, "completed": _done, "total": _total},
+                    )
+                    # Bitmemiş futures'ları iptal et
+                    for fut in futures:
+                        fut.cancel()
                         ranked.append(r)
 
             ranked.sort(
