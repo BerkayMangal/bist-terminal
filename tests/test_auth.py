@@ -97,10 +97,12 @@ class TestRegister:
         assert "12" in r.json()["detail"]
 
     def test_register_rejects_common_password(self, client):
-        # 'password1234' is 12 chars but 'password' is in common list -- actually
-        # we check full string. Let's use a real 12+ char common one.
+        # The SecLists top-10k list has relatively few entries >=12 chars,
+        # so we pick 'unbelievable' (12 chars, clean, real entry on line
+        # ~9000 of 10k-most-common.txt). Passes the length check, fails
+        # the common-password check.
         r = client.post("/api/auth/register", json={
-            "email": "x@y.co", "password": "12345678qwerty"
+            "email": "x@y.co", "password": "unbelievable"
         })
         assert r.status_code == 400
         assert "common" in r.json()["detail"].lower()
