@@ -101,3 +101,41 @@ URLs. Split: 6 additions (ASELS, PGSUS, SASA, AKSEN, OYAKC, ASTOR),
 No active blockers. Phase 4.1+ calibration can proceed; the 13
 promoted rows are the ones that matter for survivorship-sensitive
 backtests of 2020-2026 signals.
+
+
+---
+
+## KR-006 — Calibration fraction-vs-percent scale ✅ CLOSED (caught mid-turn)
+
+**Discovered:** Phase 4.1 (2026-04-20), same turn as introduction.
+Not actually shipped to reviewer — caught during report regeneration
+before the zip was built.
+
+**Bug:** Commit `9d85b03`'s `_extract_return` divided deep_events.csv
+`ret_20d` values by 100, assuming they were in percent form (like
+deep_summary.csv aggregates). Per-event rows are actually fractions
+already; no conversion needed.
+
+**Impact scope (would have shipped if uncaught):** `reports/
+phase_4_weights.json` and `.md` fields `mean_return_20d`,
+`std_return_20d`, `mean_return_60d`, `std_return_60d` would have
+displayed 100× too small (0.000486 instead of 0.0486 for 52W High
+Breakout). `weight_20d` and `weight_60d` were unaffected (Sharpe
+ratio is scale-invariant); all decisions and the FAZ 4.3 walk-forward
+inputs would be correct.
+
+**Why tests didn't catch it:** Only the weight-vs-deep_summary
+agreement was asserted (`test_calibrated_default_matches_deep_summary`).
+That assertion uses the Sharpe identity `weight = mean/std × sqrt(...)`
+which is scale-invariant, so 0.000486 / 0.00159 matches 0.0486 / 0.159
+to 4 decimals either way.
+
+**Closed:** Same turn, commit `33f986c fix(research/calibration):
+deep_events ret_*d values are fractions not percents`. Added a
+direct mean-value assertion
+(`assert _extract_return({"ret_20d": 0.0486}, 20) == 0.0486`) to
+catch a regression if someone ever reintroduces the `/100`.
+
+**Process note:** Scale-invariant aggregate tests are necessary but
+not sufficient. When the underlying fields are user-facing (displayed
+in JSON/MD reports), add direct value assertions alongside.
