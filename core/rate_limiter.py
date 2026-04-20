@@ -20,6 +20,7 @@
 
 from __future__ import annotations
 
+import os
 import time
 import threading
 import logging
@@ -68,6 +69,14 @@ RATE_LIMITS: dict[str, dict[str, int]] = {
     "social": {
         "max_requests": RATE_LIMIT_AI_SUMMARY,
         "window_seconds": RATE_LIMIT_AI_SUMMARY_WINDOW,
+    },
+    # Phase 1: login throttle per IP. Hardcoded (not via config.py) because
+    # this is a security primitive, not a tuneable product limit -- op
+    # tuning it loosens brute-force protection. Account lock is intentionally
+    # NOT used (DoS vector) -- IP throttle only.
+    "auth_login": {
+        "max_requests": 5,
+        "window_seconds": 900,  # 15 minutes
     },
 }
 
@@ -179,21 +188,27 @@ def check_rate_limit(request: Any, endpoint: str) -> None:
 
 
 def _extract_ip(request: Any) -> str:
-    """Request nesnesinden IP adresini çıkar."""
-    # FastAPI Request
-    if hasattr(request, "headers"):
+    """Extract client IP, proxy-aware.
+
+    Phase 1 change: only trust X-Forwarded-For when TRUST_PROXY=1 env is
+    set, and take the FIRST segment (the real client) rather than the
+    last. The previous implementation took the last segment, which was
+    the IP of the closest proxy -- rate limit keyed on the wrong IP.
+
+    Without TRUST_PROXY=1, XFF is ignored and request.client.host is
+    used directly -- required for local dev where anyone can forge XFF.
+    """
+    trust_proxy = os.environ.get("TRUST_PROXY") == "1"
+    if trust_proxy and hasattr(request, "headers"):
         forwarded = request.headers.get("x-forwarded-for", "")
         if forwarded:
-            return forwarded.split(",")[-1].strip()
-    if hasattr(request, "client") and request.client:
-        return request.client.host or "unknown"
-    if False:
-        forwarded = request.headers.get("x-forwarded-for", "")
-        if forwarded:
+            # XFF = "client, proxy1, proxy2, ..." -- first is the real client
             return forwarded.split(",")[0].strip()
         real_ip = request.headers.get("x-real-ip", "")
         if real_ip:
             return real_ip.strip()
+    if hasattr(request, "client") and request.client:
+        return request.client.host or "unknown"
     return "unknown"
 
 
