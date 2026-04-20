@@ -1,0 +1,488 @@
+"""Phase 3 tests: labeler, validator, signals, coverage, compare_sources,
+ingest (threaded + real-path with mocked fetcher), universe audit migration.
+"""
+
+from __future__ import annotations
+
+import json
+import threading
+from datetime import date, timedelta
+from pathlib import Path
+
+import pytest
+
+
+@pytest.fixture
+def p3_db(tmp_path, monkeypatch):
+    """Fresh DB; reset storage module-level thread-local."""
+    db_path = tmp_path / "p3.db"
+    monkeypatch.setenv("BISTBULL_DB_PATH", str(db_path))
+    import infra.storage
+    infra.storage._local = threading.local()
+    infra.storage.DB_PATH = str(db_path)
+    from infra.storage import init_db
+    init_db()
+    yield db_path
+
+
+# ========== Universe audit (migration 005) ==========
+
+class TestUniverseAudit:
+    def test_source_url_column_present(self, p3_db):
+        from infra.storage import _get_conn
+        cols = {r[1] for r in _get_conn().execute(
+            "PRAGMA table_info(universe_history)").fetchall()}
+        assert "source_url" in cols
+
+    def test_valid_reasons(self):
+        from infra.pit import VALID_UNIVERSE_REASONS
+        assert VALID_UNIVERSE_REASONS == {
+            "approximate", "addition", "removal", "verified"}
+
+    def test_loader_rejects_invalid_reason(self, p3_db, tmp_path):
+        from infra.pit import load_universe_history_csv
+        bad = tmp_path / "bad.csv"
+        bad.write_text(
+            "universe_name,symbol,from_date,to_date,reason,source_url\n"
+            "BIST30,TEST,2020-01-01,,unknown_reason,\n"
+        )
+        with pytest.raises(ValueError, match="invalid reason"):
+            load_universe_history_csv(bad)
+
+    def test_loader_requires_source_url_for_non_approximate(self, p3_db, tmp_path):
+        from infra.pit import load_universe_history_csv
+        bad = tmp_path / "bad.csv"
+        bad.write_text(
+            "universe_name,symbol,from_date,to_date,reason,source_url\n"
+            "BIST30,TEST,2020-01-01,,verified,\n"
+        )
+        with pytest.raises(ValueError, match="requires source_url"):
+            load_universe_history_csv(bad)
+
+    def test_loader_accepts_verified_with_source_url(self, p3_db, tmp_path):
+        from infra.pit import load_universe_history_csv, get_universe_at
+        ok = tmp_path / "ok.csv"
+        ok.write_text(
+            "universe_name,symbol,from_date,to_date,reason,source_url\n"
+            "BIST30,TEST,2020-01-01,,verified,https://kap.org.tr/foo\n"
+        )
+        n = load_universe_history_csv(ok)
+        assert n == 1
+        assert "TEST" in get_universe_at("BIST30", "2023-01-01")
+
+
+# ========== Preferred-source fundamentals (S4) ==========
+
+class TestGetFundamentalsPreferred:
+    def _seed_multi_source(self):
+        from infra.pit import save_fundamental
+        # Same period, three sources, different values
+        save_fundamental("THYAO", "2022-12-31", "2023-02-10", "synthetic",
+                         "net_income", 1.0e9)
+        save_fundamental("THYAO", "2022-12-31", "2023-02-10", "borsapy",
+                         "net_income", 2.0e9)
+        save_fundamental("THYAO", "2022-12-31", "2023-02-10", "kap",
+                         "net_income", 3.0e9)
+
+    def test_default_priority_kap_wins(self, p3_db):
+        from infra.pit import get_fundamentals_at_preferred
+        self._seed_multi_source()
+        r = get_fundamentals_at_preferred("THYAO", "2023-06-01")
+        assert r["net_income"]["source"] == "kap"
+        assert r["net_income"]["value"] == 3.0e9
+
+    def test_custom_priority_synthetic_only(self, p3_db):
+        from infra.pit import get_fundamentals_at_preferred
+        self._seed_multi_source()
+        r = get_fundamentals_at_preferred(
+            "THYAO", "2023-06-01", source_priority=("synthetic",))
+        assert r["net_income"]["source"] == "synthetic"
+        assert r["net_income"]["value"] == 1.0e9
+
+    def test_custom_priority_borsapy_before_kap(self, p3_db):
+        from infra.pit import get_fundamentals_at_preferred
+        self._seed_multi_source()
+        r = get_fundamentals_at_preferred(
+            "THYAO", "2023-06-01", source_priority=("borsapy", "kap"))
+        assert r["net_income"]["source"] == "borsapy"
+        assert r["net_income"]["value"] == 2.0e9
+
+    def test_respects_look_ahead_guard(self, p3_db):
+        from infra.pit import get_fundamentals_at_preferred
+        self._seed_multi_source()
+        # Query before any filings -- empty
+        r = get_fundamentals_at_preferred("THYAO", "2023-02-09")
+        assert r == {}
+
+
+# ========== OHLCV PIT (migration 006) ==========
+
+class TestPriceHistoryPIT:
+    def test_save_and_get_prices(self, p3_db):
+        from infra.pit import save_price, get_prices
+        save_price("THYAO", "2024-01-02", "synthetic",
+                   100.0, 102.0, 99.5, 101.0, 1_000_000, 101.0)
+        save_price("THYAO", "2024-01-03", "synthetic",
+                   101.0, 103.5, 100.0, 103.0, 1_200_000, 103.0)
+        bars = get_prices("THYAO", "2024-01-01", "2024-01-05")
+        assert len(bars) == 2
+        assert bars[0]["close"] == 101.0
+        assert bars[1]["close"] == 103.0
+
+    def test_get_price_at_or_before_returns_most_recent(self, p3_db):
+        from infra.pit import save_price, get_price_at_or_before
+        save_price("THYAO", "2024-01-02", "synthetic", close=100.0)
+        save_price("THYAO", "2024-01-05", "synthetic", close=105.0)
+        # Weekend -- most recent trading day is Jan 5 (Friday)
+        bar = get_price_at_or_before("THYAO", "2024-01-07")
+        assert bar["trade_date"] == "2024-01-05"
+        assert bar["close"] == 105.0
+
+    def test_multi_source_coexist(self, p3_db):
+        from infra.pit import save_price, get_prices
+        save_price("THYAO", "2024-01-02", "synthetic", close=100.0)
+        save_price("THYAO", "2024-01-02", "borsapy", close=101.5)
+        all_bars = get_prices("THYAO", "2024-01-01", "2024-01-05")
+        assert len(all_bars) == 2  # both sources
+        syn = get_prices("THYAO", "2024-01-01", "2024-01-05",
+                        source="synthetic")
+        assert len(syn) == 1
+        assert syn[0]["close"] == 100.0
+
+
+# ========== Threaded + real-path ingest ==========
+
+class TestThreadedIngest:
+    def test_real_path_with_mock_fetcher(self, p3_db, tmp_path, monkeypatch):
+        from research.ingest_filings import ingest
+        monkeypatch.setattr(
+            "research.ingest_filings.CHECKPOINT_PATH", tmp_path / "ck.json")
+
+        def mock_fetcher(symbol):
+            return [
+                {"period_end": date(2023, 3, 31), "filed_at": date(2023, 5, 15),
+                 "statements": {
+                    "income": {"revenue": 1e9, "net_income": 1e8},
+                    "ratios": {"roe": 0.1, "debt_to_equity": 0.5}}}]
+
+        r = ingest(
+            symbols=["THYAO", "AKBNK", "ISCTR"],
+            from_date=date(2022, 1, 1), to_date=date(2024, 1, 1),
+            dry_run=False,  # real path via mock
+            fetcher=mock_fetcher,
+            threaded=True, max_workers=3,
+        )
+        assert r["totals"]["symbols"] == 3
+        assert r["totals"]["filings"] == 3
+        assert r["totals"]["rows"] == 12  # 3 × 4 metrics
+        assert len(r["completed"]) == 3
+
+    def test_per_symbol_error_isolation(self, p3_db, tmp_path, monkeypatch):
+        from research.ingest_filings import ingest
+        monkeypatch.setattr(
+            "research.ingest_filings.CHECKPOINT_PATH", tmp_path / "ck.json")
+
+        call_count = {"n": 0}
+        lock = threading.Lock()
+
+        def flaky_fetcher(symbol):
+            with lock:
+                call_count["n"] += 1
+            if symbol == "AKBNK":
+                raise RuntimeError("simulated fetch error")
+            return [{"period_end": date(2023, 3, 31),
+                     "filed_at": date(2023, 5, 15),
+                     "statements": {"income": {"revenue": 1e9}}}]
+
+        r = ingest(
+            symbols=["THYAO", "AKBNK", "ISCTR"],
+            from_date=date(2022, 1, 1), to_date=date(2024, 1, 1),
+            dry_run=False, fetcher=flaky_fetcher,
+            threaded=True, max_workers=3,
+        )
+        # Other symbols should have completed
+        assert "AKBNK" in r["errors"]
+        assert "AKBNK" not in r["completed"]
+        assert {"THYAO", "ISCTR"} <= set(r["completed"])
+
+    def test_ohlcv_threaded_ingest(self, p3_db, tmp_path, monkeypatch):
+        from research.ingest_prices import ingest as ingest_px
+        monkeypatch.setattr(
+            "research.ingest_prices.CHECKPOINT_PATH", tmp_path / "ckp.json")
+
+        r = ingest_px(
+            symbols=["A", "B", "C"],
+            from_date=date(2024, 1, 1), to_date=date(2024, 1, 31),
+            dry_run=True, threaded=True, max_workers=3,
+        )
+        # Jan 2024 has 23 weekdays
+        assert r["totals"]["symbols"] == 3
+        assert r["totals"]["bars"] >= 3 * 20
+
+
+# ========== Labeler (survivorship-aware) ==========
+
+class TestLabeler:
+    def _seed_prices(self, symbols: list[str], start_close: float = 100.0):
+        from infra.pit import save_price
+        d = date(2023, 1, 2)
+        while d <= date(2024, 6, 30):
+            if d.weekday() < 5:
+                for i, s in enumerate(symbols):
+                    px = start_close * (1.0 + 0.001 * i + 0.0005 * (d - date(2023, 1, 2)).days)
+                    save_price(s, d, "synthetic", close=px)
+            d += timedelta(days=1)
+
+    def test_forward_returns_basic(self, p3_db, tmp_path, monkeypatch):
+        from infra.pit import load_universe_history_csv
+        # seed a tiny universe
+        csv = tmp_path / "u.csv"
+        csv.write_text(
+            "universe_name,symbol,from_date,to_date,reason,source_url\n"
+            "BIST30,AAAAA,2022-01-01,,approximate,\n"
+        )
+        load_universe_history_csv(csv)
+        self._seed_prices(["AAAAA"])
+
+        from research.labeler import compute_forward_returns
+        r = compute_forward_returns(
+            "AAAAA", "2023-06-01", universe="BIST30", today=date(2024, 6, 30))
+        # All horizons should resolve (drift is upward, so positive)
+        assert all(v is not None for v in r.values())
+        assert r["return_20d"] > 0
+        assert r["return_60d"] > r["return_20d"]
+
+    def test_survivorship_filter_skips_non_members(self, p3_db, tmp_path):
+        from infra.pit import load_universe_history_csv
+        from research.labeler import compute_forward_returns
+        # Symbol MEMBR is in BIST30 but symbol OTHER is NOT
+        csv = tmp_path / "u.csv"
+        csv.write_text(
+            "universe_name,symbol,from_date,to_date,reason,source_url\n"
+            "BIST30,MEMBR,2022-01-01,,approximate,\n"
+        )
+        load_universe_history_csv(csv)
+        self._seed_prices(["MEMBR", "OTHER"])
+
+        r_member = compute_forward_returns(
+            "MEMBR", "2023-06-01", universe="BIST30", today=date(2024, 6, 30))
+        r_other = compute_forward_returns(
+            "OTHER", "2023-06-01", universe="BIST30", today=date(2024, 6, 30))
+        assert any(v is not None for v in r_member.values())
+        assert all(v is None for v in r_other.values())
+
+    def test_future_horizons_return_none(self, p3_db, tmp_path):
+        from infra.pit import load_universe_history_csv
+        from research.labeler import compute_forward_returns
+        csv = tmp_path / "u.csv"
+        csv.write_text(
+            "universe_name,symbol,from_date,to_date,reason,source_url\n"
+            "BIST30,AAA,2022-01-01,,approximate,\n"
+        )
+        load_universe_history_csv(csv)
+        self._seed_prices(["AAA"])
+
+        # as_of 10 days before today -- 60d horizon hasn't materialized yet
+        today = date(2023, 6, 15)
+        r = compute_forward_returns(
+            "AAA", "2023-06-10", universe="BIST30", today=today)
+        # 5d might be close to materialized, 60d definitely not
+        assert r["return_60d"] is None
+
+
+# ========== Validator ==========
+
+class TestValidator:
+    def test_decision_rules(self):
+        from research.validator import _decide
+        # keep_strong
+        d, _ = _decide(sharpe=1.5, t_stat=2.5)
+        assert d == "keep_strong"
+        # keep_weak (marginal)
+        d, _ = _decide(sharpe=0.5, t_stat=1.7)
+        assert d == "keep_weak"
+        # kill (low Sharpe)
+        d, _ = _decide(sharpe=0.1, t_stat=2.5)
+        assert d == "kill"
+        # kill (low t)
+        d, _ = _decide(sharpe=1.5, t_stat=1.0)
+        assert d == "kill"
+        # None -> kill
+        d, _ = _decide(sharpe=None, t_stat=1.0)
+        assert d == "kill"
+
+    def test_enumerate_events_respects_universe(self, p3_db, tmp_path):
+        from infra.pit import load_universe_history_csv
+        from research.validator import enumerate_events
+        csv = tmp_path / "u.csv"
+        csv.write_text(
+            "universe_name,symbol,from_date,to_date,reason,source_url\n"
+            "BIST30,X,2023-01-01,,approximate,\n"
+            "BIST30,Y,2023-01-01,2023-07-01,approximate,\n"
+        )
+        load_universe_history_csv(csv)
+
+        # Detector fires for everything
+        evs = enumerate_events(
+            detector=lambda s, d: True, universe="BIST30",
+            from_date=date(2023, 5, 1), to_date=date(2023, 9, 30),
+            sample_every_n_days=30,
+        )
+        syms = {e["symbol"] for e in evs}
+        # Y was removed 2023-07-01 so shouldn't appear in August/September events
+        y_dates = sorted(e["as_of"] for e in evs if e["symbol"] == "Y")
+        x_dates = sorted(e["as_of"] for e in evs if e["symbol"] == "X")
+        assert all(d < "2023-07-01" for d in y_dates)
+        assert any(d >= "2023-07-01" for d in x_dates)
+
+    def test_write_report_emits_json_and_md(self, p3_db, tmp_path):
+        from research.validator import ValidatorResult, write_report
+        r = ValidatorResult(
+            signal="Test Signal", universe="BIST30",
+            from_date="2023-01-01", to_date="2024-01-01",
+            n_trades=100, hit_rate_5d=0.55, hit_rate_20d=0.58,
+            avg_return_5d=0.002, avg_return_20d=0.012,
+            std_return_20d=0.05, t_stat_20d=2.4, sharpe_20d_ann=1.2,
+            ir_vs_benchmark_20d=0.8, benchmark_symbol="XU100",
+            decision="keep_strong", notes=["good signal"],
+        )
+        jp, mp = write_report(r, tmp_path)
+        assert jp.exists() and mp.exists()
+        data = json.loads(jp.read_text())
+        assert data["signal"] == "Test Signal"
+        assert data["decision"] == "keep_strong"
+        assert "keep_strong" in mp.read_text()
+        assert "100" in mp.read_text()  # n_trades
+
+
+# ========== Signals (detector smoke) ==========
+
+class TestSignals:
+    def _seed_golden_cross_data(self, symbol: str):
+        """Seed prices that trigger a Golden Cross late in the series.
+
+        Design: 200 days of gentle decline (100→50) to push MA200 down,
+        then 100 days of steady rally (50→150). MA50 overtakes MA200
+        somewhere around day 260-280. Detector requires >=205 closes to
+        compare, so the cross is detectable in the last ~35 days of
+        the series.
+        """
+        from infra.pit import save_price
+        d = date(2022, 9, 1)  # start far enough back to have 300 weekdays
+        i = 0
+        while i < 300:
+            if d.weekday() < 5:
+                if i < 200:
+                    price = 100.0 - i * 0.25   # 100 -> 50
+                else:
+                    price = 50.0 + (i - 200) * 1.0  # 50 -> 150
+                save_price(symbol, d, "synthetic", close=price)
+                i += 1
+            d += timedelta(days=1)
+
+    def test_golden_cross_detector_fires_on_rally(self, p3_db):
+        import research.signals as sigs
+        self._seed_golden_cross_data("GCROSS")
+
+        # 300 weekdays from 2022-09-01 ≈ late Oct 2023. The cross
+        # happens around day 260-280 (about 4-5 weeks before the end).
+        # Scan backwards from the series end looking for a fire.
+        end_d = date(2023, 10, 27)
+        fired_on_any = False
+        d = end_d
+        for _ in range(80):
+            if d.weekday() < 5 and sigs.golden_cross("GCROSS", d,
+                                                     price_source="synthetic"):
+                fired_on_any = True
+                break
+            d -= timedelta(days=1)
+        assert fired_on_any, "Golden Cross detector didn't fire on a seeded rally pattern"
+
+    def test_stubbed_signals_return_false(self, p3_db):
+        import research.signals as sigs
+        # All stubs
+        for name in ("ichimoku_kumo_breakout", "ichimoku_kumo_breakdown",
+                    "ichimoku_tk_cross", "vcp_breakout",
+                    "rectangle_breakout", "rectangle_breakdown",
+                    "pivot_resistance_break", "pivot_support_break"):
+            fn = getattr(sigs, name)
+            assert fn("X", date(2023, 6, 1)) is False
+
+    def test_signal_registry_has_17_entries(self):
+        from research.signals import SIGNAL_DETECTORS
+        assert len(SIGNAL_DETECTORS) == 17
+
+
+# ========== Coverage report ==========
+
+class TestCoverage:
+    def test_compute_coverage_shape(self, p3_db):
+        from infra.pit import save_fundamental
+        from research.coverage import compute_coverage
+        # Seed THYAO Q4 2022, Q1-Q4 2023, Q1 2024 = 6 filings × 4 metrics
+        from datetime import date as D
+        for q in [D(2022, 12, 31), D(2023, 3, 31), D(2023, 6, 30),
+                  D(2023, 9, 30), D(2023, 12, 31), D(2024, 3, 31)]:
+            for m in ("revenue", "net_income", "roe", "debt_to_equity"):
+                save_fundamental("THYAO", q, q, "synthetic", m, 1.0)
+
+        rows = compute_coverage(
+            symbols=["THYAO"],
+            from_date=date(2022, 10, 1), to_date=date(2024, 4, 1),
+        )
+        assert len(rows) == 4  # 1 symbol × 4 metrics
+        for r in rows:
+            assert r.coverage == 1.0  # all quarters filled
+            assert not r.excluded_from_phase_4
+
+    def test_exclude_threshold(self, p3_db):
+        from infra.pit import save_fundamental
+        from research.coverage import compute_coverage
+        # Only fill 1 of 6 quarters -> 16% coverage -> excluded
+        save_fundamental("SPARSE", date(2023, 3, 31),
+                         date(2023, 5, 15), "synthetic", "revenue", 1.0)
+        rows = compute_coverage(
+            symbols=["SPARSE"],
+            from_date=date(2022, 10, 1), to_date=date(2024, 4, 1),
+        )
+        rev_row = next(r for r in rows if r.metric == "revenue")
+        assert rev_row.coverage < 0.5
+        assert rev_row.excluded_from_phase_4
+
+    def test_write_reports_emits_both(self, p3_db, tmp_path):
+        from research.coverage import compute_coverage, write_coverage_reports
+        rows = compute_coverage(
+            symbols=["X"],
+            from_date=date(2023, 1, 1), to_date=date(2024, 1, 1),
+        )
+        md, csvp = write_coverage_reports(
+            rows, date(2023, 1, 1), date(2024, 1, 1),
+            tmp_path, data_source="synthetic")
+        assert md.exists() and csvp.exists()
+        assert "synthetic" in md.read_text()
+
+
+# ========== Compare sources ==========
+
+class TestCompareSources:
+    def test_detects_disagreement(self, p3_db):
+        from infra.pit import save_fundamental
+        from research.compare_sources import find_source_disagreements
+        # Two sources, same period/metric, values differ by 20%
+        save_fundamental("THYAO", "2022-12-31", "2023-02-10",
+                         "borsapy", "net_income", 1.0e9)
+        save_fundamental("THYAO", "2022-12-31", "2023-02-10",
+                         "kap", "net_income", 1.2e9)
+        diffs = find_source_disagreements(rel_tol=0.01)
+        assert len(diffs) == 1
+        assert diffs[0]["rel_diff"] > 0.15
+
+    def test_below_tol_not_reported(self, p3_db):
+        from infra.pit import save_fundamental
+        from research.compare_sources import find_source_disagreements
+        save_fundamental("THYAO", "2022-12-31", "2023-02-10",
+                         "borsapy", "net_income", 1.000e9)
+        save_fundamental("THYAO", "2022-12-31", "2023-02-10",
+                         "kap", "net_income", 1.005e9)  # 0.5% diff
+        diffs = find_source_disagreements(rel_tol=0.01)
+        assert diffs == []

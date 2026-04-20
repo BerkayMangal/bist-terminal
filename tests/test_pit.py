@@ -152,15 +152,17 @@ class TestCsvLoader:
         from infra.pit import load_universe_history_csv, get_universe_at
         csv = tmp_path / "u.csv"
         csv.write_text(
-            "universe_name,symbol,from_date,to_date,reason\n"
-            "BIST30,DEMO,2020-01-01,,approximate\n"
+            "universe_name,symbol,from_date,to_date,reason,source_url\n"
+            "BIST30,DEMO,2020-01-01,,approximate,\n"
         )
         load_universe_history_csv(csv)
         assert "DEMO" in get_universe_at("BIST30", "2023-01-01")
-        # Re-load with to_date set -- UPSERT should close membership
+        # Re-load with to_date set -- UPSERT should close membership.
+        # Phase 3 migration 005 requires source_url for reason='removal';
+        # provide a placeholder URL so the loader accepts it.
         csv.write_text(
-            "universe_name,symbol,from_date,to_date,reason\n"
-            "BIST30,DEMO,2020-01-01,2022-01-01,removal\n"
+            "universe_name,symbol,from_date,to_date,reason,source_url\n"
+            "BIST30,DEMO,2020-01-01,2022-01-01,removal,https://example/test\n"
         )
         load_universe_history_csv(csv)
         assert "DEMO" not in get_universe_at("BIST30", "2023-01-01")
@@ -216,17 +218,27 @@ class TestIngestFilings:
         assert state["completed"] == ["AKBNK", "THYAO"]  # sorted
         assert state["totals"]["symbols"] == 2
 
-    def test_real_mode_stub_raises(self, pit_db, tmp_path, monkeypatch):
-        """Until real borsapy wiring lands, --dry-run is required."""
+    def test_real_mode_surfaces_missing_borsapy_error(self, pit_db, tmp_path, monkeypatch):
+        """Phase 3: _fetch_real lazily imports borsapy. When borsapy is
+        not installed (the sandbox case), the error is caught per-symbol
+        and recorded in state.errors rather than raised through ingest().
+        This test confirms the ingest keeps running and surfaces the error."""
         from research.ingest_filings import ingest
         monkeypatch.setattr(
             "research.ingest_filings.CHECKPOINT_PATH",
             tmp_path / "ck.json",
         )
-        with pytest.raises(NotImplementedError, match="borsapy fetch"):
-            ingest(
-                symbols=["THYAO"],
-                from_date=date(2023, 1, 1),
-                to_date=date(2023, 6, 30),
-                dry_run=False,
-            )
+        # No fetcher arg -> default path -> lazy import borsapy.
+        # In this test environment borsapy is not installed, so each
+        # symbol should fail with an ImportError wrapped as RuntimeError.
+        result = ingest(
+            symbols=["THYAO"],
+            from_date=date(2023, 1, 1),
+            to_date=date(2023, 6, 30),
+            dry_run=False,
+            threaded=False,  # sequential so the test is deterministic
+        )
+        assert "THYAO" in result["errors"]
+        assert "borsapy" in result["errors"]["THYAO"].lower()
+        # The symbol should NOT be in completed
+        assert "THYAO" not in result["completed"]
