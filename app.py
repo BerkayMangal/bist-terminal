@@ -28,6 +28,8 @@ from core.scan_coordinator import scan_coordinator
 from core.circuit_breaker import all_provider_status
 from core.rate_limiter import check_rate_limit, RateLimitExceeded
 from core.response_envelope import success, error, not_found, rate_limited, service_unavailable, now_iso
+from core.auth import require_jwt_secret, verify_jwt
+from api.auth import router as auth_router
 
 from config import (
     BOT_VERSION, APP_NAME, CONFIDENCE_MIN, UNIVERSE,
@@ -139,6 +141,10 @@ async def _background_scanner():
 @asynccontextmanager
 async def lifespan(application: FastAPI):
     init_db()
+    # Phase 1: refuse to boot without a real JWT_SECRET. Raises RuntimeError
+    # (uvicorn will surface this as a startup failure) if the env var is
+    # missing, too short, or still a placeholder string.
+    require_jwt_secret()
     redis_client.startup()
     restore_results = restore_all_from_redis()
     log.info(f"{APP_NAME} {BOT_VERSION} | Universe: {len(UNIVERSE)} | AI: {','.join(AI_PROVIDERS) or 'OFF'} | Chart: {'ON' if CHART_AVAILABLE else 'OFF'} | Redis: {'ON' if redis_client.is_available() else 'OFF'} | Restore: {restore_results}")
@@ -160,12 +166,49 @@ _AO = [o.strip() for o in _AO if o.strip()]
 if _AO: app.add_middleware(CORSMiddleware,allow_origins=_AO,allow_methods=["GET","POST","DELETE"],allow_headers=["Content-Type"])
 @app.middleware("http")
 async def sec_mw(request:Request,call_next):
-    r=await call_next(request);r.headers["X-Content-Type-Options"]="nosniff";r.headers["X-Frame-Options"]="DENY";r.headers["Referrer-Policy"]="strict-origin-when-cross-origin";return r
+    r=await call_next(request)
+    r.headers["X-Content-Type-Options"]="nosniff"
+    r.headers["X-Frame-Options"]="DENY"
+    r.headers["Referrer-Policy"]="strict-origin-when-cross-origin"
+    # Phase 1 additions -- full complement of defense-in-depth headers.
+    # HSTS: force HTTPS for a year; only effective if served over TLS.
+    r.headers["Strict-Transport-Security"]="max-age=31536000; includeSubDomains"
+    # CSP: self + inline (legacy app.js in landing.html is inline) + cdnjs
+    # for Chart.js / similar libs the frontend pulls. Google Fonts allowed
+    # for style + font. data: images for base64 hero etc. External https:
+    # images are allowed -- the analyze layer occasionally embeds KAP logos.
+    # 'unsafe-inline' is a known weakness; tightening requires nonce/hash
+    # plumbing in the render path, deferred to a later phase.
+    r.headers["Content-Security-Policy"]=(
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; "
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+        "font-src 'self' https://fonts.gstatic.com; "
+        "img-src 'self' data: https:; "
+        "connect-src 'self'"
+    )
+    r.headers["Permissions-Policy"]="geolocation=(), microphone=(), camera=()"
+    return r
 @app.middleware("http")
 async def ses_mw(request:Request,call_next):
+    # Phase 1: JWT-first, bb_session fallback. Authorization: Bearer <jwt>
+    # overrides the cookie-derived anonymous id so logged-in users get a
+    # persistent identity on every endpoint that reads request.state.user_id,
+    # without per-endpoint changes. The cookie is still set so logout
+    # (client drops token) reverts cleanly to anonymous.
+    auth_header = request.headers.get("authorization", "")
+    jwt_uid = None
+    if auth_header.lower().startswith("bearer "):
+        jwt_uid = verify_jwt(auth_header[7:].strip())
     sid=request.cookies.get("bb_session")
     if not sid:sid=_secrets.token_urlsafe(32)
-    request.state.user_id=sid;r=await call_next(request);r.set_cookie("bb_session",sid,httponly=True,samesite="strict",max_age=86400*90);return r
+    request.state.user_id = jwt_uid or sid
+    r=await call_next(request)
+    r.set_cookie("bb_session",sid,httponly=True,samesite="strict",max_age=86400*90)
+    return r
+
+# Phase 1: /api/auth/* endpoints (register/login/logout/me).
+app.include_router(auth_router)
 
 @app.exception_handler(RateLimitExceeded)
 async def _rate_limit_handler(request: Request, exc: RateLimitExceeded):
