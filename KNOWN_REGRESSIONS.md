@@ -198,3 +198,37 @@ Scope of fix:
 
 **Process lesson for Phase 5+:**
 Any new module reading a file via `Path(__file__).parent / "data/x"` MUST use `.resolve()`. This pattern is now consistent across `infra/migrations/__init__.py`, `infra/pit.py`, and `tests/_paths.py`. Violations of it will be the most likely category of CWD bug to re-emerge.
+
+
+---
+
+## Phase 4 close-out
+
+All 7 known regressions are now CLOSED. Phase 4 delivered 792 tests
+passing from both CWD positions (repo root + parent), covering:
+
+- FAZ 4.0 bug fixes (KR-002/003/004/005)
+- FAZ 4.1+4.2 multi-horizon validator + sector calibration (KR-006)
+- FAZ 4.3 walk-forward validation
+- FAZ 4.3.5 CWD finalize (KR-007)
+- FAZ 4.4 cross-sectional ranking
+- FAZ 4.5 mean-variance ensemble optimizer
+- FAZ 4.6 isotonic regression via PAV
+- FAZ 4.7 calibrated FA scoring with V13 A/B dispatch
+- FAZ 4.8 omnibus reports (phase_4_summary.md + OUTCOMES_PHASE_4.md)
+
+No new regressions identified during FAZ 4.6 or 4.7. The KR-006
+prevention methodology (scale-invariant aggregate tests PLUS direct
+display-field value assertions) was uniformly applied to every Phase
+4.x module. `TestDisplayFieldCorrectness` exists in:
+  - tests/test_phase4.py (FAZ 4.1)
+  - tests/test_phase4_3.py (FAZ 4.3)
+  - tests/test_phase4_4.py (FAZ 4.4)
+  - tests/test_phase4_5.py (FAZ 4.5)
+  - tests/test_phase4_6.py (FAZ 4.6)
+  - tests/test_phase4_7.py (FAZ 4.7)
+
+This pattern should continue into Phase 5+ modules that produce
+any user-facing numeric output.
+
+Phase 4 is DELIVERED. Awaiting Phase 5 spec.
