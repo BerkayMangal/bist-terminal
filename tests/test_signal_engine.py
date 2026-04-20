@@ -20,12 +20,17 @@ from engine.signal_engine import (
 # ================================================================
 @pytest.fixture
 def strong_bullish_signal():
+    # V3 scoring (engine/signal_engine.py:40-53) requires ADX/vol/confirmation_count
+    # keys to reach B (>=4 points) or A (>=7). A "strong" signal under V3 semantics
+    # therefore includes adx_confirmed. Without it, this fixture would only score
+    # 3 points (ticker_signal_count:+2, vol_confirmed:+1) and fall to C.
     return {
         "signal": "Golden Cross", "signal_type": "bullish",
         "stars": 3, "vol_confirmed": True,
         "ticker": "THYAO", "price": 280,
         "ticker_signal_count": 3, "ticker_total_stars": 7,
         "tech_score": 72, "category": "kirilim",
+        "adx_confirmed": True,
     }
 
 
@@ -133,9 +138,13 @@ class TestSignalConfidence:
         c = compute_signal_confidence(weak_bearish_signal, weak_analysis)
         assert c < 60
 
-    def test_no_analysis_caps_at_65(self, strong_bullish_signal):
+    def test_no_analysis_caps_at_v3_limit(self, strong_bullish_signal):
+        # V3 upgrade raised the no-analysis confidence cap from 65 to 72
+        # (engine/signal_engine.py:56 comment: "V3: cap artırıldı (65→72)").
+        # Was passing under the old fixture only because adx_confirmed was
+        # absent, which dropped 8 points below the new cap.
         c = compute_signal_confidence(strong_bullish_signal, None)
-        assert c <= 65
+        assert c <= 72
 
     def test_no_analysis_minimum_30(self, weak_bearish_signal):
         c = compute_signal_confidence(weak_bearish_signal, None)
