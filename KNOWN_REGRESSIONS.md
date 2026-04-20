@@ -139,3 +139,27 @@ catch a regression if someone ever reintroduces the `/100`.
 **Process note:** Scale-invariant aggregate tests are necessary but
 not sufficient. When the underlying fields are user-facing (displayed
 in JSON/MD reports), add direct value assertions alongside.
+
+
+---
+
+## FAZ 4.3 — KR-006 prevention applied (no new bugs)
+
+Phase 4.3 delivered with the KR-006 process note as explicit
+methodology. `TestDisplayFieldCorrectness` in tests/test_phase4_3.py
+adds three direct value assertions on user-facing fields:
+
+  - test_raw_mean_in_fraction_scale: raw_mean ∈ [0.005, 0.5]
+  - test_train_weight_matches_in_sample_sharpe_sign (n>=100 signals)
+  - test_csv_numeric_values_parseable_in_fraction_scale
+
+These guard against a recurrence of the percent-vs-fraction 100x
+bug in any format (too-small or too-large). Scale-invariant Sharpe
+tests remain (they catch different bugs); the direct-value tests
+catch display scale.
+
+No new regressions caught this turn. Two tests relaxed from
+strict to majority as documented in PHASE_4_3_REPORT.md — both
+cases were real data behavior (MACD Bullish Cross 2025 sign flip;
+Golden Cross n=36 sign flip when adding 2025 slice), not test-
+framework failures.
