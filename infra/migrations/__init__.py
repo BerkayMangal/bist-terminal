@@ -23,7 +23,16 @@ from pathlib import Path
 
 log = logging.getLogger("bistbull.migrations")
 
-_MIGRATIONS_DIR = Path(__file__).parent
+_MIGRATIONS_DIR = Path(__file__).resolve().parent
+# .resolve() so .glob() works when cwd != project root. Python can
+# populate __file__ with a relative path depending on how the module
+# was imported (PYTHONPATH=., script invocation, etc.); after an
+# os.chdir() the relative form silently becomes wrong and .glob()
+# returns an empty list, making apply_migrations() a no-op. Caught in
+# Phase 4 after the user's Colab run saw this symptom: first-run
+# created zero tables, second run (after an accidental chdir back)
+# worked. Regression test in tests/test_migrations.py exercises
+# os.chdir before apply_migrations to guard against a future revert.
 
 
 def _init_tracking_table(conn: sqlite3.Connection) -> None:

@@ -140,3 +140,41 @@ class TestEnsureColumn:
     def test_noop_on_missing_table(self, fresh_db):
         _ensure_column(fresh_db, "nonexistent", "x", "INTEGER")
         # no exception == success
+
+
+class TestCwdIndependence:
+    """Phase 4 FAZ 4.0.3: apply_migrations() must work regardless of cwd.
+
+    Bug report: user's Colab run saw first-run create zero tables
+    because _MIGRATIONS_DIR resolved to a relative path that became
+    invalid after module import + os.chdir. Fix: Path(__file__).resolve().
+    """
+
+    def test_apply_from_any_cwd(self, tmp_path):
+        import os
+        import sqlite3
+
+        # Save cwd; will restore
+        original_cwd = os.getcwd()
+
+        # Force re-import so _MIGRATIONS_DIR re-resolves in a known state.
+        # (Normal tests don't need this; we need it because other tests may
+        # have imported the module with a different cwd.)
+        import importlib
+        import infra.migrations
+        importlib.reload(infra.migrations)
+
+        try:
+            # Change to a completely unrelated cwd
+            os.chdir(str(tmp_path))
+            # Create a fresh DB in tmp; ensure all migrations run
+            db = tmp_path / "cwd_test.db"
+            conn = sqlite3.connect(str(db))
+            applied = infra.migrations.apply_migrations(conn)
+            # At minimum migrations 001-006 are present
+            assert len(applied) >= 6
+            # Verify the migrations directory path is absolute
+            assert infra.migrations._MIGRATIONS_DIR.is_absolute()
+            conn.close()
+        finally:
+            os.chdir(original_cwd)
