@@ -71,7 +71,7 @@ def ensure_data(db_path: Path) -> None:
     init_db()
 
     from infra.pit import load_universe_history_csv, get_universe_at
-    n = load_universe_history_csv("data/universe_history.csv")
+    n = load_universe_history_csv()
     log.info(f"universe_history: {n} rows loaded")
 
     # Combine today's + 2020 BIST30 to cover all seeded symbols

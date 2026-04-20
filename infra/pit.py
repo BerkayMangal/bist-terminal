@@ -27,6 +27,14 @@ log = logging.getLogger("bistbull.pit")
 
 DateLike = Union[str, date, datetime]
 
+# Phase 4 FAZ 4.3.5: default data paths resolved at module-load time
+# so callers (tests, scripts, ad-hoc Python sessions) don't have to
+# know the repo layout. Mirrors the infra/migrations/__init__.py
+# approach of using Path(__file__).resolve() so os.chdir doesn't
+# silently invalidate the path.
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+DEFAULT_UNIVERSE_CSV = _REPO_ROOT / "data" / "universe_history.csv"
+
 
 def _iso(d: DateLike) -> str:
     """Normalize date input to ISO-8601 YYYY-MM-DD."""
@@ -150,7 +158,7 @@ def get_universe_at(universe_name: str, as_of: DateLike) -> list[str]:
 VALID_UNIVERSE_REASONS = {"approximate", "addition", "removal", "verified"}
 
 
-def load_universe_history_csv(path: Union[str, Path]) -> int:
+def load_universe_history_csv(path: Optional[Union[str, Path]] = None) -> int:
     """Load a universe_history CSV into the DB. Returns rows inserted.
 
     CSV format (header required):
@@ -167,7 +175,14 @@ def load_universe_history_csv(path: Union[str, Path]) -> int:
       - Empty to_date -> NULL (still a member).
       - ON CONFLICT (PK) -> UPDATE to_date/reason/source_url. Idempotent
         re-seed.
+
+    Phase 4 FAZ 4.3.5: path is now optional. When None, defaults to
+    DEFAULT_UNIVERSE_CSV (resolved at module-load time from __file__,
+    so os.chdir doesn't silently change what file we read -- this
+    was the kin of the Phase 4.0.3 migrations bug for data loaders).
     """
+    if path is None:
+        path = DEFAULT_UNIVERSE_CSV
     path = Path(path)
     conn = _get_conn()
     inserted = 0

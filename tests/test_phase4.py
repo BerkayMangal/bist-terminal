@@ -34,7 +34,8 @@ class TestSectorCoverage:
     def test_every_universe_symbol_has_sector(self):
         from research.sectors import SECTOR_MAP
         import csv
-        with open("data/universe_history.csv", encoding="utf-8") as f:
+        from tests._paths import UNIVERSE_CSV
+        with open(UNIVERSE_CSV, encoding="utf-8") as f:
             syms = {r["symbol"].upper() for r in csv.DictReader(f)
                     if r.get("symbol")}
         missing = syms - set(SECTOR_MAP)
@@ -150,7 +151,7 @@ class TestRegime:
 class TestMultiHorizonValidator:
     def _seed_universe_and_prices(self, p4_db):
         from infra.pit import load_universe_history_csv, save_price
-        load_universe_history_csv("data/universe_history.csv")
+        load_universe_history_csv()
         # Seed one symbol + XU100 with a rising trend
         for sym in ("THYAO", "XU100"):
             d = date(2022, 1, 3)
@@ -517,7 +518,7 @@ class TestMultiHorizonEdgeCases:
     def test_nondefault_canonical_horizon(self, p4_db):
         """If 20 is NOT in horizons, the first horizon becomes canonical."""
         from infra.pit import save_price, load_universe_history_csv
-        load_universe_history_csv("data/universe_history.csv")
+        load_universe_history_csv()
         # Seed just enough data for the detector to fire
         d = date(2022, 1, 3)
         i = 0
@@ -702,7 +703,7 @@ class TestRegimeAnnotationFallthrough:
 
     def test_no_benchmark_doesnt_crash(self, p4_db):
         from infra.pit import load_universe_history_csv, save_price
-        load_universe_history_csv("data/universe_history.csv")
+        load_universe_history_csv()
         # Seed only THYAO, NO XU100
         d = date(2022, 1, 3)
         i = 0
@@ -736,7 +737,7 @@ class TestRegimeNetSharpeHorizons:
     def test_three_horizons_all_have_net(self, p4_db):
         """5d / 20d / 60d each get their own net_* stat."""
         from infra.pit import load_universe_history_csv, save_price
-        load_universe_history_csv("data/universe_history.csv")
+        load_universe_history_csv()
         for sym in ("THYAO", "XU100"):
             d = date(2022, 1, 3)
             i = 0

@@ -859,7 +859,7 @@ class TestUniverseAuditSharpening:
         from infra.storage import init_db
         init_db()
         from infra.pit import load_universe_history_csv
-        return load_universe_history_csv("data/universe_history.csv")
+        return load_universe_history_csv()
 
     def test_csv_loads_clean(self, tmp_path, monkeypatch):
         n = self._load(monkeypatch, tmp_path)
@@ -914,3 +914,58 @@ class TestUniverseAuditSharpening:
         # Today's universe includes additions and excludes removals:
         assert "ASTOR" in today and "OYAKC" in today
         assert "KOZAA" not in today and "EKGYO" not in today
+
+
+class TestDataLoaderCwdIndependence:
+    """Phase 4 FAZ 4.3.5: load_universe_history_csv() called with no
+    args OR a relative path must work regardless of cwd.
+
+    Bug report: running pytest from outside the repo root (e.g.
+    `pytest bist-terminal-main/tests/` from the parent directory)
+    produced 13 FAILs with FileNotFoundError because the path
+    'data/universe_history.csv' was resolved relative to pytest's
+    cwd, not the repo root. Kin of Phase 4.0.3's apply_migrations
+    cwd bug -- same shape, different file.
+    """
+
+    def test_default_path_works_from_any_cwd(self, tmp_path, monkeypatch):
+        import os
+        import threading
+        from pathlib import Path
+
+        db = tmp_path / "cwd.db"
+        monkeypatch.setenv("BISTBULL_DB_PATH", str(db))
+        import infra.storage
+        infra.storage._local = threading.local()
+        infra.storage.DB_PATH = str(db)
+        from infra.storage import init_db
+        init_db()
+
+        original_cwd = os.getcwd()
+        try:
+            os.chdir(str(tmp_path))
+            # No-arg default MUST resolve to the repo's data/ dir,
+            # not the current (tmp) cwd.
+            from infra.pit import load_universe_history_csv, DEFAULT_UNIVERSE_CSV
+            assert DEFAULT_UNIVERSE_CSV.is_absolute()
+            n = load_universe_history_csv()  # no arg
+            assert n >= 30, f"expected >=30 rows, got {n}"
+        finally:
+            os.chdir(original_cwd)
+
+    def test_explicit_absolute_path_still_works(self, tmp_path, monkeypatch):
+        """Passing an absolute path override is still honored."""
+        import threading
+        from tests._paths import UNIVERSE_CSV
+
+        db = tmp_path / "abs.db"
+        monkeypatch.setenv("BISTBULL_DB_PATH", str(db))
+        import infra.storage
+        infra.storage._local = threading.local()
+        infra.storage.DB_PATH = str(db)
+        from infra.storage import init_db
+        init_db()
+
+        from infra.pit import load_universe_history_csv
+        n = load_universe_history_csv(UNIVERSE_CSV)
+        assert n >= 30
