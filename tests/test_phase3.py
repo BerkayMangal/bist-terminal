@@ -622,3 +622,222 @@ class TestKapFetchReal:
         assert is_bank("AKBNK") is True
         assert is_bank("GARAN") is True
         assert is_bank("THYAO") is False
+
+
+class TestPortedSignals:
+    """Phase 4 FAZ 4.0.2: golden-vector tests for the 8 signals ported
+    from engine/technical.py. Each test seeds a price series designed
+    to trigger exactly one signal and scans a short window for a fire."""
+
+    def _seed_ohlc(self, symbol: str, bars: list[tuple[int, float, float, float, float]],
+                   start: date = date(2022, 1, 3)):
+        """Seed price bars. bars = list of (day_offset, open, high, low, close)."""
+        from infra.pit import save_price
+        for offset, o, h, l, c in bars:
+            d = start
+            count = 0
+            while count < offset:
+                d += timedelta(days=1)
+                if d.weekday() < 5:
+                    count += 1
+            save_price(symbol, d, "synthetic",
+                       open_=o, high=h, low=l, close=c, volume=1e6)
+
+    def _seed_sequence(self, symbol: str, closes_and_hl: list[tuple[float, float, float]],
+                       start: date = date(2022, 1, 3)):
+        """Seed a sequence of weekday bars: [(close, high, low), ...]."""
+        from infra.pit import save_price
+        d = start
+        i = 0
+        while i < len(closes_and_hl):
+            if d.weekday() < 5:
+                c, h, l = closes_and_hl[i]
+                save_price(symbol, d, "synthetic",
+                           open_=c, high=h, low=l, close=c, volume=1e6)
+                i += 1
+            d += timedelta(days=1)
+
+    def _scan_for_fire(self, detector, symbol: str, start: date,
+                       days: int) -> list[str]:
+        """Return list of trade_date ISO strings where detector fired
+        during the first `days` weekdays starting at `start`."""
+        import research.signals as sigs  # noqa
+        fires = []
+        d = start
+        count = 0
+        while count < days:
+            if d.weekday() < 5:
+                if detector(symbol, d, price_source="synthetic"):
+                    fires.append(d.isoformat())
+                count += 1
+            d += timedelta(days=1)
+        return fires
+
+    def test_ichimoku_kumo_breakout_fires_on_rally(self, p3_db):
+        """Decline from 100 to 50 over 80 bars, then rally to 150 over
+        next 70 bars. Price crosses above the cloud during the rally."""
+        import research.signals as sigs
+        seq = []
+        for i in range(150):
+            if i < 80:
+                c = 100.0 - i * 0.6
+            else:
+                c = 50.0 + (i - 80) * 1.4
+            seq.append((c, c * 1.005, c * 0.995))
+        self._seed_sequence("ICHIBO", seq)
+        fires = self._scan_for_fire(sigs.ichimoku_kumo_breakout,
+                                     "ICHIBO", date(2022, 1, 3), 150)
+        assert fires, "ichimoku_kumo_breakout must fire on decline-then-rally"
+
+    def test_ichimoku_kumo_breakdown_fires_on_reversal(self, p3_db):
+        """Rally then decline; price crosses below the cloud."""
+        import research.signals as sigs
+        seq = []
+        for i in range(150):
+            if i < 80:
+                c = 50.0 + i * 0.8
+            else:
+                c = 114.0 - (i - 80) * 1.0
+            seq.append((c, c * 1.005, c * 0.995))
+        self._seed_sequence("ICHIBD", seq)
+        fires = self._scan_for_fire(sigs.ichimoku_kumo_breakdown,
+                                     "ICHIBD", date(2022, 1, 3), 150)
+        assert fires, "ichimoku_kumo_breakdown must fire on rally-then-decline"
+
+    def test_ichimoku_tk_cross_fires(self, p3_db):
+        """Downtrend then uptrend; tenkan(9) crosses kijun(26) upward."""
+        import research.signals as sigs
+        seq = []
+        for i in range(60):
+            if i < 30:
+                c = 100.0 - i * 0.5
+            else:
+                c = 85.0 + (i - 30) * 0.8
+            seq.append((c, c * 1.005, c * 0.995))
+        self._seed_sequence("TKCROSS", seq)
+        fires = self._scan_for_fire(sigs.ichimoku_tk_cross,
+                                     "TKCROSS", date(2022, 1, 3), 60)
+        assert fires, "ichimoku_tk_cross must fire on trend reversal"
+
+    def test_vcp_breakout_fires_on_contraction_plus_break(self, p3_db):
+        """50 bars volatile, 9 bars tight consolidation near 100, final
+        bar breaks above."""
+        import research.signals as sigs
+        seq = []
+        # Bars 0-49: high volatility around 100
+        for i in range(50):
+            sign = 1 if i % 4 < 2 else -1
+            c = 100.0 + sign * 5
+            seq.append((c, c + 3, c - 3))
+        # Bars 50-58: tight consolidation 99-101
+        for i in range(9):
+            c = 100.0 + ((i % 2) * 0.3 - 0.15)
+            seq.append((c, c + 0.2, c - 0.2))
+        # Bar 59: breakout
+        seq.append((103.0, 103.5, 100.5))
+        self._seed_sequence("VCPSYM", seq)
+        fires = self._scan_for_fire(sigs.vcp_breakout,
+                                     "VCPSYM", date(2022, 1, 3), 60)
+        assert fires, "vcp_breakout must fire when contraction + breakout present"
+
+    def test_rectangle_breakout_fires(self, p3_db):
+        """20 bars tight range 99-101, then close pushes above range_high * 0.998."""
+        import research.signals as sigs
+        seq = []
+        # 20 tight bars (so range_high ≈ 100.6, range_low ≈ 99.4, range_pct < 0.08)
+        for i in range(20):
+            c = 100.0 + ((i % 2) * 0.3 - 0.15)
+            seq.append((c, c + 0.2, c - 0.2))
+        # One more tight bar (still inside range — this is the "yesterday"
+        # that the detector compares against today)
+        seq.append((100.0, 100.2, 99.8))
+        # Breakout bar
+        seq.append((102.0, 102.5, 100.5))
+        self._seed_sequence("RECTUP", seq)
+        fires = self._scan_for_fire(sigs.rectangle_breakout,
+                                     "RECTUP", date(2022, 1, 3), 25)
+        assert fires, "rectangle_breakout must fire"
+
+    def test_rectangle_breakdown_fires(self, p3_db):
+        """Mirror: tight range, then break below range_low * 1.002."""
+        import research.signals as sigs
+        seq = []
+        for i in range(20):
+            c = 100.0 + ((i % 2) * 0.3 - 0.15)
+            seq.append((c, c + 0.2, c - 0.2))
+        seq.append((100.0, 100.2, 99.8))
+        seq.append((97.5, 99.5, 97.0))  # break below
+        self._seed_sequence("RECTDN", seq)
+        fires = self._scan_for_fire(sigs.rectangle_breakdown,
+                                     "RECTDN", date(2022, 1, 3), 25)
+        assert fires, "rectangle_breakdown must fire"
+
+    def test_pivot_resistance_break_fires(self, p3_db):
+        """Seed bars with a clear pivot-high at bar 15, then prices stay
+        below until a break above in the bar AFTER the 60-bar lookback."""
+        import research.signals as sigs
+        seq = []
+        for i in range(61):
+            if i == 15:
+                c, h, l = 118.0, 120.0, 117.0  # pivot high
+            elif i == 60:
+                c, h, l = 121.0, 122.0, 117.0  # breakout (today)
+            else:
+                c, h, l = 110.0 + ((i % 7) * 0.2), 111.0 + ((i % 7) * 0.2), 109.0
+            seq.append((c, h, l))
+        self._seed_sequence("PIVRES", seq)
+        # The detector needs bar 60 to be "today"; scan around it
+        fires = self._scan_for_fire(sigs.pivot_resistance_break,
+                                     "PIVRES", date(2022, 1, 3), 70)
+        assert fires, "pivot_resistance_break must fire above prior pivot high"
+
+    def test_pivot_support_break_fires(self, p3_db):
+        """Mirror: pivot low, then break below."""
+        import research.signals as sigs
+        seq = []
+        for i in range(61):
+            if i == 15:
+                c, h, l = 82.0, 83.0, 80.0  # pivot low at 80
+            elif i == 60:
+                c, h, l = 78.0, 83.0, 77.0  # break below 80
+            else:
+                c, h, l = 90.0 - ((i % 7) * 0.2), 91.0, 89.0 - ((i % 7) * 0.2)
+            seq.append((c, h, l))
+        self._seed_sequence("PIVSUP", seq)
+        fires = self._scan_for_fire(sigs.pivot_support_break,
+                                     "PIVSUP", date(2022, 1, 3), 70)
+        assert fires, "pivot_support_break must fire below prior pivot low"
+
+    def test_registry_still_has_17(self):
+        """After porting, SIGNAL_DETECTORS still has all 17 entries."""
+        from research.signals import SIGNAL_DETECTORS
+        assert len(SIGNAL_DETECTORS) == 17
+
+    def test_ported_detectors_not_always_false(self, p3_db):
+        """Regression guard: the ported detectors must NOT be the old
+        'return False' stubs. Seed a reversal pattern (decline then
+        rally) and verify the ported Ichimoku detectors fire at least
+        once. Monotonic trends don't trigger crossover-based detectors
+        because tenkan and kijun rise together -- we need a genuine
+        reversal for a crossover to exist."""
+        import research.signals as sigs
+        # Decline + rally → TK cross and Kumo breakout both fire
+        seq = []
+        for i in range(150):
+            if i < 80:
+                c = 100.0 - i * 0.6
+            else:
+                c = 50.0 + (i - 80) * 1.4
+            seq.append((c, c * 1.005, c * 0.995))
+        self._seed_sequence("NOTSTUB", seq)
+        # Both of these are ports from engine/technical.py -- the old
+        # stubs returned False unconditionally.
+        ported_names = ["Ichimoku Kumo Breakout", "Ichimoku TK Cross"]
+        total_fires = 0
+        for name in ported_names:
+            fn = sigs.SIGNAL_DETECTORS[name]
+            fires = self._scan_for_fire(fn, "NOTSTUB",
+                                         date(2022, 1, 3), 150)
+            total_fires += len(fires)
+        assert total_fires > 0, \
+            f"Ported detectors returned False everywhere; regression -- got {total_fires} fires"

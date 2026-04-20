@@ -221,41 +221,321 @@ def bb_lower_break(symbol: str, as_of: date, price_source: Optional[str] = None)
 
 
 # Stubs for complex signals (always False until Phase 3 follow-up implements)
-def ichimoku_kumo_breakout(symbol: str, as_of: date, **kw) -> bool:
-    """Kumo breakout requires senkou span A/B computation over 52-bar window.
-    Stubbed to False until the Ichimoku layer is ported from engine/technical.py."""
-    return False
+# ==================================================================
+# Phase 4 FAZ 4.0.2 — ported from engine/technical.py
+# ==================================================================
+# The 8 previously-stubbed signals below are ports of the runtime
+# CrossHunter's detector logic (compute_ichimoku, detect_vcp,
+# detect_rectangle_breakout, find_pivot_levels). Runtime code operates
+# on a pandas DataFrame with High/Low/Close columns; detectors here
+# operate on a list-of-dicts from infra.pit.get_prices() so the
+# validator stays pandas-free.
+#
+# All detectors are PIT-safe: they only use bars with
+# trade_date <= as_of. The "fires on as_of" semantic means the
+# condition is newly true today (was false yesterday); matches the
+# Phase 3 detectors (golden_cross, macd_bullish_cross, etc.).
 
 
-def ichimoku_kumo_breakdown(symbol: str, as_of: date, **kw) -> bool:
-    return False
+def _ohlc_up_to(symbol: str, as_of: date, n: int,
+                price_source: Optional[str] = None) -> list[dict]:
+    """Return the last n OHLC bars with trade_date <= as_of.
+
+    Returns list of dicts {open, high, low, close, volume, trade_date},
+    trimmed to the last n. Used by Ichimoku/VCP/Rectangle/Pivot
+    detectors that need more than just close.
+    """
+    lookback_days = int(n * 1.6) + 10
+    bars = get_prices(
+        symbol=symbol,
+        from_date=as_of - timedelta(days=lookback_days),
+        to_date=as_of,
+        source=price_source,
+    )
+    return bars[-n:] if len(bars) >= n else bars
 
 
-def ichimoku_tk_cross(symbol: str, as_of: date, **kw) -> bool:
-    """Tenkan-sen (9) / Kijun-sen (26) cross. TODO: port from engine/technical."""
-    return False
+def _highs(bars: list[dict]) -> list[float]:
+    return [float(b["high"]) for b in bars if b.get("high") is not None]
 
 
-def vcp_breakout(symbol: str, as_of: date, **kw) -> bool:
-    """VCP (Volatility Contraction Pattern) -- pattern-based, complex. Stubbed."""
-    return False
+def _lows(bars: list[dict]) -> list[float]:
+    return [float(b["low"]) for b in bars if b.get("low") is not None]
 
 
-def rectangle_breakout(symbol: str, as_of: date, **kw) -> bool:
-    return False
+def _closes(bars: list[dict]) -> list[float]:
+    return [float(b["close"]) for b in bars if b.get("close") is not None]
 
 
-def rectangle_breakdown(symbol: str, as_of: date, **kw) -> bool:
-    return False
+def _ichimoku_levels(highs: list[float], lows: list[float],
+                     end: int) -> Optional[dict]:
+    """Ichimoku {tenkan, kijun, senkou_a, senkou_b} computed on
+    highs[:end] / lows[:end] (so end-exclusive index lets us compute
+    for both "today" and "yesterday" with the same helper).
+
+    Returns None when we lack the 52-bar span needed for senkou_b.
+    Senkou A and B are shifted 26 bars forward in the standard Ichimoku
+    definition; here we return the "current cloud" value, which for
+    the senkou_a/b series is the level computed 26 bars ago. The
+    upstream compute_ichimoku in engine/technical.py does
+    ((tenkan+kijun)/2).shift(26), so the level that's visible TODAY is
+    the one built from 26 bars ago's tenkan/kijun. Match that.
+    """
+    if end < 52:
+        return None
+    h = highs[:end]
+    l = lows[:end]
+
+    def _rolling_max(xs, w, i):
+        # max of xs[i-w+1 : i+1]
+        if i + 1 < w:
+            return None
+        return max(xs[i - w + 1: i + 1])
+
+    def _rolling_min(xs, w, i):
+        if i + 1 < w:
+            return None
+        return min(xs[i - w + 1: i + 1])
+
+    last = end - 1
+    tenkan = (_rolling_max(h, 9, last) + _rolling_min(l, 9, last)) / 2
+    kijun  = (_rolling_max(h, 26, last) + _rolling_min(l, 26, last)) / 2
+    # Senkou A/B visible today = the values that were shifted 26 bars
+    # forward. I.e., the tenkan/kijun computed at index (last - 26).
+    senkou_idx = last - 26
+    if senkou_idx < 8:  # need tenkan/kijun (9-bar min) at that index
+        return None
+    tk_senkou = (_rolling_max(h, 9,  senkou_idx) + _rolling_min(l, 9,  senkou_idx)) / 2
+    kj_senkou = (_rolling_max(h, 26, senkou_idx) + _rolling_min(l, 26, senkou_idx)) / 2
+    senkou_a = (tk_senkou + kj_senkou) / 2
+    # Senkou B = 52-bar midpoint, also shifted; need 52 bars ending at senkou_idx
+    if senkou_idx + 1 < 52:
+        return None
+    senkou_b = (_rolling_max(h, 52, senkou_idx) + _rolling_min(l, 52, senkou_idx)) / 2
+    return {"tenkan": tenkan, "kijun": kijun,
+            "senkou_a": senkou_a, "senkou_b": senkou_b}
 
 
-def pivot_resistance_break(symbol: str, as_of: date, **kw) -> bool:
-    """Pivot point resistance break -- needs pivot computation. Stubbed."""
-    return False
+def ichimoku_kumo_breakout(symbol: str, as_of: date,
+                           price_source: Optional[str] = None) -> bool:
+    """Close crosses above the Ichimoku cloud (max(senkou_a, senkou_b)).
+
+    Ported from engine/technical.py:compute_ichimoku. Requires >=80 bars
+    (52 lookback + 26 shift offset + some buffer). Cross means prior
+    close <= cloud_top and today's close > cloud_top.
+    """
+    bars = _ohlc_up_to(symbol, as_of, 100, price_source)
+    if len(bars) < 80:
+        return False
+    h, l, c = _highs(bars), _lows(bars), _closes(bars)
+    if min(len(h), len(l), len(c)) < 80:
+        return False
+    cur = _ichimoku_levels(h, l, len(h))
+    prev = _ichimoku_levels(h, l, len(h) - 1)
+    if cur is None or prev is None:
+        return False
+    cloud_top_cur = max(cur["senkou_a"], cur["senkou_b"])
+    cloud_top_prev = max(prev["senkou_a"], prev["senkou_b"])
+    return c[-2] <= cloud_top_prev and c[-1] > cloud_top_cur
 
 
-def pivot_support_break(symbol: str, as_of: date, **kw) -> bool:
-    return False
+def ichimoku_kumo_breakdown(symbol: str, as_of: date,
+                            price_source: Optional[str] = None) -> bool:
+    """Close crosses below the Ichimoku cloud (min(senkou_a, senkou_b))."""
+    bars = _ohlc_up_to(symbol, as_of, 100, price_source)
+    if len(bars) < 80:
+        return False
+    h, l, c = _highs(bars), _lows(bars), _closes(bars)
+    if min(len(h), len(l), len(c)) < 80:
+        return False
+    cur = _ichimoku_levels(h, l, len(h))
+    prev = _ichimoku_levels(h, l, len(h) - 1)
+    if cur is None or prev is None:
+        return False
+    cloud_bot_cur = min(cur["senkou_a"], cur["senkou_b"])
+    cloud_bot_prev = min(prev["senkou_a"], prev["senkou_b"])
+    return c[-2] >= cloud_bot_prev and c[-1] < cloud_bot_cur
+
+
+def ichimoku_tk_cross(symbol: str, as_of: date,
+                      price_source: Optional[str] = None) -> bool:
+    """Tenkan-sen (9) crosses above Kijun-sen (26) -- bullish TK cross.
+
+    Ported from engine/technical.py:SIGNAL_INFO where it's marked
+    bullish. A bearish TK cross (tenkan crosses below kijun) is not
+    one of the 17 SIGNAL_DETECTORS so we don't implement it here.
+    """
+    bars = _ohlc_up_to(symbol, as_of, 40, price_source)
+    if len(bars) < 30:
+        return False
+    h, l = _highs(bars), _lows(bars)
+    if min(len(h), len(l)) < 30:
+        return False
+    cur = _ichimoku_levels(h, l, len(h))
+    prev = _ichimoku_levels(h, l, len(h) - 1)
+    # For TK we don't need senkou (26-bar shift); allow fallback
+    # if the helper bailed for senkou reasons but tenkan/kijun would
+    # otherwise compute. Re-compute them directly here to decouple.
+    def _tk(h, l, end):
+        if end < 26: return None, None
+        tk = (max(h[end-9:end]) + min(l[end-9:end])) / 2
+        kj = (max(h[end-26:end]) + min(l[end-26:end])) / 2
+        return tk, kj
+    tk_cur, kj_cur = _tk(h, l, len(h))
+    tk_prev, kj_prev = _tk(h, l, len(h) - 1)
+    if None in (tk_cur, kj_cur, tk_prev, kj_prev):
+        return False
+    return tk_prev <= kj_prev and tk_cur > kj_cur
+
+
+def vcp_breakout(symbol: str, as_of: date,
+                 price_source: Optional[str] = None) -> bool:
+    """Volatility Contraction Pattern breakout.
+
+    Ported from engine/technical.py:detect_vcp:
+      - ATR(5) < ATR(20) * 0.85   -- recent volatility contracting
+      - ATR(20) < ATR(50) * 0.90
+      - Close > max(high[-5:]) * 0.998  -- breakout of recent high
+    ATR here is simple mean of true range (matches the engine).
+    """
+    bars = _ohlc_up_to(symbol, as_of, 60, price_source)
+    if len(bars) < 50:
+        return False
+    h, l, c = _highs(bars), _lows(bars), _closes(bars)
+    if min(len(h), len(l), len(c)) < 50:
+        return False
+    # True range series
+    tr: list[float] = []
+    for i in range(1, len(c)):
+        prev_c = c[i - 1]
+        tr.append(max(h[i] - l[i],
+                     abs(h[i] - prev_c),
+                     abs(l[i] - prev_c)))
+    if len(tr) < 50:
+        return False
+    atr_5 = sum(tr[-5:]) / 5
+    atr_20 = sum(tr[-20:]) / 20
+    atr_50 = sum(tr[-50:]) / 50
+    if atr_50 == 0:
+        return False
+    contracting = atr_5 < atr_20 * 0.85 and atr_20 < atr_50 * 0.90
+    recent_high = max(h[-5:])
+    breakout = c[-1] > recent_high * 0.998
+    return contracting and breakout
+
+
+def _rectangle_signal(bars: list[dict], direction: str) -> bool:
+    """Shared logic for Rectangle Breakout / Breakdown.
+
+    Ported from engine/technical.py:detect_rectangle_breakout with a
+    correction: the runtime code uses the last 20 bars INCLUDING today,
+    which means today's breakout high itself pulls range_high up so
+    the 'break above range_high * 0.998' check is noisy. For Phase 3's
+    backtest semantics (fires-on-as_of-date), we want the rectangle to
+    be defined by the 20 bars BEFORE today, and today's close to
+    cross it. Uses bars[-21:-1] for the range + bars[-1] for the
+    breakout candidate.
+
+    A 'rectangle' = range_pct < 8% over the prior 20 bars.
+    Breakout = close > range_high * 0.998 (bullish) or
+               close < range_low  * 1.002 (bearish),
+    with the prior day still inside the range.
+    """
+    if len(bars) < 22:  # need 20 range + yesterday + today
+        return False
+    h, l, c = _highs(bars), _lows(bars), _closes(bars)
+    if min(len(h), len(l), len(c)) < 22:
+        return False
+    range_bars_high = h[-22:-1]   # 20 bars ending yesterday
+    range_bars_low = l[-22:-1]
+    range_high = max(range_bars_high[-20:])
+    range_low = min(range_bars_low[-20:])
+    if range_low == 0:
+        return False
+    range_pct = (range_high - range_low) / range_low
+    if range_pct >= 0.08:
+        return False
+    price = c[-1]
+    prev_price = c[-2]
+    if direction == "bullish":
+        return prev_price <= range_high * 0.998 and price > range_high * 0.998
+    else:  # bearish
+        return prev_price >= range_low * 1.002 and price < range_low * 1.002
+
+
+def rectangle_breakout(symbol: str, as_of: date,
+                       price_source: Optional[str] = None) -> bool:
+    bars = _ohlc_up_to(symbol, as_of, 26, price_source)
+    return _rectangle_signal(bars, "bullish")
+
+
+def rectangle_breakdown(symbol: str, as_of: date,
+                        price_source: Optional[str] = None) -> bool:
+    bars = _ohlc_up_to(symbol, as_of, 26, price_source)
+    return _rectangle_signal(bars, "bearish")
+
+
+def _pivot_levels(bars: list[dict],
+                  lookback: int = 60) -> tuple[Optional[float], Optional[float]]:
+    """Fractal-based pivot resistance/support over the last `lookback` bars.
+
+    Ported from engine/technical.py:find_pivot_levels.
+      - A fractal pivot high: high[i] == max(high[i-3..i+3])
+      - A fractal pivot low:  low[i]  == min(low[i-3..i+3])
+      - Resistance = max pivot high, Support = min pivot low.
+    """
+    if len(bars) < lookback:
+        return None, None
+    h = _highs(bars[-lookback:])
+    l = _lows(bars[-lookback:])
+    if min(len(h), len(l)) < lookback:
+        return None, None
+    ph: list[float] = []
+    pl: list[float] = []
+    for i in range(3, len(h) - 3):
+        if h[i] == max(h[i - 3: i + 4]):
+            ph.append(h[i])
+        if l[i] == min(l[i - 3: i + 4]):
+            pl.append(l[i])
+    return (max(ph) if ph else None), (min(pl) if pl else None)
+
+
+def pivot_resistance_break(symbol: str, as_of: date,
+                           price_source: Optional[str] = None) -> bool:
+    """'Direnç Kırılımı' -- close crosses above the fractal-pivot
+    resistance from the prior 60-bar window.
+
+    Uses the 60 bars BEFORE today to identify the resistance level, so
+    today's close crossing it is a fresh breakout (not the same bar
+    that defined the level). Fires when prev close was at/below the
+    level and today's close is above it.
+    """
+    bars = _ohlc_up_to(symbol, as_of, 61, price_source)
+    if len(bars) < 61:
+        return False
+    # Use bars[0:60] to define the level; bars[60] is today, bars[59] is yesterday.
+    resistance, _ = _pivot_levels(bars[:60], lookback=60)
+    if resistance is None:
+        return False
+    c = _closes(bars)
+    if len(c) < 61:
+        return False
+    return c[-2] <= resistance and c[-1] > resistance
+
+
+def pivot_support_break(symbol: str, as_of: date,
+                        price_source: Optional[str] = None) -> bool:
+    """'Destek Kırılımı' -- close crosses below the fractal-pivot support."""
+    bars = _ohlc_up_to(symbol, as_of, 61, price_source)
+    if len(bars) < 61:
+        return False
+    _, support = _pivot_levels(bars[:60], lookback=60)
+    if support is None:
+        return False
+    c = _closes(bars)
+    if len(c) < 61:
+        return False
+    return c[-2] >= support and c[-1] < support
 
 
 # ============ Registry ============
