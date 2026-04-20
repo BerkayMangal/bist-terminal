@@ -28,3 +28,9 @@ borsapy>=0.8.0
 # AI providers (optional — graceful degrade if key missing)
 openai>=1.0.0
 anthropic>=0.18.0
+
+# Phase 1: authentication — argon2id password hashing + JWT session tokens
+# See core/auth.py + api/auth.py. Both libraries are load-bearing at startup;
+# core/auth.py's require_jwt_secret() + PasswordHasher() import at app boot time.
+argon2-cffi>=23.1.0
+PyJWT>=2.8.0
