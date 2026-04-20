@@ -24,6 +24,8 @@ import sqlite3
 import threading
 from typing import Optional
 
+from infra.migrations import apply_migrations, _ensure_column
+
 log = logging.getLogger("bistbull.storage")
 
 DB_PATH = os.environ.get("BISTBULL_DB_PATH", "/data/bistbull.db")
@@ -42,38 +44,27 @@ def _get_conn() -> sqlite3.Connection:
     return _local.conn
 
 
-def _ensure_column(conn: sqlite3.Connection, table: str, column: str, ddl: str) -> None:
-    """Idempotently add a column to an existing table.
-
-    SQLite has no 'ADD COLUMN IF NOT EXISTS' so we inspect PRAGMA
-    table_info and ALTER only if needed. Safe to call on every startup.
-    """
-    rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
-    if not rows:
-        # Table doesn't exist yet; CREATE TABLE handled elsewhere.
-        return
-    existing = {r[1] for r in rows}
-    if column not in existing:
-        conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}")
-
-
 def init_db() -> None:
-    """Create tables if they don't exist and run additive migrations.
+    """Initialize the schema. Three-step process as of Phase 2:
 
-    Safe to call multiple times.
+      1. Create "baseline" tables that pre-date the migrations pattern
+         (watchlist, alerts, symbol_snapshots -- Phase 7 vintage). These
+         stay here for backwards compatibility with long-running DBs
+         whose _schema_migrations tracking started only at Phase 2.
+      2. _ensure_column the Phase 1 last_accessed_at additions. The
+         corresponding migration file (002) is a no-op marker because
+         SQLite lacks ADD COLUMN IF NOT EXISTS and we need a runtime
+         check against PRAGMA table_info regardless of tracking.
+      3. apply_migrations(conn) -- run any new migrations from
+         infra/migrations/. NEW schema goes here, not inline.
+
+    Safe to call multiple times (every step is idempotent).
     """
     conn = _get_conn()
+
+    # Step 1: baseline / legacy tables (pre-migrations-pattern).
     conn.executescript(
         """
-        CREATE TABLE IF NOT EXISTS users (
-            user_id       TEXT PRIMARY KEY,
-            email         TEXT UNIQUE NOT NULL,
-            password_hash TEXT NOT NULL,
-            created_at    TEXT NOT NULL DEFAULT (datetime('now')),
-            last_login_at TEXT,
-            is_active     INTEGER NOT NULL DEFAULT 1
-        );
-
         CREATE TABLE IF NOT EXISTS watchlist (
             user_id          TEXT NOT NULL,
             symbol           TEXT NOT NULL,
@@ -100,8 +91,6 @@ def init_db() -> None:
             ON alerts(user_id, created_at DESC);
         CREATE INDEX IF NOT EXISTS idx_alerts_dedupe
             ON alerts(dedupe_key);
-        CREATE INDEX IF NOT EXISTS idx_users_email
-            ON users(email);
 
         CREATE TABLE IF NOT EXISTS symbol_snapshots (
             user_id    TEXT NOT NULL,
@@ -113,14 +102,16 @@ def init_db() -> None:
         """
     )
 
-    # Phase 1 migration: add last_accessed_at to pre-existing installations.
-    # No-op on fresh DBs (columns are created inline above) and on already-migrated ones.
+    # Step 2: runtime backfill for Phase 1 columns on pre-Phase-1 installs.
     _ensure_column(conn, "watchlist", "last_accessed_at",
                    "TEXT NOT NULL DEFAULT (datetime('now'))")
     _ensure_column(conn, "alerts", "last_accessed_at",
                    "TEXT NOT NULL DEFAULT (datetime('now'))")
-
     conn.commit()
+
+    # Step 3: run versioned migrations (001 users, 002 marker, 003 score_history, ...).
+    apply_migrations(conn)
+
     log.info(f"SQLite storage initialized: {DB_PATH}")
 
 
