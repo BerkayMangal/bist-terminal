@@ -841,3 +841,76 @@ class TestPortedSignals:
             total_fires += len(fires)
         assert total_fires > 0, \
             f"Ported detectors returned False everywhere; regression -- got {total_fires} fires"
+
+
+class TestUniverseAuditSharpening:
+    """Phase 4 FAZ 4.0.4: the shipped data/universe_history.csv now has
+    13 rows promoted from 'approximate' to 'addition'/'removal' with
+    source URLs. The remaining 21 stay 'approximate' because I didn't
+    have a confident date for their original index entry."""
+
+    def _load(self, monkeypatch, tmp_path):
+        import threading
+        db = tmp_path / "audit.db"
+        monkeypatch.setenv("BISTBULL_DB_PATH", str(db))
+        import infra.storage
+        infra.storage._local = threading.local()
+        infra.storage.DB_PATH = str(db)
+        from infra.storage import init_db
+        init_db()
+        from infra.pit import load_universe_history_csv
+        return load_universe_history_csv("data/universe_history.csv")
+
+    def test_csv_loads_clean(self, tmp_path, monkeypatch):
+        n = self._load(monkeypatch, tmp_path)
+        assert n >= 30  # Phase 2 seed had 33; Phase 3 added HEKTS (34)
+
+    def test_promoted_rows_have_source_urls(self, tmp_path, monkeypatch):
+        """Each non-approximate row must have a source_url per the spec S1."""
+        self._load(monkeypatch, tmp_path)
+        from infra.storage import _get_conn
+        rows = _get_conn().execute(
+            "SELECT reason, source_url FROM universe_history "
+            "WHERE reason != 'approximate'"
+        ).fetchall()
+        assert len(rows) >= 10, f"expected >=10 promoted rows, got {len(rows)}"
+        for r in rows:
+            assert r["source_url"], f"row {dict(r)} has empty source_url"
+
+    def test_known_removals_recorded(self, tmp_path, monkeypatch):
+        """Regression: HEKTS + the main 2020-2026 removals must be
+        tagged 'removal', not 'approximate'."""
+        self._load(monkeypatch, tmp_path)
+        from infra.storage import _get_conn
+        rows = _get_conn().execute(
+            "SELECT symbol, reason FROM universe_history "
+            "WHERE symbol IN ('HEKTS','KOZAA','KOZAL','HALKB','EKGYO','TTKOM','KRDMD')"
+        ).fetchall()
+        for r in rows:
+            assert r["reason"] == "removal", f"{r['symbol']} should be removal, got {r['reason']}"
+
+    def test_known_additions_recorded(self, tmp_path, monkeypatch):
+        self._load(monkeypatch, tmp_path)
+        from infra.storage import _get_conn
+        rows = _get_conn().execute(
+            "SELECT symbol, reason FROM universe_history "
+            "WHERE symbol IN ('SASA','ASTOR','OYAKC','AKSEN','PGSUS','ASELS')"
+        ).fetchall()
+        for r in rows:
+            assert r["reason"] == "addition", f"{r['symbol']} should be addition, got {r['reason']}"
+
+    def test_survivorship_holds_after_audit(self, tmp_path, monkeypatch):
+        """The audit must not break Phase 2's survivorship semantics.
+        2020-06-15 membership must still include removed-later symbols
+        and exclude added-later ones."""
+        self._load(monkeypatch, tmp_path)
+        from infra.pit import get_universe_at
+        mid_2020 = set(get_universe_at("BIST30", "2020-06-15"))
+        today = set(get_universe_at("BIST30", "2026-04-20"))
+        # Removed-later were in 2020:
+        assert {"KOZAA", "KOZAL", "HALKB", "EKGYO"} <= mid_2020
+        # Added-later were NOT in 2020:
+        assert {"ASTOR", "OYAKC", "AKSEN"}.isdisjoint(mid_2020)
+        # Today's universe includes additions and excludes removals:
+        assert "ASTOR" in today and "OYAKC" in today
+        assert "KOZAA" not in today and "EKGYO" not in today
