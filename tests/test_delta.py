@@ -1,6 +1,6 @@
 import os;os.environ["BISTBULL_DB_PATH"]="/tmp/test_delta2.db"
 if os.path.exists("/tmp/test_delta2.db"):os.remove("/tmp/test_delta2.db")
-from storage import _get_conn,init_db;from engine.delta import save_daily_snapshot,compute_delta,watchlist_changes,get_movers
+from infra.storage import _get_conn,init_db;from engine.delta import save_daily_snapshot,compute_delta,watchlist_changes,get_movers
 init_db()
 class TestDelta:
  def test_save(self):save_daily_snapshot("T.IS",{"overall":65,"ivme":55,"risk_score":-5,"fa_score":60,"decision":"İZLE"});r=_get_conn().execute("SELECT * FROM score_history WHERE symbol='T.IS'").fetchone();assert r is not None
