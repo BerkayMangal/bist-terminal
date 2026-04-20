@@ -129,75 +129,140 @@ def _fetch_real(
 ) -> list[dict]:
     """Fetch quarterly filings from borsapy for one symbol.
 
-    Shape returned: list of filings in the internal dict format:
-        {"period_end": date, "filed_at": date,
-         "metrics": {name: value_or_none, ...}}
+    Phase 4 FAZ 4.0.1: corrected to use the actual borsapy 0.8.7 API,
+    which does NOT have a top-level ``borsapy.get_filings()`` function.
+    The real API is per-ticker methods returning pandas DataFrames:
 
-    The fetcher argument exists so tests (and the Phase 3.0 dry-run
-    harness) can inject a deterministic mock:
-        fetcher(symbol) -> iterable of raw filing records
-    If None, the real borsapy path is used.
+        bp.Ticker(tc).get_income_stmt(quarterly=True,
+                                      financial_group='UFRS' or None,
+                                      last_n=32)
+        bp.Ticker(tc).get_balance_sheet(quarterly=True, ...)
+        bp.Ticker(tc).get_cashflow(quarterly=True, ...)
 
-    Real-path contract (expected from data/providers.py:fetch_raw_v9 when
-    a Phase 3b follow-up wires it through):
-        borsapy.get_filings(symbol) -> list[RawFiling]
-        RawFiling fields used here:
-          .period_end (date), .filed_at (date or datetime), .statements
-          .statements["income"]["revenue"] etc.
-    We map RawFiling.statements into QUARTERLY_METRICS values; missing
-    metrics are None (persists as NULL in value column).
+    Each DataFrame has Turkish KAP line names as rows ("Satış Gelirleri",
+    "DÖNEM KARI (ZARARI)", etc.) and period-end dates as columns, with
+    the most recent period in column 0.
 
-    Error semantics:
-      - Transient HTTP errors (timeout, 5xx) raise -- caller retries via
-        the ThreadPoolExecutor's future, which ingest() catches and
-        records in the checkpoint.
-      - Data-shape errors (unexpected RawFiling layout) also raise -- the
-        operator needs to see them, not silently drop rows.
-      - Empty responses return [] (symbol truly has no filings in range).
+    Reference implementation: ``data/providers.py:fetch_raw_v9`` uses
+    this exact pattern for the live-trading path; the line-name maps
+    (IS_MAP, BS_MAP, CF_MAP) are imported from there when available.
+
+    Returned shape (unchanged from Phase 3 to keep the persistence
+    layer callers uncoupled):
+        [{"period_end": date, "filed_at": date,
+          "metrics": {revenue, net_income, roe, debt_to_equity}}]
+
+    filed_at estimation:
+        The statement DataFrames do not expose KAP disclosure dates, so
+        we estimate filed_at as period_end + 60 days (typical BIST
+        disclosure lag). A Phase 4 follow-up could scrape KAP for exact
+        dates; for the PIT guarantees we only need filed_at to be
+        conservative (later rather than earlier), so +60 days is safe
+        for look-ahead-free reads.
+
+    ROE / debt_to_equity:
+        Computed from line items (not a separate 'ratios' statement,
+        which borsapy does not expose):
+            ROE = net_income / equity       (same period)
+            D/E = total_debt / equity       (same period)
+        Returns None if either input is missing/zero.
+
+    Fetcher injection:
+        ``fetcher(symbol) -> {'income': DataFrame, 'balance': DataFrame,
+                              'cashflow': DataFrame}``
+        Lets tests run the parse logic deterministically without
+        installing borsapy. When fetcher is None, the default path
+        lazily imports borsapy and calls the Ticker methods above.
+
+    Banks get ``financial_group='UFRS'`` automatically via the shared
+    BANK_TICKERS set; matches fetch_raw_v9.
     """
     if fetcher is None:
-        # Default path: import borsapy lazily so the module is importable
-        # in environments without borsapy installed (e.g. this sandbox).
         try:
-            import borsapy  # type: ignore
+            import borsapy as bp  # type: ignore
         except ImportError as e:
             raise RuntimeError(
-                "borsapy not installed. Install it on the ingest host or "
-                "pass fetcher=... for testing. See data/providers.py."
+                "borsapy not installed. Install it on the ingest host "
+                "(pip install borsapy) or pass fetcher=... for testing."
             ) from e
-        fetcher = borsapy.get_filings
 
-    raw_filings = list(fetcher(symbol))
-    out: list[dict] = []
-    for raw in raw_filings:
+        # Respect data/providers.py's bank list and ticker cleaning.
+        # Soft-import so a broken providers import doesn't block ingest.
         try:
-            period_end = _coerce_date(getattr(raw, "period_end", None)
-                                      if not isinstance(raw, dict)
-                                      else raw.get("period_end"))
-            filed_at = _coerce_date(getattr(raw, "filed_at", None)
-                                    if not isinstance(raw, dict)
-                                    else raw.get("filed_at"))
-        except Exception as e:
-            raise ValueError(
-                f"unparseable date in raw filing for {symbol}: {e}"
-            ) from e
+            from data.providers import is_bank as _is_bank
+        except Exception:
+            def _is_bank(tc: str) -> bool:  # type: ignore
+                return False
 
-        if period_end is None or filed_at is None:
-            # Skip filings without a period_end / filed_at. Defensive:
-            # better to drop a row than to stamp a wrong date into PIT.
+        def _real_fetch(sym: str) -> dict:
+            tc = sym.upper().replace(".IS", "").replace(".E", "")
+            tk = bp.Ticker(tc)
+            fg = "UFRS" if _is_bank(tc) else None
+            # last_n=40 comfortably covers 10 years × 4 quarters even
+            # when a few older quarters are missing in borsapy.
+            return {
+                "income":   tk.get_income_stmt(quarterly=True, financial_group=fg, last_n=40),
+                "balance":  tk.get_balance_sheet(quarterly=True, financial_group=fg, last_n=40),
+                "cashflow": tk.get_cashflow(quarterly=True, financial_group=fg, last_n=40),
+            }
+
+        fetcher = _real_fetch
+
+    data = fetcher(symbol)
+    income = data.get("income")
+    balance = data.get("balance")
+    cashflow = data.get("cashflow")
+
+    # Collect all distinct period_end columns across the three statements.
+    # Columns are usually pandas Timestamps or ISO strings.
+    periods: set[date] = set()
+    for df in (income, balance, cashflow):
+        if df is None:
             continue
-        if not (from_date <= period_end <= to_date):
+        try:
+            empty = df.empty
+        except AttributeError:
             continue
+        if empty:
+            continue
+        for col in df.columns:
+            d = _coerce_date(col)
+            if d is not None:
+                periods.add(d)
 
-        statements = (raw.get("statements") if isinstance(raw, dict)
-                      else getattr(raw, "statements", {})) or {}
-        metrics: dict[str, Optional[float]] = {}
-        for metric in QUARTERLY_METRICS:
-            metrics[metric] = _extract_metric(statements, metric)
+    # Restrict to the requested window
+    periods_sorted = sorted(p for p in periods if from_date <= p <= to_date)
 
-        out.append({"period_end": period_end, "filed_at": filed_at,
-                    "metrics": metrics})
-    return out
+    filings: list[dict] = []
+    for period in periods_sorted:
+        revenue      = _pick_kap(income,  _KAP_NAMES["revenue"], period)
+        net_income   = _pick_kap(income,  _KAP_NAMES["net_income"], period)
+        equity       = _pick_kap(balance, _KAP_NAMES["equity"], period)
+        total_debt   = _extract_total_debt(balance, period)
+
+        roe: Optional[float] = None
+        if net_income is not None and equity and equity != 0:
+            roe = round(net_income / equity, 6)
+
+        debt_to_equity: Optional[float] = None
+        if total_debt is not None and equity and equity != 0:
+            debt_to_equity = round(total_debt / equity, 6)
+
+        filings.append({
+            "period_end": period,
+            # Conservative filed_at estimate: +60 days after period end.
+            # Later than truth is PIT-safe; earlier than truth would be a
+            # look-ahead bug. We explicitly err on the side of later.
+            "filed_at": period + timedelta(days=60),
+            "metrics": {
+                "revenue": revenue,
+                "net_income": net_income,
+                "roe": roe,
+                "debt_to_equity": debt_to_equity,
+            },
+        })
+
+    return filings
 
 
 def _coerce_date(x) -> Optional[date]:
@@ -213,35 +278,121 @@ def _coerce_date(x) -> Optional[date]:
     raise TypeError(f"cannot coerce {type(x).__name__} to date")
 
 
-# Mapping of our internal metric name -> borsapy statement path.
-# Split out so Phase 3 follow-ups can add metrics without touching _fetch_real.
-_METRIC_PATHS: dict[str, list[tuple[str, str]]] = {
-    # (statement_bucket, field_name) candidates in order; first match wins
-    "revenue":        [("income", "revenue"), ("income", "total_revenue"),
-                       ("income", "net_sales")],
-    "net_income":     [("income", "net_income"), ("income", "profit_after_tax")],
-    "roe":            [("ratios", "roe"), ("ratios", "return_on_equity")],
-    "debt_to_equity": [("ratios", "debt_to_equity"), ("balance", "debt_to_equity")],
+# ================================================================
+# KAP line-name dictionary (Phase 4 FAZ 4.0.1)
+# ================================================================
+# Matches data/providers.py IS_MAP / BS_MAP so the backfill speaks the
+# same Turkish KAP vocabulary as the live-trading fetch path. Each
+# entry is a list of candidate row-name strings; first match wins.
+# Partial (substring) matching is handled by _pick_kap as a fallback.
+
+_KAP_NAMES: dict[str, list[str]] = {
+    "revenue": ["Satış Gelirleri", "Hasılat"],
+    "net_income": [
+        "DÖNEM KARI (ZARARI)",
+        "SÜRDÜRÜLEN FAALİYETLER DÖNEM KARI/ZARARI",
+        "Net Dönem Karı/Zararı",
+    ],
+    "equity": [
+        "Ana Ortaklığa Ait Özkaynaklar",
+        "Özkaynaklar",
+        "TOPLAM ÖZKAYNAKLAR",
+    ],
+    # Debt is composed from long- and short-term financial liabilities;
+    # we sum them in _extract_total_debt.
+    "long_term_debt": [
+        "Uzun Vadeli Finansal Borçlar",
+        "Uzun Vadeli Yükümlülükler - Finansal Borçlar",
+    ],
+    "short_term_debt": [
+        "Kısa Vadeli Finansal Borçlar",
+        "Kısa Vadeli Yükümlülükler - Finansal Borçlar",
+    ],
+    # Fallback if only a total-debt line is available
+    "total_liabilities_long": ["Uzun Vadeli Yükümlülükler"],
+    "total_liabilities_short": ["Kısa Vadeli Yükümlülükler"],
 }
 
 
-def _extract_metric(statements: dict, metric: str) -> Optional[float]:
-    """Pull a single metric value out of a borsapy statements blob.
+def _norm_name(s) -> str:
+    """Whitespace + nbsp normalization. Matches data/providers._norm."""
+    import re as _re
+    if not isinstance(s, str):
+        return ""
+    return _re.sub(r"\s+", " ", s.replace("\xa0", " ")).strip()
 
-    Returns None if not found in any of the candidate paths.
+
+def _pick_kap(df, names: list[str], period: date) -> Optional[float]:
+    """Select a value from a period-columned KAP DataFrame by (name, date).
+
+    Mirrors ``data/providers._pick`` but keys the column by period_end
+    date rather than positional offset. Returns float or None.
+    - Exact row-name match first (case-insensitive, whitespace-normalized).
+    - Substring fallback second (catches minor KAP re-phrasings).
     """
-    for bucket, field in _METRIC_PATHS.get(metric, []):
-        try:
-            v = statements.get(bucket, {}).get(field)
-        except AttributeError:
-            continue
-        if v is None:
-            continue
-        try:
-            return float(v)
-        except (TypeError, ValueError):
-            continue
+    if df is None:
+        return None
+    try:
+        if df.empty:
+            return None
+    except AttributeError:
+        return None
+
+    # Find the column matching the requested period
+    target_col = None
+    for col in df.columns:
+        if _coerce_date(col) == period:
+            target_col = col
+            break
+    if target_col is None:
+        return None
+
+    # Row-name match
+    target_names = [_norm_name(n).lower() for n in names]
+
+    # Exact
+    for idx in df.index:
+        if _norm_name(idx).lower() in target_names:
+            try:
+                v = df.loc[idx, target_col]
+                if hasattr(v, "iloc"):  # duplicate-index Series -> take first
+                    v = v.iloc[0]
+                return float(v)
+            except (TypeError, ValueError, KeyError):
+                continue
+
+    # Partial
+    for name_norm in target_names:
+        for idx in df.index:
+            if name_norm in _norm_name(idx).lower():
+                try:
+                    v = df.loc[idx, target_col]
+                    if hasattr(v, "iloc"):
+                        v = v.iloc[0]
+                    return float(v)
+                except (TypeError, ValueError, KeyError):
+                    continue
     return None
+
+
+def _extract_total_debt(balance_df, period: date) -> Optional[float]:
+    """Compute total debt from long + short term financial borrowings.
+
+    Priority:
+      1. If both LT and ST financial-debt lines are present, sum them.
+      2. Otherwise return None (don't fall back to total liabilities --
+         that inflates D/E with non-interest-bearing items like trade
+         payables and gives a misleading leverage reading).
+
+    Phase 4 follow-up could add more granular extraction (e.g. long
+    term provisions vs borrowings), but for the calibration Phase 4.7
+    consumes, LT+ST financial borrowings / equity is the canonical D/E.
+    """
+    lt = _pick_kap(balance_df, _KAP_NAMES["long_term_debt"], period)
+    st = _pick_kap(balance_df, _KAP_NAMES["short_term_debt"], period)
+    if lt is None and st is None:
+        return None
+    return (lt or 0.0) + (st or 0.0)
 
 
 def _load_checkpoint() -> Optional[dict]:

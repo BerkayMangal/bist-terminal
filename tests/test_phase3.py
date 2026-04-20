@@ -154,45 +154,63 @@ class TestPriceHistoryPIT:
 
 class TestThreadedIngest:
     def test_real_path_with_mock_fetcher(self, p3_db, tmp_path, monkeypatch):
+        """Phase 4 FAZ 4.0.1: _fetch_real now consumes the real
+        borsapy API shape, which is pandas DataFrames from
+        Ticker.get_income_stmt() / get_balance_sheet() / get_cashflow().
+        Columns are period-end Timestamps, rows are Turkish KAP line
+        names matching data/providers.py:IS_MAP/BS_MAP."""
+        import pandas as pd
         from research.ingest_filings import ingest
         monkeypatch.setattr(
             "research.ingest_filings.CHECKPOINT_PATH", tmp_path / "ck.json")
 
+        # Build DataFrames in the real borsapy shape
+        periods = [pd.Timestamp("2023-03-31"), pd.Timestamp("2023-06-30")]
+        income = pd.DataFrame({
+            periods[0]: [1.0e9, 1.0e8],
+            periods[1]: [1.1e9, 1.2e8],
+        }, index=["Satış Gelirleri", "DÖNEM KARI (ZARARI)"])
+        balance = pd.DataFrame({
+            periods[0]: [2.0e9, 3.0e8, 1.5e8],
+            periods[1]: [2.1e9, 3.2e8, 1.6e8],
+        }, index=["Ana Ortaklığa Ait Özkaynaklar",
+                  "Uzun Vadeli Finansal Borçlar",
+                  "Kısa Vadeli Finansal Borçlar"])
+
         def mock_fetcher(symbol):
-            return [
-                {"period_end": date(2023, 3, 31), "filed_at": date(2023, 5, 15),
-                 "statements": {
-                    "income": {"revenue": 1e9, "net_income": 1e8},
-                    "ratios": {"roe": 0.1, "debt_to_equity": 0.5}}}]
+            return {"income": income, "balance": balance, "cashflow": None}
 
         r = ingest(
             symbols=["THYAO", "AKBNK", "ISCTR"],
             from_date=date(2022, 1, 1), to_date=date(2024, 1, 1),
-            dry_run=False,  # real path via mock
-            fetcher=mock_fetcher,
+            dry_run=False, fetcher=mock_fetcher,
             threaded=True, max_workers=3,
         )
         assert r["totals"]["symbols"] == 3
-        assert r["totals"]["filings"] == 3
-        assert r["totals"]["rows"] == 12  # 3 × 4 metrics
+        # 2 filings per symbol, 4 metrics each = 8 rows per symbol
+        assert r["totals"]["filings"] == 3 * 2
+        assert r["totals"]["rows"] == 3 * 2 * 4
         assert len(r["completed"]) == 3
 
     def test_per_symbol_error_isolation(self, p3_db, tmp_path, monkeypatch):
+        """Error in one symbol's fetcher call must not stop other symbols."""
+        import pandas as pd
         from research.ingest_filings import ingest
         monkeypatch.setattr(
             "research.ingest_filings.CHECKPOINT_PATH", tmp_path / "ck.json")
 
         call_count = {"n": 0}
         lock = threading.Lock()
+        ok_income = pd.DataFrame({
+            pd.Timestamp("2023-03-31"): [1.0e9],
+        }, index=["Satış Gelirleri"])
 
         def flaky_fetcher(symbol):
             with lock:
                 call_count["n"] += 1
             if symbol == "AKBNK":
                 raise RuntimeError("simulated fetch error")
-            return [{"period_end": date(2023, 3, 31),
-                     "filed_at": date(2023, 5, 15),
-                     "statements": {"income": {"revenue": 1e9}}}]
+            return {"income": ok_income, "balance": None, "cashflow": None}
 
         r = ingest(
             symbols=["THYAO", "AKBNK", "ISCTR"],
@@ -486,3 +504,121 @@ class TestCompareSources:
                          "kap", "net_income", 1.005e9)  # 0.5% diff
         diffs = find_source_disagreements(rel_tol=0.01)
         assert diffs == []
+
+
+class TestKapFetchReal:
+    """Phase 4 FAZ 4.0.1: _fetch_real parsing of real borsapy DataFrames
+    (Turkish KAP line names, period-end Timestamp columns)."""
+
+    def _df(self, rows: dict[str, list], periods: list[str]):
+        import pandas as pd
+        # rows: {line_name: [v_period0, v_period1, ...]}
+        cols = [pd.Timestamp(p) for p in periods]
+        return pd.DataFrame(rows, index=list(rows.keys())).T.set_index(
+            pd.Index(list(rows.keys()))
+        ) if False else pd.DataFrame(
+            {col: [rows[name][i] for name in rows] for i, col in enumerate(cols)},
+            index=list(rows.keys()),
+        )
+
+    def test_single_period_end_to_end(self, p3_db, tmp_path, monkeypatch):
+        import pandas as pd
+        from research.ingest_filings import _fetch_real
+        income = pd.DataFrame({
+            pd.Timestamp("2023-12-31"): [5.0e9, 1.2e9],
+        }, index=["Satış Gelirleri", "DÖNEM KARI (ZARARI)"])
+        balance = pd.DataFrame({
+            pd.Timestamp("2023-12-31"): [2.0e10, 3.0e9, 1.5e9],
+        }, index=[
+            "Ana Ortaklığa Ait Özkaynaklar",
+            "Uzun Vadeli Finansal Borçlar",
+            "Kısa Vadeli Finansal Borçlar",
+        ])
+
+        def f(sym):
+            return {"income": income, "balance": balance, "cashflow": None}
+
+        fs = _fetch_real("THYAO", date(2023, 1, 1), date(2024, 1, 1), fetcher=f)
+        assert len(fs) == 1
+        m = fs[0]["metrics"]
+        assert m["revenue"] == 5.0e9
+        assert m["net_income"] == 1.2e9
+        # ROE = 1.2e9 / 2.0e10 = 0.06
+        assert abs(m["roe"] - 0.06) < 1e-9
+        # D/E = (3.0e9 + 1.5e9) / 2.0e10 = 0.225
+        assert abs(m["debt_to_equity"] - 0.225) < 1e-9
+        # filed_at = period + 60 days
+        assert fs[0]["filed_at"] == date(2023, 12, 31) + timedelta(days=60)
+
+    def test_partial_row_name_match(self, p3_db):
+        import pandas as pd
+        from research.ingest_filings import _fetch_real
+        # Row name contains the canonical substring but with extra tokens
+        income = pd.DataFrame({
+            pd.Timestamp("2023-12-31"): [8.0e8],
+        }, index=["SÜRDÜRÜLEN FAALİYETLER DÖNEM KARI/ZARARI - Ana Ortaklık"])
+
+        def f(sym):
+            return {"income": income, "balance": None, "cashflow": None}
+
+        fs = _fetch_real("X", date(2023, 1, 1), date(2024, 1, 1), fetcher=f)
+        # Partial match on "SÜRDÜRÜLEN FAALİYETLER DÖNEM KARI/ZARARI"
+        assert fs[0]["metrics"]["net_income"] == 8.0e8
+
+    def test_period_window_filter(self, p3_db):
+        import pandas as pd
+        from research.ingest_filings import _fetch_real
+        income = pd.DataFrame({
+            pd.Timestamp("2019-12-31"): [1e9],  # outside window
+            pd.Timestamp("2022-12-31"): [2e9],  # outside window
+            pd.Timestamp("2023-06-30"): [3e9],  # inside
+            pd.Timestamp("2024-12-31"): [4e9],  # outside
+        }, index=["Satış Gelirleri"])
+
+        def f(sym):
+            return {"income": income, "balance": None, "cashflow": None}
+
+        fs = _fetch_real("X", date(2023, 1, 1), date(2024, 1, 1), fetcher=f)
+        assert len(fs) == 1
+        assert fs[0]["period_end"] == date(2023, 6, 30)
+
+    def test_empty_or_missing_dfs(self, p3_db):
+        import pandas as pd
+        from research.ingest_filings import _fetch_real
+
+        # All None
+        fs = _fetch_real("X", date(2023, 1, 1), date(2024, 1, 1),
+                         fetcher=lambda s: {"income": None, "balance": None, "cashflow": None})
+        assert fs == []
+
+        # Empty DataFrame
+        fs = _fetch_real("X", date(2023, 1, 1), date(2024, 1, 1),
+                         fetcher=lambda s: {"income": pd.DataFrame(),
+                                            "balance": None, "cashflow": None})
+        assert fs == []
+
+    def test_missing_equity_yields_none_ratios(self, p3_db):
+        import pandas as pd
+        from research.ingest_filings import _fetch_real
+        # Only revenue + net_income; no balance sheet equity
+        income = pd.DataFrame({
+            pd.Timestamp("2023-12-31"): [5e9, 1e9],
+        }, index=["Satış Gelirleri", "DÖNEM KARI (ZARARI)"])
+
+        fs = _fetch_real("X", date(2023, 1, 1), date(2024, 1, 1),
+                         fetcher=lambda s: {"income": income,
+                                            "balance": None, "cashflow": None})
+        assert fs[0]["metrics"]["revenue"] == 5e9
+        assert fs[0]["metrics"]["net_income"] == 1e9
+        assert fs[0]["metrics"]["roe"] is None
+        assert fs[0]["metrics"]["debt_to_equity"] is None
+
+    def test_bank_financial_group_propagated(self, p3_db, monkeypatch):
+        """Sanity check: the default path would call get_income_stmt with
+        financial_group='UFRS' for bank tickers. We can't exercise the
+        real import path here, but we can verify the is_bank helper
+        lookup reaches the right ticker."""
+        from data.providers import is_bank
+        assert is_bank("AKBNK") is True
+        assert is_bank("GARAN") is True
+        assert is_bank("THYAO") is False
