@@ -1,0 +1,18 @@
+{
+  "signal": "MACD Bullish Cross",
+  "universe": "BIST30",
+  "from_date": "2020-01-01",
+  "to_date": "2025-12-31",
+  "n_trades": 142,
+  "hit_rate_5d": 0.5070422535211268,
+  "hit_rate_20d": 0.4647887323943662,
+  "avg_return_5d": 0.004751985915492958,
+  "avg_return_20d": -0.0009072112676056336,
+  "std_return_20d": 0.08771449832420583,
+  "t_stat_20d": -0.12324838124438016,
+  "sharpe_20d_ann": -0.03671320711048798,
+  "ir_vs_benchmark_20d": null,
+  "benchmark_symbol": null,
+  "decision": "kill",
+  "notes": []
+}

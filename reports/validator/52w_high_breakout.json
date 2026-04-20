@@ -1,0 +1,18 @@
+{
+  "signal": "52W High Breakout",
+  "universe": "BIST30",
+  "from_date": "2020-01-01",
+  "to_date": "2025-12-31",
+  "n_trades": 168,
+  "hit_rate_5d": 0.5,
+  "hit_rate_20d": 0.5297619047619048,
+  "avg_return_5d": 0.0033061369047619046,
+  "avg_return_20d": 0.009896083333333333,
+  "std_return_20d": 0.09327419826289492,
+  "t_stat_20d": 1.3751702230107927,
+  "sharpe_20d_ann": 0.3766058757762106,
+  "ir_vs_benchmark_20d": null,
+  "benchmark_symbol": null,
+  "decision": "kill",
+  "notes": []
+}

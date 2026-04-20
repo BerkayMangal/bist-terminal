@@ -1,0 +1,18 @@
+{
+  "signal": "RSI Asiri Satim",
+  "universe": "BIST30",
+  "from_date": "2020-01-01",
+  "to_date": "2025-12-31",
+  "n_trades": 41,
+  "hit_rate_5d": 0.6829268292682927,
+  "hit_rate_20d": 0.5121951219512195,
+  "avg_return_5d": 0.009625268292682926,
+  "avg_return_20d": 0.008469560975609755,
+  "std_return_20d": 0.09493284972101301,
+  "t_stat_20d": 0.5712632805474317,
+  "sharpe_20d_ann": 0.31668657544856216,
+  "ir_vs_benchmark_20d": null,
+  "benchmark_symbol": null,
+  "decision": "kill",
+  "notes": []
+}

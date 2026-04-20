@@ -1,0 +1,18 @@
+{
+  "signal": "RSI Asiri Alim",
+  "universe": "BIST30",
+  "from_date": "2020-01-01",
+  "to_date": "2025-12-31",
+  "n_trades": 58,
+  "hit_rate_5d": 0.39655172413793105,
+  "hit_rate_20d": 0.39655172413793105,
+  "avg_return_5d": -0.00974443103448276,
+  "avg_return_20d": -0.012344482758620691,
+  "std_return_20d": 0.07856713989382703,
+  "t_stat_20d": -1.1965916021118987,
+  "sharpe_20d_ann": -0.5577212940152018,
+  "ir_vs_benchmark_20d": null,
+  "benchmark_symbol": null,
+  "decision": "kill",
+  "notes": []
+}

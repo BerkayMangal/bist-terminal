@@ -1,0 +1,18 @@
+{
+  "signal": "BB Ust Band Kirilim",
+  "universe": "BIST30",
+  "from_date": "2020-01-01",
+  "to_date": "2025-12-31",
+  "n_trades": 122,
+  "hit_rate_5d": 0.5655737704918032,
+  "hit_rate_20d": 0.5245901639344263,
+  "avg_return_5d": 0.0055825327868852465,
+  "avg_return_20d": 0.010016106557377051,
+  "std_return_20d": 0.0911199291959476,
+  "t_stat_20d": 1.214130804194768,
+  "sharpe_20d_ann": 0.39018523850283143,
+  "ir_vs_benchmark_20d": null,
+  "benchmark_symbol": null,
+  "decision": "kill",
+  "notes": []
+}

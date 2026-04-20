@@ -1,0 +1,18 @@
+{
+  "signal": "MACD Bearish Cross",
+  "universe": "BIST30",
+  "from_date": "2020-01-01",
+  "to_date": "2025-12-31",
+  "n_trades": 143,
+  "hit_rate_5d": 0.43356643356643354,
+  "hit_rate_20d": 0.4825174825174825,
+  "avg_return_5d": -0.003909888111888112,
+  "avg_return_20d": 0.00921665034965035,
+  "std_return_20d": 0.08946821647687485,
+  "t_stat_20d": 1.231891194428842,
+  "sharpe_20d_ann": 0.36567022982217207,
+  "ir_vs_benchmark_20d": null,
+  "benchmark_symbol": null,
+  "decision": "kill",
+  "notes": []
+}

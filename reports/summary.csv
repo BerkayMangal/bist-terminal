@@ -1,0 +1,18 @@
+signal,universe,n_trades,hit_rate_20d,avg_return_20d,t_stat_20d,sharpe_20d_ann,ir_vs_benchmark_20d,decision
+52W High Breakout,BIST30,168,52.98%,0.990%,1.38,0.38,,kill
+BB Alt Band Kirilim,BIST30,99,54.55%,1.219%,1.32,0.47,,kill
+BB Ust Band Kirilim,BIST30,122,52.46%,1.002%,1.21,0.39,,kill
+Death Cross,BIST30,11,63.64%,1.788%,0.75,0.81,,kill
+Destek Kirilimi,BIST30,0,,,,,,kill
+Direnc Kirilimi,BIST30,0,,,,,,kill
+Golden Cross,BIST30,8,37.50%,-2.512%,-1.11,-1.39,,kill
+Ichimoku Kumo Breakdown,BIST30,0,,,,,,kill
+Ichimoku Kumo Breakout,BIST30,0,,,,,,kill
+Ichimoku TK Cross,BIST30,0,,,,,,kill
+MACD Bearish Cross,BIST30,143,48.25%,0.922%,1.23,0.37,,kill
+MACD Bullish Cross,BIST30,142,46.48%,-0.091%,-0.12,-0.04,,kill
+RSI Asiri Alim,BIST30,58,39.66%,-1.234%,-1.20,-0.56,,kill
+RSI Asiri Satim,BIST30,41,51.22%,0.847%,0.57,0.32,,kill
+Rectangle Breakdown,BIST30,0,,,,,,kill
+Rectangle Breakout,BIST30,0,,,,,,kill
+VCP Kirilim,BIST30,0,,,,,,kill

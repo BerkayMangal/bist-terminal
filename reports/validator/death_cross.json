@@ -1,0 +1,20 @@
+{
+  "signal": "Death Cross",
+  "universe": "BIST30",
+  "from_date": "2020-01-01",
+  "to_date": "2025-12-31",
+  "n_trades": 11,
+  "hit_rate_5d": 0.5454545454545454,
+  "hit_rate_20d": 0.6363636363636364,
+  "avg_return_5d": 0.009796727272727275,
+  "avg_return_20d": 0.017880545454545455,
+  "std_return_20d": 0.07871928934557736,
+  "t_stat_20d": 0.753348522485789,
+  "sharpe_20d_ann": 0.8062781131829914,
+  "ir_vs_benchmark_20d": null,
+  "benchmark_symbol": null,
+  "decision": "kill",
+  "notes": [
+    "low trade count (11) -- results may be noisy"
+  ]
+}

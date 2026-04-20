@@ -1,0 +1,21 @@
+{
+  "signal": "Ichimoku Kumo Breakdown",
+  "universe": "BIST30",
+  "from_date": "2020-01-01",
+  "to_date": "2025-12-31",
+  "n_trades": 0,
+  "hit_rate_5d": null,
+  "hit_rate_20d": null,
+  "avg_return_5d": null,
+  "avg_return_20d": null,
+  "std_return_20d": null,
+  "t_stat_20d": null,
+  "sharpe_20d_ann": null,
+  "ir_vs_benchmark_20d": null,
+  "benchmark_symbol": null,
+  "decision": "kill",
+  "notes": [
+    "no events fired -- check detector or date range",
+    "insufficient data (null sharpe or t-stat)"
+  ]
+}
