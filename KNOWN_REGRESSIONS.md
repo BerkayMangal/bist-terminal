@@ -232,3 +232,19 @@ This pattern should continue into Phase 5+ modules that produce
 any user-facing numeric output.
 
 Phase 4 is DELIVERED. Awaiting Phase 5 spec.
+
+
+---
+
+## Phase 4.9 production integration — clean delivery
+
+No new regressions. Backward compat explicitly pinned by
+`TestScoringBackwardCompat` (5 tests) plus the 792 pre-Phase-4.9
+tests all passing unchanged. 39 new tests added, 831 total from
+BOTH CWDs.
+
+The `TestDisplayFieldCorrectness` class is now present in every
+Phase 4.x test module (4.1, 4.3, 4.4, 4.5, 4.6, 4.7, 4.9) —
+KR-006 prevention methodology fully adopted as the phase pattern.
+
+Phase 4 is DELIVERED & PRODUCTION-READY. Awaiting Phase 5 spec.
