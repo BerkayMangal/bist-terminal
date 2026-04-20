@@ -1,73 +1,45 @@
 # Known Regressions
 
-Bugs discovered during the audit-driven rebuild that are **deliberately
-not fixed yet**. Documented here so they are (a) visible, (b) not
-rediscovered repeatedly, and (c) scheduled to the right phase instead
-of squeezed into the wrong one.
+Bugs discovered during the audit-driven rebuild that were deliberately
+deferred with a documented fix-schedule. Closed entries are kept for
+audit-trail continuity.
 
-Each entry carries a `KR-NNN` id, the phase during which it was
-discovered, and a suggested fix.
+Each entry carries a `KR-NNN` id, the phase in which it was discovered,
+and (once closed) the phase in which it was fixed.
 
 ---
 
-## KR-001 — `score_history` table is never created
+## KR-001 — `score_history` table is never created ✅ CLOSED in Phase 2
 
-**Discovered:** Phase 0 (2026-04-20).
-**Scheduled:** Phase 2 (PIT schema) — will be added alongside the
-migrations.py pattern, with an additional `scoring_version` column so
-Phase 4 calibrated scoring can A/B against v13_handpicked on the same
-table.
+**Discovered:** Phase 0 (2026-04-20), while fixing the broken import in
+`tests/test_delta.py`.
+**Deferred:** Phase 0 Report §KR-001 (adding the table would change
+endpoint output, violating rule 6).
+**Closed:** Phase 2, feat/pit-datastore branch, in two commits:
 
-### What is broken
-- `engine/delta.py` writes to and reads from a SQLite table named
-  `score_history` at lines 17, 23, 39, 49.
-- `infra/storage.py:init_db()` creates `watchlist`, `alerts`, and
-  `symbol_snapshots` tables — but **not** `score_history`.
-- Every call silently fails via `try/except`, returning empty defaults.
+1. `feat(infra): add migrations/ package with applier + 3 retroactive migrations`
+   — introduced `infra/migrations/003_score_history.sql` with the schema
+   suggested in the original KR-001 entry, plus the `scoring_version`
+   column (Phase 4 A/B future-proofing per the Phase 1 reviewer note).
 
-### Observable effect in production
-- `save_daily_snapshot(...)` silently discards.
-- `compute_delta(...)` returns `{}`.
-- `watchlist_changes(...)` returns `[]`.
-- `get_movers(...)` returns `{"gainers": [], "losers": []}`.
+2. `fix(engine): update score_history ON CONFLICT clause for new PK triple`
+   — `engine/delta.py:_save` previously used `ON CONFLICT(symbol, snap_date)`
+   which is no longer a unique constraint; updated to
+   `ON CONFLICT(symbol, snap_date, scoring_version)`. The column DEFAULT
+   of `'v13_handpicked'` keeps the call-site unchanged (no new parameter).
 
-Callers in `app.py:677, 686` and `engine/analysis.py:443` handle these
-defaults gracefully, so the app still serves — the "what changed in
-the last 7 days" feature has simply been dark since the subpackage reorg.
+**Tests reactivated:**
+- `tests/test_delta.py::TestDelta::test_save` — xfail marker removed
+- `tests/test_delta.py::TestDelta::test_with_history` — xfail marker removed
+- `tests/test_delta.py::TestDelta::test_what_changed` — xfail marker removed
 
-### Why not fixed in Phase 0
-Adding the table would change endpoint output (rule 6). Phase 2 is the
-right home — a proper migrations pattern will be in place there.
+**Prod behavior change:** `engine/delta.py` functions
+(`save_daily_snapshot`, `compute_delta`, `watchlist_changes`, `get_movers`)
+now return real data rather than the empty defaults their `try/except`
+blocks were silently producing. This is the intended effect of closing
+KR-001; it restores a feature that has been dark since the subpackage
+reorg. Rule 6 is respected because Phase 2's explicit goal is "KR-001
+kapanmış", making this the sanctioned place for the behavior change.
 
-### Tests affected
-Three tests in `tests/test_delta.py` are marked
-`pytest.mark.xfail(strict=True)` so that they flip to XPASS and force
-marker removal when the schema is added:
-- `TestDelta::test_save`
-- `TestDelta::test_with_history`
-- `TestDelta::test_what_changed`
-
-### Suggested fix (for Phase 2)
-
-Add to `infra/storage.py:init_db()` via the new migrations pattern:
-
-```sql
-CREATE TABLE IF NOT EXISTS score_history (
-    symbol           TEXT NOT NULL,
-    snap_date        TEXT NOT NULL,
-    score            REAL,
-    momentum         REAL,
-    risk             REAL,
-    fa_score         REAL,
-    ivme             REAL,
-    decision         TEXT,
-    scoring_version  TEXT NOT NULL DEFAULT 'v13_handpicked',
-    PRIMARY KEY (symbol, snap_date, scoring_version)
-);
-```
-
-The `scoring_version` column (Phase 1 extension to the Phase 0 spec,
-per reviewer note) enables Phase 4 calibrated scoring to coexist with
-the v13 baseline for A/B comparison.
-
-**Audit ref:** Adjacent to A6. Not originally flagged.
+**No active entries remain.** Phase 2+ discoveries would be added here
+with new `KR-NNN` ids.
