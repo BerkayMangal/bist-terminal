@@ -340,5 +340,8 @@ class TestServiceLayer:
              patch("ai.service.ai_cache") as mock_cache:
             mock_cache.get.return_value = None
             result = generate_trader_summary(r, None)
-            assert result == "Yatırım tezi"
+            # generate_trader_summary now returns dict: {summary, is_fallback, data_grade}
+            assert isinstance(result, dict)
+            assert result["summary"] == "Yatırım tezi"
+            assert result["is_fallback"] is False
             assert mock_cache.set.called  # verify caching happened

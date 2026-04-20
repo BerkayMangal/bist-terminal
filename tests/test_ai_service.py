@@ -206,21 +206,30 @@ class TestGenerateTraderSummaryMocked:
     @patch("ai.service.ai_call", return_value="GİRİŞ: TEYİTLİ — güçlü giriş.\nTEZ: ROE %18.")
     @patch("ai.service.AI_AVAILABLE", True)
     def test_returns_ai_text(self, mock_call, sample_analysis):
+        # generate_trader_summary returns dict: {summary, is_fallback, data_grade}
         result = generate_trader_summary(sample_analysis)
         assert result is not None
-        assert "TEYİTLİ" in result
+        assert isinstance(result, dict)
+        assert "TEYİTLİ" in result["summary"]
+        assert result["is_fallback"] is False
         mock_call.assert_called_once()
 
     @patch("ai.service.AI_AVAILABLE", False)
     def test_returns_none_when_ai_off(self, sample_analysis):
-        assert generate_trader_summary(sample_analysis) is None
+        # AI off => dict with summary=None and is_fallback=True (richer contract
+        # than the old "return None" shape; see ai/service.py:34 signature -> dict).
+        result = generate_trader_summary(sample_analysis)
+        assert result["summary"] is None
+        assert result["is_fallback"] is True
 
     @patch("ai.service.ai_cache")
     @patch("ai.service.ai_call", return_value=None)
     @patch("ai.service.AI_AVAILABLE", True)
     def test_returns_none_on_ai_failure(self, mock_call, mock_cache, sample_analysis):
         mock_cache.get.return_value = None  # no cache hit
-        assert generate_trader_summary(sample_analysis) is None
+        result = generate_trader_summary(sample_analysis)
+        assert result["summary"] is None
+        assert result["is_fallback"] is True
 
 
 class TestGenerateHeroStoryMocked:
