@@ -44,6 +44,8 @@ FastAPI · Python 3.11 · borsapy + yfinance · Redis (opsiyonel) · SQLite · G
 git clone https://github.com/BerkayMangal/bist-terminal.git
 cd bist-terminal
 pip install -r requirements.txt
+
+For running tests: `pip install -r requirements-dev.txt`
 uvicorn app:app --host 0.0.0.0 --port 8080
 ```
 

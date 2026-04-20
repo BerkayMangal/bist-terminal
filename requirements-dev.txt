@@ -1,0 +1,13 @@
+# ================================================================
+# BISTBULL TERMINAL — Dev / test-only dependencies
+# Not installed on Railway; install locally before running tests:
+#   pip install -r requirements-dev.txt
+# ================================================================
+
+# Test runner
+pytest>=7.0.0
+
+# HTTP client used by fastapi.testclient (required by tests/test_auth.py
+# and any future endpoint tests). Runtime itself doesn't need it because
+# the app doesn't make outbound HTTP to itself.
+httpx>=0.27.0
