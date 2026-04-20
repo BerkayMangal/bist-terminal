@@ -93,32 +93,32 @@ def _extract_return(event: dict, horizon_days: int) -> Optional[float]:
     naming conventions.
 
     The calibration training data can arrive in two shapes:
-      (A) Phase 3b deep_events.csv -- 'ret_20d' as percent (e.g. 4.86)
-      (B) Live labeler output -- 'return_20d' as fraction (e.g. 0.0486)
+      (A) deep_events.csv: column 'ret_20d' (fraction — 0.0486 for 4.86%)
+      (B) live labeler: column 'return_20d' (fraction — same scale)
 
-    We try (A) first (reviewer's deep_events.csv is the documented
-    training source) and divide by 100 to normalize to fraction. Then
-    fall back to (B) which is already a fraction. If both are present,
-    (A) wins -- the CSV is the reviewer-verified ground truth.
+    Both already store returns as unit-less fractions, not percents. The
+    deep_summary.csv reports aggregate MEANS multiplied by 100 for
+    human readability ('ret_20d = 4.864' in that file = mean 4.86%),
+    but per-event rows stay in fraction form -- verified via:
+
+        >>> import pandas as pd
+        >>> d = pd.read_csv('deep_events.csv')
+        >>> d[d.signal=='52W High Breakout'].ret_20d.mean()
+        0.0486...
+
+    So: read as-is, no conversion. Prefer 'ret_{N}d' if present
+    (the reviewer's training CSV format), else 'return_{N}d' (live
+    labeler format). None on missing / unparseable values.
     """
-    # (A) deep_events.csv shape: ret_{N}d in PERCENT
-    if f"ret_{horizon_days}d" in event:
-        v = event[f"ret_{horizon_days}d"]
-        if v is None or v == "":
-            return None
-        try:
-            return float(v) / 100.0
-        except (TypeError, ValueError):
-            return None
-    # (B) live labeler shape: return_{N}d already a fraction
-    if f"return_{horizon_days}d" in event:
-        v = event[f"return_{horizon_days}d"]
-        if v is None or v == "":
-            return None
-        try:
-            return float(v)
-        except (TypeError, ValueError):
-            return None
+    for key in (f"ret_{horizon_days}d", f"return_{horizon_days}d"):
+        if key in event:
+            v = event[key]
+            if v is None or v == "":
+                continue
+            try:
+                return float(v)
+            except (TypeError, ValueError):
+                continue
     return None
 
 

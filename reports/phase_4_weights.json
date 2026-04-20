@@ -1,0 +1,497 @@
+{
+  "Golden Cross": {
+    "_default": {
+      "n": 36,
+      "weight_20d": -0.207,
+      "mean_return_20d": -0.006673,
+      "std_return_20d": 0.1144,
+      "weight_60d": -0.3737,
+      "mean_return_60d": -0.035555,
+      "std_return_60d": 0.194982
+    }
+  },
+  "Death Cross": {
+    "_default": {
+      "n": 21,
+      "weight_20d": 0.5906,
+      "mean_return_20d": 0.014716,
+      "std_return_20d": 0.088454,
+      "weight_60d": 0.7464,
+      "mean_return_60d": 0.103321,
+      "std_return_60d": 0.283671
+    }
+  },
+  "52W High Breakout": {
+    "_default": {
+      "n": 662,
+      "weight_20d": 1.0883,
+      "mean_return_20d": 0.048641,
+      "std_return_20d": 0.158645,
+      "weight_60d": 0.8962,
+      "mean_return_60d": 0.129834,
+      "std_return_60d": 0.2969
+    },
+    "Banka": {
+      "n": 114,
+      "weight_20d": 0.2332,
+      "mean_return_20d": 0.011295,
+      "std_return_20d": 0.17194,
+      "weight_60d": 0.5905,
+      "mean_return_60d": 0.079682,
+      "std_return_60d": 0.276527
+    },
+    "Enerji": {
+      "n": 57,
+      "weight_20d": 1.4138,
+      "mean_return_20d": 0.045803,
+      "std_return_20d": 0.114999,
+      "weight_60d": 0.7727,
+      "mean_return_60d": 0.080813,
+      "std_return_60d": 0.214323
+    },
+    "Havayolu": {
+      "n": 56,
+      "weight_20d": 2.7777,
+      "mean_return_20d": 0.105008,
+      "std_return_20d": 0.134192,
+      "weight_60d": 1.4971,
+      "mean_return_60d": 0.23993,
+      "std_return_60d": 0.328435
+    },
+    "Holding": {
+      "n": 91,
+      "weight_20d": 0.6126,
+      "mean_return_20d": 0.026677,
+      "std_return_20d": 0.154575,
+      "weight_60d": 0.7068,
+      "mean_return_60d": 0.066471,
+      "std_return_60d": 0.192741
+    },
+    "Kimya": {
+      "n": 23,
+      "weight_20d": 1.9108,
+      "mean_return_20d": 0.144138,
+      "std_return_20d": 0.267756,
+      "weight_60d": 1.2844,
+      "mean_return_60d": 0.368673,
+      "std_return_60d": 0.588251
+    },
+    "Madencilik": {
+      "n": 21,
+      "weight_20d": 1.5341,
+      "mean_return_20d": 0.143413,
+      "std_return_20d": 0.331836,
+      "weight_60d": 0.7945,
+      "mean_return_60d": 0.222614,
+      "std_return_60d": 0.574198
+    },
+    "Perakende": {
+      "n": 66,
+      "weight_20d": 1.9115,
+      "mean_return_20d": 0.073597,
+      "std_return_20d": 0.136668,
+      "weight_60d": 1.2508,
+      "mean_return_60d": 0.187074,
+      "std_return_60d": 0.306503
+    },
+    "Sanayi": {
+      "n": 108,
+      "weight_20d": 1.1316,
+      "mean_return_20d": 0.038743,
+      "std_return_20d": 0.121537,
+      "weight_60d": 0.8713,
+      "mean_return_60d": 0.113934,
+      "std_return_60d": 0.267992
+    },
+    "Savunma": {
+      "n": 21,
+      "weight_20d": 2.2214,
+      "mean_return_20d": 0.078447,
+      "std_return_20d": 0.125352,
+      "weight_60d": 2.7812,
+      "mean_return_60d": 0.267291,
+      "std_return_60d": 0.196963
+    },
+    "Telekom": {
+      "n": 31,
+      "weight_20d": 0.7971,
+      "mean_return_20d": 0.026984,
+      "std_return_20d": 0.120158,
+      "weight_60d": 1.2048,
+      "mean_return_60d": 0.128183,
+      "std_return_60d": 0.218048
+    },
+    "Ulaşım": {
+      "n": 29,
+      "weight_20d": 1.6564,
+      "mean_return_20d": 0.034019,
+      "std_return_20d": 0.072903,
+      "weight_60d": 1.1522,
+      "mean_return_60d": 0.109505,
+      "std_return_60d": 0.194766
+    }
+  },
+  "MACD Bullish Cross": {
+    "_default": {
+      "n": 417,
+      "weight_20d": 0.9044,
+      "mean_return_20d": 0.034269,
+      "std_return_20d": 0.134497,
+      "weight_60d": 0.9387,
+      "mean_return_60d": 0.125482,
+      "std_return_60d": 0.273952
+    },
+    "Banka": {
+      "n": 83,
+      "weight_20d": 0.9596,
+      "mean_return_20d": 0.034405,
+      "std_return_20d": 0.127264,
+      "weight_60d": 1.0283,
+      "mean_return_60d": 0.127418,
+      "std_return_60d": 0.253932
+    },
+    "Enerji": {
+      "n": 29,
+      "weight_20d": 1.1182,
+      "mean_return_20d": 0.032275,
+      "std_return_20d": 0.102455,
+      "weight_60d": 1.0573,
+      "mean_return_60d": 0.113116,
+      "std_return_60d": 0.219247
+    },
+    "Havayolu": {
+      "n": 30,
+      "weight_20d": 1.5823,
+      "mean_return_20d": 0.073852,
+      "std_return_20d": 0.165672,
+      "weight_60d": 1.2335,
+      "mean_return_60d": 0.194624,
+      "std_return_60d": 0.323365
+    },
+    "Holding": {
+      "n": 65,
+      "weight_20d": 0.9561,
+      "mean_return_20d": 0.044936,
+      "std_return_20d": 0.166826,
+      "weight_60d": 1.179,
+      "mean_return_60d": 0.100645,
+      "std_return_60d": 0.174944
+    },
+    "Perakende": {
+      "n": 31,
+      "weight_20d": 0.6391,
+      "mean_return_20d": 0.018166,
+      "std_return_20d": 0.100905,
+      "weight_60d": 0.6246,
+      "mean_return_60d": 0.059609,
+      "std_return_60d": 0.195594
+    },
+    "Sanayi": {
+      "n": 60,
+      "weight_20d": 0.366,
+      "mean_return_20d": 0.0113,
+      "std_return_20d": 0.109593,
+      "weight_60d": 0.89,
+      "mean_return_60d": 0.109773,
+      "std_return_60d": 0.252778
+    },
+    "Telekom": {
+      "n": 22,
+      "weight_20d": 0.9589,
+      "mean_return_20d": 0.038802,
+      "std_return_20d": 0.143638,
+      "weight_60d": 0.654,
+      "mean_return_60d": 0.074728,
+      "std_return_60d": 0.234166
+    }
+  },
+  "MACD Bearish Cross": {
+    "_default": {
+      "n": 461,
+      "weight_20d": 0.7762,
+      "mean_return_20d": 0.028737,
+      "std_return_20d": 0.131424,
+      "weight_60d": 0.8163,
+      "mean_return_60d": 0.102345,
+      "std_return_60d": 0.256935
+    },
+    "Banka": {
+      "n": 93,
+      "weight_20d": 0.1354,
+      "mean_return_20d": 0.004979,
+      "std_return_20d": 0.130543,
+      "weight_60d": 0.4845,
+      "mean_return_60d": 0.059137,
+      "std_return_60d": 0.250156
+    },
+    "Enerji": {
+      "n": 38,
+      "weight_20d": 0.273,
+      "mean_return_20d": 0.009579,
+      "std_return_20d": 0.124559,
+      "weight_60d": 0.3831,
+      "mean_return_60d": 0.038756,
+      "std_return_60d": 0.207337
+    },
+    "Havayolu": {
+      "n": 29,
+      "weight_20d": 2.0102,
+      "mean_return_20d": 0.097882,
+      "std_return_20d": 0.172846,
+      "weight_60d": 1.2662,
+      "mean_return_60d": 0.222991,
+      "std_return_60d": 0.360918
+    },
+    "Holding": {
+      "n": 69,
+      "weight_20d": 0.8472,
+      "mean_return_20d": 0.024878,
+      "std_return_20d": 0.104233,
+      "weight_60d": 1.202,
+      "mean_return_60d": 0.121843,
+      "std_return_60d": 0.207732
+    },
+    "Perakende": {
+      "n": 38,
+      "weight_20d": 1.3398,
+      "mean_return_20d": 0.039507,
+      "std_return_20d": 0.104665,
+      "weight_60d": 1.3734,
+      "mean_return_60d": 0.174978,
+      "std_return_60d": 0.2611
+    },
+    "Sanayi": {
+      "n": 76,
+      "weight_20d": 0.7849,
+      "mean_return_20d": 0.033168,
+      "std_return_20d": 0.150004,
+      "weight_60d": 0.8867,
+      "mean_return_60d": 0.110713,
+      "std_return_60d": 0.255895
+    },
+    "Telekom": {
+      "n": 28,
+      "weight_20d": 1.0866,
+      "mean_return_20d": 0.032633,
+      "std_return_20d": 0.106607,
+      "weight_60d": 0.907,
+      "mean_return_60d": 0.099438,
+      "std_return_60d": 0.22468
+    }
+  },
+  "RSI Asiri Alim": {
+    "_default": {
+      "n": 267,
+      "weight_20d": 1.2028,
+      "mean_return_20d": 0.042442,
+      "std_return_20d": 0.125254,
+      "weight_60d": 0.8467,
+      "mean_return_60d": 0.117903,
+      "std_return_60d": 0.285373
+    },
+    "Banka": {
+      "n": 59,
+      "weight_20d": 1.0234,
+      "mean_return_20d": 0.037405,
+      "std_return_20d": 0.129741,
+      "weight_60d": 0.3301,
+      "mean_return_60d": 0.040736,
+      "std_return_60d": 0.252904
+    },
+    "Enerji": {
+      "n": 23,
+      "weight_20d": 0.7522,
+      "mean_return_20d": 0.018969,
+      "std_return_20d": 0.089517,
+      "weight_60d": 0.5969,
+      "mean_return_60d": 0.061623,
+      "std_return_60d": 0.211562
+    },
+    "Holding": {
+      "n": 34,
+      "weight_20d": 0.7872,
+      "mean_return_20d": 0.018384,
+      "std_return_20d": 0.082895,
+      "weight_60d": 0.6901,
+      "mean_return_60d": 0.062845,
+      "std_return_60d": 0.18664
+    },
+    "Sanayi": {
+      "n": 41,
+      "weight_20d": 1.3577,
+      "mean_return_20d": 0.033404,
+      "std_return_20d": 0.087335,
+      "weight_60d": 0.7964,
+      "mean_return_60d": 0.093073,
+      "std_return_60d": 0.239492
+    }
+  },
+  "RSI Asiri Satim": {
+    "_default": {
+      "n": 142,
+      "weight_20d": 0.879,
+      "mean_return_20d": 0.033323,
+      "std_return_20d": 0.134569,
+      "weight_60d": 0.7707,
+      "mean_return_60d": 0.096161,
+      "std_return_60d": 0.2557
+    },
+    "Banka": {
+      "n": 31,
+      "weight_20d": 0.2805,
+      "mean_return_20d": 0.01078,
+      "std_return_20d": 0.1364,
+      "weight_60d": 0.6287,
+      "mean_return_60d": 0.096112,
+      "std_return_60d": 0.313294
+    },
+    "Sanayi": {
+      "n": 22,
+      "weight_20d": 0.1711,
+      "mean_return_20d": 0.00522,
+      "std_return_20d": 0.108309,
+      "weight_60d": 0.6235,
+      "mean_return_60d": 0.062585,
+      "std_return_60d": 0.205726
+    }
+  },
+  "BB Ust Band Kirilim": {
+    "_default": {
+      "n": 433,
+      "weight_20d": 0.9827,
+      "mean_return_20d": 0.03519,
+      "std_return_20d": 0.127115,
+      "weight_60d": 0.8931,
+      "mean_return_60d": 0.12348,
+      "std_return_60d": 0.283332
+    },
+    "Banka": {
+      "n": 86,
+      "weight_20d": 0.7335,
+      "mean_return_20d": 0.028971,
+      "std_return_20d": 0.140193,
+      "weight_60d": 0.4876,
+      "mean_return_60d": 0.057746,
+      "std_return_60d": 0.242689
+    },
+    "Enerji": {
+      "n": 31,
+      "weight_20d": 1.366,
+      "mean_return_20d": 0.042091,
+      "std_return_20d": 0.109374,
+      "weight_60d": 1.5171,
+      "mean_return_60d": 0.144297,
+      "std_return_60d": 0.194922
+    },
+    "Havayolu": {
+      "n": 32,
+      "weight_20d": 2.8398,
+      "mean_return_20d": 0.09255,
+      "std_return_20d": 0.115684,
+      "weight_60d": 1.9412,
+      "mean_return_60d": 0.275779,
+      "std_return_60d": 0.291156
+    },
+    "Holding": {
+      "n": 60,
+      "weight_20d": 0.531,
+      "mean_return_20d": 0.015993,
+      "std_return_20d": 0.106904,
+      "weight_60d": 0.7311,
+      "mean_return_60d": 0.059456,
+      "std_return_60d": 0.166658
+    },
+    "Perakende": {
+      "n": 42,
+      "weight_20d": 0.9921,
+      "mean_return_20d": 0.031348,
+      "std_return_20d": 0.112162,
+      "weight_60d": 0.8222,
+      "mean_return_60d": 0.101572,
+      "std_return_60d": 0.253167
+    },
+    "Sanayi": {
+      "n": 69,
+      "weight_20d": 0.2831,
+      "mean_return_20d": 0.008284,
+      "std_return_20d": 0.103884,
+      "weight_60d": 0.7055,
+      "mean_return_60d": 0.082408,
+      "std_return_60d": 0.239396
+    },
+    "Savunma": {
+      "n": 22,
+      "weight_20d": 1.7665,
+      "mean_return_20d": 0.071123,
+      "std_return_20d": 0.142918,
+      "weight_60d": 1.6572,
+      "mean_return_60d": 0.231343,
+      "std_return_60d": 0.2861
+    }
+  },
+  "BB Alt Band Kirilim": {
+    "_default": {
+      "n": 337,
+      "weight_20d": 0.2194,
+      "mean_return_20d": 0.007928,
+      "std_return_20d": 0.128277,
+      "weight_60d": 0.576,
+      "mean_return_60d": 0.06717,
+      "std_return_60d": 0.239006
+    },
+    "Banka": {
+      "n": 76,
+      "weight_20d": -0.0734,
+      "mean_return_20d": -0.002909,
+      "std_return_20d": 0.140609,
+      "weight_60d": 0.2079,
+      "mean_return_60d": 0.027948,
+      "std_return_60d": 0.2755
+    },
+    "Enerji": {
+      "n": 32,
+      "weight_20d": -0.122,
+      "mean_return_20d": -0.004063,
+      "std_return_20d": 0.118173,
+      "weight_60d": 0.2178,
+      "mean_return_60d": 0.019523,
+      "std_return_60d": 0.183705
+    },
+    "Havayolu": {
+      "n": 27,
+      "weight_20d": 1.0513,
+      "mean_return_20d": 0.027126,
+      "std_return_20d": 0.091584,
+      "weight_60d": 0.6161,
+      "mean_return_60d": 0.066508,
+      "std_return_60d": 0.221219
+    },
+    "Holding": {
+      "n": 34,
+      "weight_20d": 0.7522,
+      "mean_return_20d": 0.026336,
+      "std_return_20d": 0.124276,
+      "weight_60d": 0.8093,
+      "mean_return_60d": 0.093697,
+      "std_return_60d": 0.237273
+    },
+    "Perakende": {
+      "n": 26,
+      "weight_20d": 1.2235,
+      "mean_return_20d": 0.040339,
+      "std_return_20d": 0.117033,
+      "weight_60d": 1.1102,
+      "mean_return_60d": 0.122132,
+      "std_return_60d": 0.225445
+    },
+    "Sanayi": {
+      "n": 50,
+      "weight_20d": 0.0193,
+      "mean_return_20d": 0.000582,
+      "std_return_20d": 0.106891,
+      "weight_60d": 1.0696,
+      "mean_return_60d": 0.10843,
+      "std_return_60d": 0.207749
+    }
+  }
+}

@@ -292,15 +292,18 @@ class TestCalibration:
 
     def test_extract_return_handles_both_shapes(self):
         from research.calibration import _extract_return
-        # deep_events.csv shape: percent
-        assert _extract_return({"ret_20d": 4.86}, 20) == pytest.approx(0.0486)
-        # live labeler shape: fraction
+        # deep_events.csv shape: fraction (0.0486 = 4.86%)
+        assert _extract_return({"ret_20d": 0.0486}, 20) == pytest.approx(0.0486)
+        # live labeler shape: fraction (same scale)
         assert _extract_return({"return_20d": 0.0486}, 20) == pytest.approx(0.0486)
-        # deep_events.csv wins if both present
-        assert _extract_return({"ret_20d": 4.86, "return_20d": 0.0}, 20) \
-            == pytest.approx(0.0486)
+        # deep_events.csv wins if both present (preferred column)
+        assert _extract_return({"ret_20d": 0.05, "return_20d": 0.10}, 20) \
+            == pytest.approx(0.05)
         # missing
         assert _extract_return({}, 20) is None
+        # empty/None
+        assert _extract_return({"ret_20d": None}, 20) is None
+        assert _extract_return({"ret_20d": ""}, 20) is None
 
     def test_load_events_csv(self):
         from research.calibration import load_events_csv
