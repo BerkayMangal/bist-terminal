@@ -163,3 +163,38 @@ strict to majority as documented in PHASE_4_3_REPORT.md — both
 cases were real data behavior (MACD Bullish Cross 2025 sign flip;
 Golden Cross n=36 sign flip when adding 2025 slice), not test-
 framework failures.
+
+
+---
+
+## KR-007 — CWD bug re-emerged in data loaders ✅ CLOSED in FAZ 4.3.5
+
+**Discovered:** Phase 4.3 (2026-04-20). Reviewer reproduced by running
+pytest from parent directory:
+```
+$ cd parent/
+$ pytest bist-terminal-main/tests/
+13 failed: FileNotFoundError: 'data/universe_history.csv'
+```
+
+Phase 4.0.3 fixed `apply_migrations()` by resolving `__file__` to an
+absolute path via `.resolve()`. That fix was correct for migrations
+but scoped only to the migrations package. The same CWD-relative
+pattern recurred in:
+- `infra/pit.py:load_universe_history_csv(path)` — callers passed
+  hardcoded `"data/universe_history.csv"` strings
+- `tests/test_phase3.py:862`, `tests/test_phase4.py:37/153/520/705/739`
+- `scripts/run_phase_3_demo.py:74`
+
+**Closed:** Commit `496131e fix(infra,tests): complete cwd-independence
+across data loaders (FAZ 4.3.5)`.
+
+Scope of fix:
+1. `infra/pit.py` — added `DEFAULT_UNIVERSE_CSV = Path(__file__).resolve().parent.parent / 'data' / 'universe_history.csv'`; `load_universe_history_csv(path=None)` with default resolving to constant.
+2. `tests/_paths.py` (new module) — shared `UNIVERSE_CSV`, `DATA_DIR`, `REPO_ROOT` constants. Separate from `conftest.py` because conftest isn't reliably importable as a module in pytest.
+3. All hardcoded references replaced.
+4. Regression tests: `TestDataLoaderCwdIndependence::test_default_path_works_from_any_cwd` + `test_explicit_absolute_path_still_works`.
+5. Full suite from BOTH CWDs clean: 747 pass from repo root, 747 pass from parent.
+
+**Process lesson for Phase 5+:**
+Any new module reading a file via `Path(__file__).parent / "data/x"` MUST use `.resolve()`. This pattern is now consistent across `infra/migrations/__init__.py`, `infra/pit.py`, and `tests/_paths.py`. Violations of it will be the most likely category of CWD bug to re-emerge.
