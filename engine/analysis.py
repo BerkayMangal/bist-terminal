@@ -20,6 +20,30 @@ from config import UNIVERSE
 from engine.metrics import normalize_metrics, compute_score_coverage, confidence_penalty_for_imputed_scores
 from engine.explainability import build_explanation
 
+# Phase 1 — flattened from inline imports that previously lived inside analyze_symbol()
+# and compute_v13_final_score(). See commit 'refactor: flatten inline imports...' for
+# rationale. Try-wrapped optional-feature imports (data_quality, valuation, timing_intel,
+# dimension_explainer, turkey_context, delta, labels, verdict, scoring_v11.enrich_*)
+# remain inline on purpose so that missing/broken optional modules degrade gracefully
+# instead of breaking analyze_symbol() at import time.
+from config import V11_FA_WEIGHTS, V13_OVERALL_FA_WEIGHT, V13_OVERALL_RISK_FACTOR
+from engine.scoring import (
+    map_sector, score_value, score_quality, score_growth,
+    score_balance, score_earnings, score_moat, score_capital,
+    score_momentum, score_technical_break, score_institutional_flow,
+    compute_risk_penalties, compute_ivme,
+    detect_hype, confidence_score,
+    timing_label, quality_label, entry_quality_label,
+    decision_engine, style_label, legendary_labels, drivers,
+    compute_valuation_stretch,
+)
+from engine.scoring_v11 import get_risk_cap, detect_fatal_risks
+from engine.technical import compute_technical
+from engine.applicability import build_applicability_flags
+from engine.metric_guards import validate_metrics
+from engine.academic_layer import compute_academic_adjustments
+from engine.turkey_realities import compute_turkey_realities
+
 log = logging.getLogger("bistbull.analysis")
 
 # ================================================================
@@ -174,21 +198,6 @@ def analyze_symbol(symbol: str) -> dict:
     if cached is not None:
         return cached
 
-    from engine.scoring import (
-        map_sector, score_value, score_quality, score_growth,
-        score_balance, score_earnings, score_moat, score_capital,
-        score_momentum, score_technical_break, score_institutional_flow,
-        compute_risk_penalties, compute_ivme,
-        detect_hype, confidence_score,
-        timing_label, quality_label, entry_quality_label,
-        decision_engine, style_label, legendary_labels, drivers,
-        compute_valuation_stretch,
-    )
-    from engine.technical import compute_technical
-    from engine.applicability import build_applicability_flags
-    from engine.metric_guards import validate_metrics
-    from config import V11_FA_WEIGHTS, V13_OVERALL_FA_WEIGHT, V13_OVERALL_RISK_FACTOR
-
     m = validate_metrics(normalize_metrics(compute_metrics(symbol)))
     sector_group = map_sector(m.get("sector", ""))
 
@@ -262,7 +271,6 @@ def analyze_symbol(symbol: str) -> dict:
     turkey_result = {"composite_multiplier": 1.0, "composite_grade": "?", "filters": {},
                      "adjusted_fa": fa_pure, "adjusted_deger": None, "summary": ""}
     try:
-        from engine.turkey_realities import compute_turkey_realities
         turkey_result = compute_turkey_realities(
             m, sector_group=sector_group, fa_pure=fa_pure,
             policy_rate=37.0,
@@ -278,7 +286,6 @@ def analyze_symbol(symbol: str) -> dict:
     academic_result = {"composite_score": 50, "composite_penalty": 0, "composite_grade": "?",
                        "filters": {}, "adjusted_fa": tr_adjusted_fa, "summary": ""}
     try:
-        from engine.academic_layer import compute_academic_adjustments
         academic_result = compute_academic_adjustments(
             m, sector_group=sector_group,
             fa_input=tr_adjusted_fa,
@@ -294,7 +301,6 @@ def analyze_symbol(symbol: str) -> dict:
     # V13 FINAL SCORE — Pure Fundamental, NO momentum
     # Formula: clamp(TR_adjusted_FA + academic_penalty + risk_penalty × factor + val_stretch, 1, 99)
     # ──────────────────────────────────────────────────
-    from engine.scoring_v11 import get_risk_cap, detect_fatal_risks
     risk_cap = get_risk_cap(m)
     capped_risk = max(risk_penalty, risk_cap)
     val_stretch = compute_valuation_stretch(scores.get("value", 50))
