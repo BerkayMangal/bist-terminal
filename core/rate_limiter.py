@@ -78,6 +78,30 @@ RATE_LIMITS: dict[str, dict[str, int]] = {
         "max_requests": 5,
         "window_seconds": 900,  # 15 minutes
     },
+    # Phase 4.9: user-facing paper-trading + A/B telemetry endpoints.
+    # signals_today / paper_trading_template are the expensive ones --
+    # they fan out cs_rank_pct across the universe (34 syms × 9 signals).
+    # ab_report / ensemble_weights / signals_history are pure DB/file reads.
+    "signals_today": {
+        "max_requests": 20,
+        "window_seconds": 60,
+    },
+    "signals_history": {
+        "max_requests": 60,
+        "window_seconds": 60,
+    },
+    "ensemble_weights": {
+        "max_requests": 120,
+        "window_seconds": 60,
+    },
+    "paper_trading_template": {
+        "max_requests": 10,
+        "window_seconds": 60,
+    },
+    "ab_report": {
+        "max_requests": 60,
+        "window_seconds": 60,
+    },
 }
 
 

@@ -7,6 +7,7 @@
 import os, asyncio, datetime as dt, time, json, logging
 from collections import defaultdict, deque
 from contextlib import asynccontextmanager
+from typing import Optional
 
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, JSONResponse, Response
@@ -30,6 +31,7 @@ from core.rate_limiter import check_rate_limit, RateLimitExceeded
 from core.response_envelope import success, error, not_found, rate_limited, service_unavailable, now_iso
 from core.auth import require_jwt_secret, verify_jwt
 from api.auth import router as auth_router
+from api.phase4_endpoints import router as phase4_router
 
 from config import (
     BOT_VERSION, APP_NAME, CONFIDENCE_MIN, UNIVERSE,
@@ -209,6 +211,7 @@ async def ses_mw(request:Request,call_next):
 
 # Phase 1: /api/auth/* endpoints (register/login/logout/me).
 app.include_router(auth_router)
+app.include_router(phase4_router)
 
 @app.exception_handler(RateLimitExceeded)
 async def _rate_limit_handler(request: Request, exc: RateLimitExceeded):
@@ -248,11 +251,16 @@ async def api_bootstrap():
 async def api_universe(): return success({"universe": UNIVERSE, "count": len(UNIVERSE)})
 
 @app.get("/api/analyze/{ticker}")
-async def api_analyze(ticker: str):
+async def api_analyze(ticker: str, scoring_version: Optional[str] = None):
+    # Phase 4.9: scoring_version query param. None => env var default
+    # (SCORING_VERSION_DEFAULT -> 'v13_handpicked'). When explicitly set
+    # to 'calibrated_2026Q1', analyze_symbol routes value/quality/
+    # growth/balance through the calibrated dispatcher. Fallback to V13
+    # (when no fits loaded) is surfaced via r["_meta"].
     symbol = normalize_symbol(ticker)
     with LogTimer() as t:
         try:
-            r = await asyncio.to_thread(analyze_symbol, symbol)
+            r = await asyncio.to_thread(analyze_symbol, symbol, scoring_version)
             m = r["metrics"]
             if m.get("price") is None and m.get("market_cap") is None and m.get("pe") is None: raise ValueError("No data")
             return success(r, latency_ms=t.ms)
