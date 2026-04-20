@@ -1,0 +1,30 @@
+# ================================================================
+# BISTBULL TERMINAL V10.0 — Enterprise Blueprint Dependencies
+# Railway deploy: pip install -r requirements.txt
+# ================================================================
+
+# Core web framework
+fastapi>=0.104.0
+uvicorn>=0.24.0
+websockets>=12.0
+
+# Data processing
+pandas>=2.0.0
+numpy>=1.24.0
+requests>=2.31.0
+
+# Redis — L2 persistent cache (optional: graceful fallback to RAM-only)
+redis>=5.0.0
+
+# In-memory cache (L1 layer)
+cachetools>=5.3.0
+
+# Charts
+matplotlib>=3.7.0
+
+# Data sources — BIST
+borsapy>=0.8.0
+
+# AI providers (optional — graceful degrade if key missing)
+openai>=1.0.0
+anthropic>=0.18.0

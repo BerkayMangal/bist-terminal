@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#060a10">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>BistBull Terminal</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='28' font-size='28'>🐂</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=DM+Sans:wght@400;600;700&display=swap">
+<link rel="stylesheet" href="/static/terminal.css">
+</head>
+<body>
+<div class="hdr">
+  <div class="logo"><svg width="32" height="32" viewBox="0 0 100 100" style="vertical-align:middle;margin-right:8px"><defs><linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" style="stop-color:#FFB300"/><stop offset="100%" style="stop-color:#E69500"/></linearGradient></defs><path d="M20,48 Q6,20 5,6 Q12,22 24,36 Z" fill="url(#bg)" opacity=".85"/><path d="M70,48 Q84,20 85,6 Q78,22 66,36 Z" fill="url(#bg)" opacity=".85"/><ellipse cx="45" cy="54" rx="28" ry="22" fill="url(#bg)"/><ellipse cx="45" cy="70" rx="17" ry="12" fill="#E69500"/><ellipse cx="37" cy="72" rx="2.8" ry="2.2" fill="#0a0e14"/><ellipse cx="53" cy="72" rx="2.8" ry="2.2" fill="#0a0e14"/><ellipse cx="34" cy="50" rx="5" ry="4.5" fill="#0a0e14"/><ellipse cx="56" cy="50" rx="5" ry="4.5" fill="#0a0e14"/><ellipse cx="35.5" cy="49" rx="2.2" ry="1.8" fill="#eaf0fa"/><ellipse cx="57.5" cy="49" rx="2.2" ry="1.8" fill="#eaf0fa"/><path d="M26,44 Q31,41.5 37,43.5" stroke="#0a0e14" stroke-width="2" fill="none" stroke-linecap="round"/><path d="M64,44 Q59,41.5 53,43.5" stroke="#0a0e14" stroke-width="2" fill="none" stroke-linecap="round"/><path d="M39,77 Q45,80.5 51,77" stroke="#0a0e14" stroke-width="1.4" fill="none" stroke-linecap="round"/><ellipse cx="20" cy="44" rx="6.5" ry="5" fill="url(#bg)" transform="rotate(-12,20,44)"/><ellipse cx="70" cy="44" rx="6.5" ry="5" fill="url(#bg)" transform="rotate(12,70,44)"/></svg>BIST<b>BULL</b><small>TERMINAL</small></div>
+  <div class="hdr-nav" id="nav"></div>
+  <div class="hdr-r"><button onclick="showWelcome()" style="font-family:'JetBrains Mono',monospace;font-size:14px;padding:2px 8px;background:none;border:1px solid var(--bdr);border-radius:var(--rad);color:var(--t3);cursor:pointer;min-height:32px" title="BistBull hakkında">ℹ️</button><div class="dot"></div><div class="clk" id="clk"></div></div>
+</div>
+<!-- WELCOME OVERLAY (ilk giriş) -->
+<div id="welcomeOv" style="display:none;position:fixed;inset:0;z-index:9999;background:var(--bg0);overflow-y:auto;-webkit-overflow-scrolling:touch">
+  <div style="min-height:100vh;min-height:100dvh;display:flex;flex-direction:column;justify-content:center;align-items:center;padding:32px 24px;text-align:center">
+    <div style="margin-bottom:24px"><svg width="60" height="60" viewBox="0 0 100 100"><defs><linearGradient id="wg" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" style="stop-color:#FFB300"/><stop offset="100%" style="stop-color:#E69500"/></linearGradient></defs><path d="M20,48 Q6,20 5,6 Q12,22 24,36 Z" fill="url(#wg)" opacity=".85"/><path d="M70,48 Q84,20 85,6 Q78,22 66,36 Z" fill="url(#wg)" opacity=".85"/><ellipse cx="45" cy="54" rx="28" ry="22" fill="url(#wg)"/><ellipse cx="45" cy="70" rx="17" ry="12" fill="#E69500"/><ellipse cx="37" cy="72" rx="2.8" ry="2.2" fill="#0a0e14"/><ellipse cx="53" cy="72" rx="2.8" ry="2.2" fill="#0a0e14"/><ellipse cx="34" cy="50" rx="5" ry="4.5" fill="#0a0e14"/><ellipse cx="56" cy="50" rx="5" ry="4.5" fill="#0a0e14"/><ellipse cx="35.5" cy="49" rx="2.2" ry="1.8" fill="#f0f4fa"/><ellipse cx="57.5" cy="49" rx="2.2" ry="1.8" fill="#f0f4fa"/><path d="M26,44 Q31,41.5 37,43.5" stroke="#0a0e14" stroke-width="2" fill="none" stroke-linecap="round"/><path d="M64,44 Q59,41.5 53,43.5" stroke="#0a0e14" stroke-width="2" fill="none" stroke-linecap="round"/><path d="M39,77 Q45,80.5 51,77" stroke="#0a0e14" stroke-width="1.4" fill="none" stroke-linecap="round"/><ellipse cx="20" cy="44" rx="6.5" ry="5" fill="url(#wg)" transform="rotate(-12,20,44)"/><ellipse cx="70" cy="44" rx="6.5" ry="5" fill="url(#wg)" transform="rotate(12,70,44)"/></svg></div>
+    <div style="font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--acc);text-transform:uppercase;letter-spacing:3px;margin-bottom:16px">BISTBULL</div>
+    <h1 style="font-family:'DM Sans',system-ui,sans-serif;font-size:28px;font-weight:700;color:var(--t1);line-height:1.3;margin-bottom:10px;max-width:480px">Son aldığın tüyo<br><span style="color:var(--acc)">kâr mı yazdı?</span></h1>
+    <p style="font-size:15px;color:var(--t3);margin-bottom:32px;max-width:400px;line-height:1.6">Hisse yaz, 3 saniyede karar gör. Gerisini biz hallederiz.</p>
+    <div style="max-width:420px;margin-bottom:36px">
+      <div style="display:flex;align-items:flex-start;gap:14px;text-align:left;margin-bottom:20px;padding-bottom:20px;border-bottom:1px solid var(--bdr)"><span style="font-size:24px;flex-shrink:0;margin-top:2px">🏛️</span><div><div style="font-size:16px;color:var(--t1);font-weight:600;margin-bottom:4px">Bilançoya bakmana gerek yok</div><div style="font-size:14px;color:var(--t2);line-height:1.6">9 model senin yerine bakıyor. Sonuç: tek bir skor, net bir karar.</div></div></div>
+      <div style="display:flex;align-items:flex-start;gap:14px;text-align:left;margin-bottom:20px;padding-bottom:20px;border-bottom:1px solid var(--bdr)"><span style="font-size:24px;flex-shrink:0;margin-top:2px">⚡</span><div><div style="font-size:16px;color:var(--t1);font-weight:600;margin-bottom:4px">Grafiğe de bakmana gerek yok</div><div style="font-size:14px;color:var(--t2);line-height:1.6">14 teknik sinyal otomatik taranıyor. Kırılım varsa sana gelir.</div></div></div>
+      <div style="display:flex;align-items:flex-start;gap:14px;text-align:left"><span style="font-size:24px;flex-shrink:0;margin-top:2px">🤖</span><div><div style="font-size:16px;color:var(--t1);font-weight:600;margin-bottom:4px">Kafana takılanı sor</div><div style="font-size:14px;color:var(--t2);line-height:1.6">Q asistanına hisse sor, rakamlarla cevap al. Sallama yok.</div></div></div>
+    </div>
+    <button onclick="dismissWelcome()" style="font-family:'DM Sans',system-ui,sans-serif;font-size:17px;font-weight:700;padding:16px 48px;background:var(--acc);color:#0a0e14;border:none;border-radius:var(--rad2);cursor:pointer;min-height:54px;letter-spacing:.5px;transition:transform .15s,box-shadow .15s;box-shadow:0 4px 20px rgba(255,179,0,.3)">Sonucu Gör →</button>
+    <div style="margin-top:20px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--t4)">Veri odaklı BIST analiz terminali · bistbull.ai</div>
+  </div>
+</div>
+
+<div class="tbar"><div class="tbar-inner" id="tbar"><div class="tbar-i"><span style="color:var(--t3)">Makro yükleniyor...</span></div></div></div>
+<div class="cbar"><div class="cbar-i">Hisse <span class="cbar-v" id="cnt-a">0</span></div><div class="cbar-i">Sinyal <span class="cbar-v" id="cnt-s">0</span></div><div class="cbar-i" style="margin-left:auto">Son güncelleme <span class="cbar-v" id="cnt-u">—</span></div></div>
+<div class="sbar">
+  <div class="sbar-wrap" id="sbarWrap">
+    <input type="text" class="sinp" id="sinp" placeholder="Hisse ara: THYAO, Garanti, ASELS..." autocomplete="off" enterkeyhint="search" spellcheck="false">
+    <span class="sinp-icon">🔍</span>
+    <!-- DISCOVERY PANEL — appears on focus -->
+    <div class="srch-disc" id="srchDisc"></div>
+  </div>
+  <div class="qticks" id="qticks"></div>
+</div>
+<div class="main">
+  <div class="page on" id="pg-home" data-page="home"></div>
+  <div class="page" id="pg-radar" data-page="radar"></div>
+  <div class="page" id="pg-cross" data-page="cross"></div>
+  <div class="page" id="pg-makro" data-page="makro"></div>
+  <div class="page" id="pg-takas" data-page="takas"></div>
+  <div class="page" id="pg-sosyal" data-page="sosyal"></div>
+  <div class="page" id="pg-portfoy" data-page="portfoy"></div>
+  <div class="page" id="pg-nasil" data-page="nasil"></div>
+</div>
+<div class="ov" id="ov" onclick="if(event.target===this)closeD()"><div class="dp" id="dp"></div></div>
+
+<!-- GLASSMORPHISM TOOLTIP -->
+<div id="bbTip"></div>
+<!-- ONBOARDING TOUR -->
+<div id="onbOverlay" style="display:none"></div>
+<script defer src="/static/terminal.js"></script>
+
+<!-- FOOTER -->
+<div style="background:var(--bg1);border-top:1px solid var(--bdr);padding:16px 20px;margin-top:20px;text-align:center">
+<div style="display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:8px"><svg width="20" height="20" viewBox="0 0 100 100"><defs><linearGradient id="fg" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" style="stop-color:#FFB300"/><stop offset="100%" style="stop-color:#E69500"/></linearGradient></defs><path d="M20,48 Q6,20 5,6 Q12,22 24,36 Z" fill="url(#fg)" opacity=".85"/><path d="M70,48 Q84,20 85,6 Q78,22 66,36 Z" fill="url(#fg)" opacity=".85"/><ellipse cx="45" cy="54" rx="28" ry="22" fill="url(#fg)"/><ellipse cx="45" cy="70" rx="17" ry="12" fill="#E69500"/><path d="M39,77 Q45,80.5 51,77" stroke="#E69500" stroke-width="1" fill="none"/></svg><span style="font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--t1);font-weight:600">BIST<span style="color:var(--acc)">BULL</span></span></div>
+<div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--t3);line-height:1.8">
+Yapay Zekâ Destekli BIST Yatırım Terminali<br>
+<span style="color:var(--t2)">Tasarım & Geliştirme: <span style="color:var(--cyn)">Berkay Kangal</span></span><br>
+© 2026 BistBull Terminal. Tüm hakları saklıdır.<br>
+<span style="color:var(--t4);font-size:9px">Bu uygulama yatırım tavsiyesi değildir. Veriler yfinance üzerinden sağlanmaktadır.</span>
+</div>
+</div>
+<div style="position:fixed;bottom:0;left:0;right:0;padding:6px 16px;background:rgba(10,10,18,0.95);border-top:1px solid rgba(255,179,0,0.15);font-family:'JetBrains Mono',monospace;font-size:9px;color:#666;text-align:center;z-index:200;line-height:1.5">⚠️ BistBull yatırım tavsiyesi niteliğinde <b>değildir</b>. Veriler gecikmeli olabilir (15-20dk). Finansal kararlarınızı lisanslı danışmanlarınızla doğrulayın. Tüm risk kullanıcıya aittir.</div>
+
+<!-- Q ASSISTANT FAB + PANEL -->
+<div id="agentBtn" onclick="toggleAgent()" style="position:fixed;bottom:calc(20px + var(--safe-b));right:20px;width:62px;height:62px;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 20px rgba(0,0,0,.5);z-index:150;border:2px solid var(--acc);overflow:hidden;background:linear-gradient(135deg,#1a1a2e,#0e131c)" onmouseenter="this.style.transform='scale(1.1)'" onmouseleave="this.style.transform='scale(1)'"><div style="font-family:'JetBrains Mono',monospace;font-size:22px;font-weight:700;color:var(--acc);line-height:1">Q</div></div>
+<div id="agentPanel" style="display:none;position:fixed;bottom:calc(86px + var(--safe-b));right:20px;width:360px;max-width:calc(100vw - 40px);height:460px;max-height:calc(100vh - 120px);max-height:calc(100dvh - 120px);background:var(--bg1);border:1px solid var(--bdr2);border-radius:12px;box-shadow:0 8px 40px rgba(0,0,0,.5);z-index:150;flex-direction:column;overflow:hidden">
+<div style="padding:12px 16px;background:linear-gradient(135deg,#1a1a2e,var(--bg1));border-bottom:1px solid var(--bdr);display:flex;align-items:center;gap:10px"><div style="font-family:'JetBrains Mono',monospace;font-size:24px;font-weight:700;color:var(--acc)">Q</div><div><div style="font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700;color:var(--acc)">BISTBULL Q</div><div style="font-size:9px;color:var(--t3)">Terminal Asistanı · Veri Odaklı</div></div><button onclick="toggleAgent()" style="margin-left:auto;background:0;border:0;color:var(--t3);font-size:18px;cursor:pointer;width:44px;height:44px;display:flex;align-items:center;justify-content:center">✕</button></div>
+<div id="agentMsgs" style="flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;-webkit-overflow-scrolling:touch"><div style="margin-bottom:8px"><span style="background:var(--bg3);border:1px solid var(--bdr);padding:6px 10px;border-radius:8px 8px 8px 0;font-size:12px;color:var(--t1);display:inline-block;max-width:85%;line-height:1.5">BistBull Q aktif. Hisse yaz, soru sor — rakamlarla cevap alırsın. Sallama yok.</span></div></div>
+<div style="padding:10px 12px;border-top:1px solid var(--bdr)"><div style="display:flex;gap:8px;margin-bottom:6px"><input id="agentInput" type="text" placeholder="THYAO nasıl? ya da kafana takılan..." style="flex:1;font-size:13px;padding:10px 12px;background:var(--bg0);border:1px solid var(--bdr);border-radius:6px;color:var(--t1);outline:0;font-family:'DM Sans',sans-serif;min-height:44px" onkeydown="if(event.key==='Enter')sendAgent()" enterkeyhint="send"><button onclick="sendAgent()" style="font-family:'JetBrains Mono',monospace;font-size:12px;padding:8px 14px;background:var(--acc);color:#000;border:0;border-radius:6px;cursor:pointer;font-weight:600;min-height:44px">Sor</button></div><div style="font-size:8px;color:var(--t4);line-height:1.3;padding-top:4px">⚠️ Q bilgi amaçlıdır. Yatırım tavsiyesi değildir.</div>
+</div>
+</div>
+
+<!-- FEEDBACK -->
+<div id="fbBtn" onclick="document.getElementById('fbPanel').style.display=document.getElementById('fbPanel').style.display==='none'?'block':'none'" style="position:fixed;bottom:calc(90px + var(--safe-b));right:20px;width:44px;height:44px;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 16px rgba(0,0,0,.4);z-index:149;border:1.5px solid var(--prp);background:linear-gradient(135deg,#1a1a2e,#0e131c);font-size:18px">💬</div>
+<div id="fbPanel" style="display:none;position:fixed;bottom:calc(140px + var(--safe-b));right:20px;width:320px;max-width:calc(100vw - 40px);background:var(--bg1);border:1px solid rgba(206,147,216,.25);border-radius:12px;box-shadow:0 8px 40px rgba(0,0,0,.5);z-index:149;overflow:hidden">
+<div style="padding:14px 16px;background:linear-gradient(135deg,rgba(206,147,216,.08),var(--bg1));border-bottom:1px solid var(--bdr)"><div style="display:flex;justify-content:space-between;align-items:center"><div><div style="font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:700;color:var(--prp)">💬 Geri Bildirim</div><div style="font-size:10px;color:var(--t4);margin-top:2px">Anonim · kimse bilmez 🤫</div></div><button onclick="document.getElementById('fbPanel').style.display='none'" style="background:0;border:0;color:var(--t3);font-size:16px;cursor:pointer">✕</button></div></div>
+<div style="padding:14px 16px">
+<div style="font-size:13px;color:var(--t2);margin-bottom:12px">Beğendin mi? Kızdın mı? Bir şey bozuk mu? 😄</div>
+<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px"><span onclick="document.getElementById('fbText').value='🔥 Çok iyi olmuş!'" style="cursor:pointer;font-size:12px;padding:6px 10px;background:var(--bg3);border:1px solid var(--bdr);border-radius:20px;color:var(--t2)">🔥 Harika</span><span onclick="document.getElementById('fbText').value='🤔 Anlamadım'" style="cursor:pointer;font-size:12px;padding:6px 10px;background:var(--bg3);border:1px solid var(--bdr);border-radius:20px;color:var(--t2)">🤔 Anlamadım</span><span onclick="document.getElementById('fbText').value='🐛 Bug buldum: '" style="cursor:pointer;font-size:12px;padding:6px 10px;background:var(--bg3);border:1px solid var(--bdr);border-radius:20px;color:var(--t2)">🐛 Bug</span><span onclick="document.getElementById('fbText').value='💡 Fikir: '" style="cursor:pointer;font-size:12px;padding:6px 10px;background:var(--bg3);border:1px solid var(--bdr);border-radius:20px;color:var(--t2)">💡 Fikir</span></div>
+<textarea id="fbText" placeholder="Aklına ne gelirse yaz... anonim, rahat ol 😊" style="width:100%;height:80px;font-size:13px;padding:10px;background:var(--bg0);border:1px solid var(--bdr);border-radius:8px;color:var(--t1);outline:0;resize:vertical;box-sizing:border-box;font-family:'DM Sans',sans-serif"></textarea>
+<button id="fbSendBtn" onclick="(async()=>{const t=document.getElementById('fbText').value.trim();if(!t){document.getElementById('fbSt').textContent='Bir şeyler yaz 😄';return;}document.getElementById('fbSendBtn').disabled=true;try{await fetch('/api/track?e=feedback_'+encodeURIComponent(t.slice(0,200)));document.getElementById('fbText').value='';document.getElementById('fbSt').innerHTML='<span style=color:var(--grn)>✅ Teşekkürler!</span>';setTimeout(()=>{document.getElementById('fbSt').textContent='';document.getElementById('fbPanel').style.display='none'},2000)}catch(e){document.getElementById('fbSt').innerHTML='<span style=color:var(--red)>Hata, tekrar dene</span>'}document.getElementById('fbSendBtn').disabled=false})()" style="margin-top:8px;width:100%;font-family:'JetBrains Mono',monospace;font-size:12px;padding:10px;background:var(--prp);color:#000;border:0;border-radius:8px;cursor:pointer;font-weight:700">GÖNDER 🚀</button>
+<div id="fbSt" style="margin-top:6px;font-size:11px;text-align:center;color:var(--t4)"></div>
+</div></div>
+
+</body></html>

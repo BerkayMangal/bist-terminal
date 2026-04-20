@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BistBull.ai — Tüyo'ya değil, kendi kararına güven.</title>
+<meta name="description" content="BistBull.ai senin kişisel BIST asistanın. Her hisse için tek bakışta net Al – Bekle – Uzak Dur diyor ve nedenini açık Türkçe anlatıyor. 99 TL/ay.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,700;0,800;0,900;1,700;1,800&family=DM+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--gold:#FFB300;--gold2:#E69500;--gold-dim:rgba(255,179,0,.12);--gold-glow:rgba(255,179,0,.25);--bg:#07090E;--bg1:#0B0D15;--bg2:#10121C;--bg3:#161927;--bdr:rgba(255,255,255,.06);--bdr2:rgba(255,255,255,.1);--t1:#ECEDF4;--t2:#9A9BB0;--t3:#5A5B70;--grn:#22C55E;--red:#EF4444;--ylw:#F59E0B;--r:12px;--r2:20px}
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg);color:var(--t1);line-height:1.6;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+::selection{background:var(--gold-dim);color:var(--gold)}
+::-webkit-scrollbar{width:4px}::-webkit-scrollbar-track{background:var(--bg)}::-webkit-scrollbar-thumb{background:var(--bg3);border-radius:2px}
+nav{position:fixed;top:0;left:0;right:0;z-index:100;padding:0 clamp(20px,4vw,48px);height:60px;background:rgba(7,9,14,.88);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);border-bottom:1px solid var(--bdr);display:flex;align-items:center;justify-content:space-between}
+.nav-logo{display:flex;align-items:center;gap:9px;font-family:'JetBrains Mono',monospace;font-size:15px;font-weight:700;color:var(--t1);text-decoration:none}
+.nav-logo b{color:var(--gold)}
+.nav-links{display:flex;gap:24px;align-items:center}
+.nav-links a{color:var(--t2);font-size:13px;font-weight:500;text-decoration:none;transition:color .15s}
+.nav-links a:hover{color:var(--t1)}
+.nav-cta{background:var(--gold)!important;color:#000!important;padding:8px 20px;border-radius:8px;font-weight:700!important;transition:all .2s}
+.nav-cta:hover{background:#FFC940!important;transform:translateY(-1px);box-shadow:0 4px 20px var(--gold-glow)}
+@media(max-width:640px){.nav-links a:not(.nav-cta){display:none}}
+.section{padding:clamp(64px,10vw,120px) clamp(20px,4vw,48px);max-width:1180px;margin:0 auto}
+.section-label{font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:2.5px;text-transform:uppercase;color:var(--gold);display:flex;align-items:center;gap:8px;margin-bottom:16px}
+.section-label::after{content:'';flex:1;height:1px;background:var(--gold-dim);max-width:60px}
+.hero{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:100px 24px 80px;position:relative;overflow:hidden}
+.hero-bg{position:absolute;inset:0;z-index:0;overflow:hidden}
+.hero-bg-glow{position:absolute;top:-20%;left:50%;transform:translateX(-50%);width:900px;height:700px;background:radial-gradient(ellipse at center,rgba(255,179,0,.08) 0%,transparent 65%);pointer-events:none}
+.hero-grid{position:absolute;inset:0;background-image:linear-gradient(var(--bdr) 1px,transparent 1px),linear-gradient(90deg,var(--bdr) 1px,transparent 1px);background-size:48px 48px;mask-image:radial-gradient(ellipse 80% 70% at 50% 50%,black 40%,transparent 100%);-webkit-mask-image:radial-gradient(ellipse 80% 70% at 50% 50%,black 40%,transparent 100%)}
+.hero>*{position:relative;z-index:1}
+.hero-badge{display:inline-flex;align-items:center;gap:8px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--gold);letter-spacing:1.5px;text-transform:uppercase;padding:6px 16px;border:1px solid rgba(255,179,0,.2);border-radius:40px;background:rgba(255,179,0,.06);margin-bottom:28px;animation:fadeUp .7s ease forwards}
+.bdot{width:6px;height:6px;border-radius:50%;background:var(--gold);animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(.8)}}
+.hero-h1{font-family:'Playfair Display',Georgia,serif;font-size:clamp(38px,7vw,78px);font-weight:800;line-height:1.1;letter-spacing:-.02em;color:var(--t1);margin-bottom:24px;animation:fadeUp .7s ease forwards .15s;opacity:0}
+.hero-h1 em{font-style:italic;color:var(--gold)}
+.hero-sub{font-size:clamp(15px,2vw,19px);color:var(--t2);max-width:640px;line-height:1.7;margin-bottom:12px;animation:fadeUp .7s ease forwards .25s;opacity:0}
+.hero-micro{font-size:14px;color:var(--t3);margin-bottom:36px;animation:fadeUp .7s ease forwards .3s;opacity:0}
+.hero-micro span{color:var(--grn)}
+.hero-cta-group{display:flex;flex-direction:column;align-items:center;gap:10px;animation:fadeUp .7s ease forwards .35s;opacity:0}
+.btn-primary{display:inline-flex;align-items:center;gap:10px;background:var(--gold);color:#000;font-weight:800;font-size:17px;padding:16px 36px;border-radius:12px;text-decoration:none;transition:all .2s}
+.btn-primary:hover{background:#FFC940;transform:translateY(-2px);box-shadow:0 8px 32px var(--gold-glow)}
+.btn-sub{font-size:13px;color:var(--t3);display:flex;align-items:center;gap:6px}
+.btn-sub span{color:var(--grn);font-weight:600}
+.hero-demo{margin-top:64px;animation:fadeUp .8s ease forwards .5s;opacity:0;width:100%;max-width:680px}
+.demo-card{background:var(--bg1);border:1px solid var(--bdr2);border-radius:var(--r2);overflow:hidden;max-width:680px;margin:0 auto;box-shadow:0 20px 60px rgba(0,0,0,.5)}
+.demo-bar{background:var(--bg2);padding:10px 16px;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--bdr)}
+.demo-dots{display:flex;gap:6px}
+.demo-dot{width:10px;height:10px;border-radius:50%}
+.demo-inner{padding:20px}
+.demo-stock{display:flex;align-items:flex-start;gap:14px;padding:14px;background:var(--bg3);border-radius:var(--r);margin-bottom:10px;border:1px solid var(--bdr)}
+.demo-ticker{font-family:'JetBrains Mono',monospace;font-size:16px;font-weight:700;color:#22d3ee;min-width:70px}
+.demo-reason{font-size:12px;color:var(--t2);line-height:1.5;margin-top:3px}
+.v-gir{background:rgba(34,197,94,.12);color:#22C55E;padding:4px 12px;border-radius:5px;font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:800;border:1px solid rgba(34,197,94,.25)}
+.v-bkl{background:rgba(245,158,11,.12);color:#F59E0B;padding:4px 12px;border-radius:5px;font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:800;border:1px solid rgba(245,158,11,.25)}
+.v-uzk{background:rgba(239,68,68,.12);color:#EF4444;padding:4px 12px;border-radius:5px;font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:800;border:1px solid rgba(239,68,68,.25)}
+@keyframes fadeUp{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:translateY(0)}}
+.problem-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px;margin-top:40px}
+.problem-card{background:var(--bg1);border:1px solid var(--bdr);border-radius:var(--r);padding:20px;display:flex;gap:14px;align-items:flex-start}
+.problem-icon{font-size:24px;flex-shrink:0}
+.problem-text{font-size:14px;color:var(--t2);line-height:1.6}
+.problem-text strong{color:var(--t1);display:block;margin-bottom:4px;font-size:15px}
+.solution-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px;margin-top:40px}
+.solution-card{background:var(--bg1);border:1px solid var(--bdr);border-radius:var(--r);padding:22px;transition:.2s}
+.solution-card:hover{border-color:rgba(255,179,0,.2);transform:translateY(-2px)}
+.solution-num{font-family:'JetBrains Mono',monospace;font-size:28px;font-weight:700;color:var(--gold);margin-bottom:12px;line-height:1}
+.solution-title{font-size:15px;font-weight:700;color:var(--t1);margin-bottom:6px}
+.solution-desc{font-size:13px;color:var(--t2);line-height:1.6}
+.steps{display:flex;flex-direction:column;gap:0;margin-top:48px;position:relative}
+.steps::before{content:'';position:absolute;left:23px;top:24px;bottom:24px;width:2px;background:linear-gradient(to bottom,var(--gold-dim),var(--bdr),var(--gold-dim))}
+.step{display:flex;gap:20px;align-items:flex-start;padding:0 0 36px}
+.step:last-child{padding-bottom:0}
+.step-num{width:48px;height:48px;border-radius:50%;background:var(--bg2);border:2px solid var(--gold);display:flex;align-items:center;justify-content:center;font-family:'JetBrains Mono',monospace;font-size:16px;font-weight:700;color:var(--gold);flex-shrink:0;position:relative;z-index:1}
+.step-body{padding-top:10px}
+.step-title{font-size:17px;font-weight:700;color:var(--t1);margin-bottom:6px}
+.step-desc{font-size:14px;color:var(--t2);line-height:1.6}
+.step-note{margin-top:6px;font-size:12px;color:var(--t3)}
+.features-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px;margin-top:40px}
+.feature-card{background:var(--bg1);border:1px solid var(--bdr);border-radius:var(--r);padding:22px}
+.feature-icon{font-size:26px;margin-bottom:12px}
+.feature-title{font-size:15px;font-weight:700;color:var(--t1);margin-bottom:6px}
+.feature-desc{font-size:13px;color:var(--t2);line-height:1.6}
+.feature-hl{margin-top:10px;padding:8px 10px;background:var(--gold-dim);border-radius:6px;font-size:12px;color:var(--gold)}
+.social-preview{background:var(--bg1);border:1px solid var(--bdr2);border-radius:var(--r2);padding:24px;margin-top:40px}
+.spike-graph{display:flex;align-items:flex-end;gap:4px;height:72px;margin-top:16px}
+.spike-bar{flex:1;border-radius:3px 3px 0 0;min-width:8px}
+.spike-bar.sp{background:var(--gold);animation:spPulse 2s ease infinite}
+.spike-bar.nm{background:var(--bg3)}
+@keyframes spPulse{0%,100%{opacity:1}50%{opacity:.7}}
+.pricing-card{background:var(--bg1);border:2px solid var(--gold);border-radius:var(--r2);padding:clamp(28px,4vw,44px);max-width:520px;margin:0 auto;box-shadow:0 0 60px rgba(255,179,0,.08);position:relative;overflow:hidden}
+.pricing-card::before{content:'';position:absolute;top:-60px;right:-60px;width:200px;height:200px;background:radial-gradient(circle,rgba(255,179,0,.08),transparent 70%)}
+.price-num{font-family:'Playfair Display',Georgia,serif;font-size:64px;font-weight:800;color:var(--gold);line-height:1}
+.price-feat{display:flex;align-items:center;gap:10px;font-size:14px;color:var(--t2);padding:6px 0}
+.price-feat-icon{color:var(--grn);font-size:16px;flex-shrink:0}
+.compare-table{width:100%;border-collapse:collapse;margin-top:40px}
+.compare-table th{font-family:'JetBrains Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--t3);padding:10px 12px;text-align:left;border-bottom:1px solid var(--bdr)}
+.compare-table td{padding:12px;border-bottom:1px solid var(--bdr);font-size:13px;color:var(--t2)}
+.compare-table td:first-child{color:var(--t1);font-weight:600}
+.compare-table tr.ours td{background:rgba(255,179,0,.04)}
+.compare-table tr.ours td:first-child{color:var(--gold)}
+.yes{color:var(--grn);font-weight:700}.no{color:var(--t3)}
+.pcell{font-family:'JetBrains Mono',monospace;font-weight:700;color:var(--t1)}
+.compare-table tr.ours .pcell{color:var(--gold)}
+.trust-grid{display:flex;flex-wrap:wrap;gap:24px;margin-top:40px}
+.trust-item{display:flex;align-items:center;gap:10px;font-size:14px;color:var(--t2)}
+.trust-item-icon{font-size:20px;flex-shrink:0}
+.final-cta{text-align:center;padding:clamp(64px,10vw,120px) clamp(20px,4vw,48px);position:relative;overflow:hidden}
+.final-cta::before{content:'';position:absolute;top:0;left:50%;transform:translateX(-50%);width:800px;height:400px;background:radial-gradient(ellipse,rgba(255,179,0,.07),transparent 65%);pointer-events:none}
+.final-cta>*{position:relative;z-index:1}
+footer{background:var(--bg1);border-top:1px solid var(--bdr);padding:32px clamp(20px,4vw,48px);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:16px}
+.footer-brand{font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:600;color:var(--t2)}
+.footer-brand b{color:var(--gold)}
+.footer-legal{font-size:11px;color:var(--t3);line-height:1.6;max-width:540px}
+.fl{color:var(--t3);text-decoration:none}.fl:hover{color:var(--gold)}
+.divider{border:0;border-top:1px solid var(--bdr);margin:0}
+@media(max-width:768px){.hero-h1{font-size:clamp(32px,8vw,48px)}.price-num{font-size:52px}.steps::before{left:19px}.step-num{width:40px;height:40px;font-size:14px}}
+</style>
+</head>
+<body>
+<nav>
+  <a href="/" class="nav-logo">
+    <svg width="24" height="24" viewBox="0 0 100 100"><defs><linearGradient id="ng" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" style="stop-color:#FFB300"/><stop offset="100%" style="stop-color:#E69500"/></linearGradient></defs><path d="M20,48 Q6,20 5,6 Q12,22 24,36 Z" fill="url(#ng)" opacity=".85"/><path d="M70,48 Q84,20 85,6 Q78,22 66,36 Z" fill="url(#ng)" opacity=".85"/><ellipse cx="45" cy="54" rx="28" ry="22" fill="url(#ng)"/><ellipse cx="45" cy="70" rx="17" ry="12" fill="#E69500"/><ellipse cx="34" cy="50" rx="5" ry="4.5" fill="#07090E"/><ellipse cx="56" cy="50" rx="5" ry="4.5" fill="#07090E"/><ellipse cx="35.5" cy="49" rx="2" ry="1.7" fill="#fff"/><ellipse cx="57.5" cy="49" rx="2" ry="1.7" fill="#fff"/></svg>
+    BIST<b>BULL</b><span style="font-weight:400;opacity:.4;margin-left:2px">.ai</span>
+  </a>
+  <div class="nav-links">
+    <a href="#nasil">Nasil calisir?</a>
+    <a href="#fiyat">Fiyat</a>
+    <a href="/terminal">Terminal</a>
+    <a href="/terminal" class="nav-cta">Ücretsiz Dene</a>
+  </div>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="hero-bg"><div class="hero-grid"></div><div class="hero-bg-glow"></div></div>
+  <div class="hero-badge"><span class="bdot"></span>260+ BIST hissesi · Anlik analiz</div>
+  <h1 class="hero-h1">Tüyo'ya değil,<br><em>kendi kararına</em> güven.</h1>
+  <p class="hero-sub">BistBull.ai senin kişisel BIST asistanın. Her hisse için tek bakışta net <strong style="color:var(--grn)">GİR</strong> – <strong style="color:var(--ylw)">BEKLE</strong> – <strong style="color:var(--red)">UZAK DUR</strong> diyor ve nedenini açık Türkçe anlatıyor. Artık başkalarının heyecanına değil, kendi verine dayalı karar veriyorsun.</p>
+  <p class="hero-micro">Zamanını boşa harcamıyorsun. Stresini azaltıyorsun. <span>Daha akıllıca yatırım yapıyorsun.</span></p>
+  <div class="hero-cta-group">
+    <a href="/terminal" class="btn-primary">İlk 7 Gün Ücretsiz Dene →</a>
+    <div class="btn-sub">Sonra sadece <span>99 TL/ay</span> · İstediğin an iptal edebilirsin</div>
+  </div>
+  <div class="hero-demo">
+    <div class="demo-card">
+      <div class="demo-bar">
+        <div class="demo-dots"><div class="demo-dot" style="background:#FF5F57"></div><div class="demo-dot" style="background:#FFBD2E"></div><div class="demo-dot" style="background:#28C840"></div></div>
+        <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--t3);margin-left:8px">BistBull Terminal · 260+ hisse tarandı</span>
+      </div>
+      <div class="demo-inner">
+        <div class="demo-stock"><div><div class="demo-ticker">THYAO</div><div class="demo-reason">Sektörüne göre değerlemesi iyi, hacim artıyor. Son 3 çeyrekte kâr büyümesi sürekli.</div></div><div style="flex-shrink:0;text-align:right"><div class="v-gir">GİR</div><div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--t3);margin-top:4px">Güven: Yüksek</div></div></div>
+        <div class="demo-stock"><div><div class="demo-ticker">ASELS</div><div class="demo-reason">Temel güçlü ama fiyat 52 haftalık zirveye yakın. Giriş için daha uygun seviye beklenebilir.</div></div><div style="flex-shrink:0;text-align:right"><div class="v-bkl">BEKLE</div><div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--t3);margin-top:4px">Güven: Orta</div></div></div>
+        <div class="demo-stock"><div><div class="demo-ticker">XYZAB</div><div class="demo-reason">Borç yükü yüksek, nakit akışı negatif. Beneish testi muhasebe konusunda şüphe işaret ediyor.</div></div><div style="flex-shrink:0;text-align:right"><div class="v-uzk">UZAK DUR</div><div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--t3);margin-top:4px">Güven: Yüksek</div></div></div>
+        <div style="padding:10px 0 0;font-size:11px;color:var(--t3);text-align:center;font-family:'JetBrains Mono',monospace">Bu bir yatırım tavsiyesi değildir · Karar sizindir</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<hr class="divider">
+
+<!-- PROBLEM -->
+<div class="section">
+  <div class="section-label">Her sabah aynı hikaye...</div>
+  <h2 style="font-family:'Playfair Display',Georgia,serif;font-size:clamp(28px,4vw,44px);font-weight:800;line-height:1.2;max-width:560px">Sana tanıdık geliyor mu?</h2>
+  <div class="problem-grid">
+    <div class="problem-card"><div class="problem-icon">💸</div><div class="problem-text"><strong>Aylık 300–900 TL araç parası</strong>Matriks, TradingView, Sentimentalgo — hepsi pahalı. Ve hepsini tam kullanmıyorsun.</div></div>
+    <div class="problem-card"><div class="problem-icon">🔥</div><div class="problem-text"><strong>Telegram ve X tüyoları çakışıyor</strong>Biri "kesin al" diyor, öteki "kesin sat". Kim haklı? Hiç bilmiyorsun.</div></div>
+    <div class="problem-card"><div class="problem-icon">😰</div><div class="problem-text"><strong>"Bugün ne almalıyım?" stresi</strong>Her sabah grafiklere bak, haber oku, karar ver — ama hâlâ emin değilsin.</div></div>
+    <div class="problem-card"><div class="problem-icon">🧩</div><div class="problem-text"><strong>Temel + teknik + sosyal = imkânsız</strong>Hepsini aynı yerde görmek için saatler harcıyorsun. Ve yine de eksik kalıyor.</div></div>
+  </div>
+</div>
+
+<hr class="divider">
+
+<!-- SOLUTION -->
+<div class="section">
+  <div class="section-label">BistBull ne yapıyor?</div>
+  <h2 style="font-family:'Playfair Display',Georgia,serif;font-size:clamp(28px,4vw,44px);font-weight:800;line-height:1.2;max-width:560px">Karmaşıklığı sana <span style="color:var(--gold)">3 kelimeye</span> indiriyor.</h2>
+  <p style="font-size:15px;color:var(--t2);max-width:560px;margin-top:14px;line-height:1.7">Günlerce öğrenmek isteyip vazgeçtiğin F/K, PD/DD, Piotroski, Altman Z hesaplamalarını sistem senin yerine yapıyor. Sonuç: net bir karar ve sade bir Türkçe açıklama.</p>
+  <div class="solution-grid">
+    <div class="solution-card"><div class="solution-num">243</div><div class="solution-title">BIST hissesi otomatik taranıyor</div><div class="solution-desc">Her gün sabah sonuçlar güncellenir. Sen sadece hisseye tıklarsın.</div></div>
+    <div class="solution-card"><div class="solution-num">3</div><div class="solution-title">Net karar: GİR / BEKLE / UZAK DUR</div><div class="solution-desc">Gri alan yok. Her hisse için net bir tavsiye ve güven seviyesi.</div></div>
+    <div class="solution-card"><div class="solution-num">7</div><div class="solution-title">Boyutlu temel analiz</div><div class="solution-desc">Değerleme, kalite, büyüme, bilanço — hepsi tek skor altında toplandı.</div></div>
+    <div class="solution-card"><div class="solution-num" style="font-size:32px;color:var(--t1)">𝕏</div><div class="solution-title">Sosyal nabız & tweet spike</div><div class="solution-desc">Hisse X/Twitter'da aniden konuşulmaya başlandığında seni uyarır. Rakiplerde bu yok.</div></div>
+  </div>
+</div>
+
+<hr class="divider">
+
+<!-- HOW IT WORKS -->
+<div id="nasil" class="section">
+  <div class="section-label">Nasıl çalışır?</div>
+  <h2 style="font-family:'Playfair Display',Georgia,serif;font-size:clamp(26px,4vw,40px);font-weight:800;line-height:1.2">3 adımda bitti.</h2>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:48px;align-items:start;margin-top:48px">
+    <div class="steps">
+      <div class="step"><div class="step-num">1</div><div class="step-body"><div class="step-title">Hisse seç veya listede gez</div><div class="step-desc">"THYAO" yaz — ya da keşfet. En yüksek skorlu hisseler, güçlü momentum taşıyanlar, sektöre göre gruplar hazır.</div><div class="step-note">260+ hisse · Sektöre göre filtrelenebilir</div></div></div>
+      <div class="step"><div class="step-num">2</div><div class="step-body"><div class="step-title">Skoru, kararı ve açıklamayı oku</div><div class="step-desc">GİR / BEKLE / UZAK DUR kararı ilk bakışta gözüne çarpar. Güven seviyesi yanında. Açıklama sade Türkçe, jargon yok.</div><div class="step-note">"Neden bu karar?" sekmesinde tam gerekçe</div></div></div>
+      <div class="step"><div class="step-num">3</div><div class="step-body"><div class="step-title">Kendi kararını ver</div><div class="step-desc">BistBull karar vermez — karar verirken yardım eder. Veriyi görürsün, gerekçeyi anlarsın, karar senin.</div><div class="step-note">Al-sat tavsiyesi değildir · Sorumluluk yatırımcıya aittir</div></div></div>
+    </div>
+    <div style="background:var(--bg1);border:1px solid var(--bdr2);border-radius:var(--r2);padding:24px;position:sticky;top:80px">
+      <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--t3);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:14px">Örnek Açıklama</div>
+      <div style="font-size:22px;font-weight:800;color:var(--grn);margin-bottom:10px">GİR</div>
+      <div style="font-size:14px;color:var(--t2);line-height:1.7;margin-bottom:14px">"Bu hisseye neden GİR diyoruz? Şirketin son 3 çeyrekte kârı sürekli arttı, borcu sektör ortalamasının altında ve fiyatı tarihsel değerine göre %18 iskontolu."</div>
+      <div style="font-size:13px;color:var(--ylw);line-height:1.6;padding:10px;background:rgba(245,158,11,.06);border-radius:8px;border-left:2px solid var(--ylw)">"Dikkat: Hacim düşük — büyük pozisyonlarda fiyat kayması olabilir."</div>
+      <div style="margin-top:14px;font-size:11px;color:var(--t3)">TV analistinin arkadaşına anlatır gibi. Jargon yok.</div>
+    </div>
+  </div>
+</div>
+
+<hr class="divider">
+
+<!-- FEATURES -->
+<div class="section">
+  <div class="section-label">Neler dahil?</div>
+  <h2 style="font-family:'Playfair Display',Georgia,serif;font-size:clamp(26px,4vw,40px);font-weight:800;line-height:1.2">Her şey. Tek fiyatta.</h2>
+  <div class="features-grid">
+    <div class="feature-card"><div class="feature-icon">🏛️</div><div class="feature-title">7 Boyutlu Temel Analiz</div><div class="feature-desc">Değerleme, Şirket Kalitesi, Büyüme, Finansal Sağlık, Kâr Kalitesi, Rekabet Avantajı, Sermaye Kullanımı — Piotroski, Altman Z, Graham, Buffett dahil.</div></div>
+    <div class="feature-card"><div class="feature-icon">𝕏</div><div class="feature-title">Sosyal Nabız — Tweet Spike Tespiti</div><div class="feature-desc">X/Twitter'da bir hisse aniden konuşulmaya başladığında görsel spike grafiğiyle uyarı alırsın.</div><div class="feature-hl">⚡ Rakiplerde bu özellik yok</div></div>
+    <div class="feature-card"><div class="feature-icon">📊</div><div class="feature-title">Teknik Görünüm</div><div class="feature-desc">Trend yönü, destek/direnç seviyeleri, hacim analizi — teknik terimler yerine "yukarı trend ↑ devam ediyor" gibi sade açıklamalarla.</div></div>
+    <div class="feature-card"><div class="feature-icon">⭐</div><div class="feature-title">Takip Listesi & Uyarılar</div><div class="feature-desc">Favori hisselerini takibe al. Skor değiştiğinde veya teknik kırılım yaşandığında bildirim al.</div></div>
+    <div class="feature-card"><div class="feature-icon">🤖</div><div class="feature-title">Q AI Asistanı</div><div class="feature-desc">"THYAO'yu FROTO ile karşılaştır" ya da "Portföyümdeki en riskli hisse hangisi?" gibi sorulara veri odaklı cevap.</div></div>
+    <div class="feature-card"><div class="feature-icon">📱</div><div class="feature-title">Tam Mobil Uyumlu</div><div class="feature-desc">Kullanıcıların %75'i telefonda. Her ekran boyutunda kusursuz çalışır. Uygulama gerektirmez.</div></div>
+  </div>
+  <div class="social-preview">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px">
+      <div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--gold);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:6px">𝕏 Sosyal Nabız Örneği</div>
+        <div style="font-size:18px;font-weight:700;color:var(--t1)">THYAO</div>
+        <div style="font-size:13px;color:var(--t2);margin-top:2px">X'te son 24 saatte <strong style="color:var(--gold)">847</strong> tweet atıldı</div>
+        <div style="margin-top:6px;font-size:11px;color:var(--t3)">X'te bu hisse hakkında son 24 saatte 847 tweet atılmış.</div>
+      </div>
+      <div style="display:inline-flex;align-items:center;gap:6px;padding:6px 14px;background:rgba(255,179,0,.1);border:1px solid rgba(255,179,0,.2);border-radius:6px"><span style="font-size:14px">🔥</span><span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--gold);font-weight:700">Spike Tespit Edildi</span></div>
+    </div>
+    <div class="spike-graph">
+      <div class="spike-bar nm" style="height:20%"></div><div class="spike-bar nm" style="height:30%"></div><div class="spike-bar nm" style="height:25%"></div><div class="spike-bar nm" style="height:35%"></div><div class="spike-bar nm" style="height:28%"></div><div class="spike-bar nm" style="height:22%"></div><div class="spike-bar nm" style="height:40%"></div><div class="spike-bar nm" style="height:32%"></div><div class="spike-bar nm" style="height:29%"></div><div class="spike-bar nm" style="height:25%"></div><div class="spike-bar nm" style="height:38%"></div><div class="spike-bar sp" style="height:85%"></div><div class="spike-bar sp" style="height:100%"></div><div class="spike-bar sp" style="height:92%"></div><div class="spike-bar sp" style="height:78%"></div><div class="spike-bar nm" style="height:55%"></div><div class="spike-bar nm" style="height:42%"></div><div class="spike-bar nm" style="height:38%"></div><div class="spike-bar nm" style="height:35%"></div><div class="spike-bar nm" style="height:30%"></div><div class="spike-bar nm" style="height:28%"></div><div class="spike-bar nm" style="height:31%"></div><div class="spike-bar nm" style="height:29%"></div><div class="spike-bar nm" style="height:27%"></div>
+    </div>
+    <div style="font-size:11px;color:var(--t3);margin-top:8px;font-family:'JetBrains Mono',monospace">Son 24 saat · Her çubuk = 1 saat</div>
+  </div>
+</div>
+
+<hr class="divider">
+
+<!-- PRICING -->
+<div id="fiyat" class="section" style="text-align:center">
+  <div class="section-label" style="justify-content:center">Fiyatlandırma</div>
+  <h2 style="font-family:'Playfair Display',Georgia,serif;font-size:clamp(28px,4vw,44px);font-weight:800;line-height:1.2;margin-bottom:12px">Tek fiyat. Her şey dahil.</h2>
+  <p style="font-size:15px;color:var(--t2);max-width:480px;margin:0 auto 48px">Karmaşık paketler yok. 15 farklı tier yok. Bir fiyat, tam erişim.</p>
+  <div class="pricing-card">
+    <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--gold);letter-spacing:2px;text-transform:uppercase;margin-bottom:16px">BistBull.ai · Tam Erişim</div>
+    <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:6px"><div class="price-num">99</div><div style="display:flex;flex-direction:column;gap:2px;padding-bottom:8px"><span style="font-size:18px;color:var(--t2)">TL</span><span style="font-size:13px;color:var(--t3)">/ay</span></div></div>
+    <div style="font-size:13px;color:var(--t3);margin-bottom:24px">İlk 7 gün ücretsiz · Kredi kartı gerekmez</div>
+    <div style="margin-bottom:24px">
+      <div class="price-feat"><span class="price-feat-icon">✓</span><span><b>260+ BIST hissesi</b> tam analiz</span></div>
+      <div class="price-feat"><span class="price-feat-icon">✓</span><span><b>GİR / BEKLE / UZAK DUR</b> kararları</span></div>
+      <div class="price-feat"><span class="price-feat-icon">✓</span><span><b>7 boyutlu</b> temel analiz</span></div>
+      <div class="price-feat"><span class="price-feat-icon">✓</span><span><b>Tweet spike</b> tespiti (rakiplerde yok)</span></div>
+      <div class="price-feat"><span class="price-feat-icon">✓</span><span><b>Teknik analiz</b> sade Türkçe</span></div>
+      <div class="price-feat"><span class="price-feat-icon">✓</span><span><b>Q AI asistanı</b> dahil</span></div>
+      <div class="price-feat"><span class="price-feat-icon">✓</span><span><b>Takip listesi</b> ve uyarılar</span></div>
+      <div class="price-feat"><span class="price-feat-icon">✓</span><span>İstediğin zaman <b>iptal</b></span></div>
+    </div>
+    <a href="/terminal" class="btn-primary" style="width:100%;justify-content:center;font-size:16px">7 Gün Ücretsiz Başla →</a>
+    <div style="margin-top:12px;font-size:12px;color:var(--t3)">Sonra sadece 99 TL/ay · Kredi kartı gerekmez · İstediğin an iptal</div>
+  </div>
+  <div style="overflow-x:auto">
+    <table class="compare-table">
+      <thead><tr><th>Platform</th><th>Aylık Ücret</th><th>Temel Analiz</th><th>Tweet Spike</th><th>Sade Türkçe</th><th>Net Karar</th></tr></thead>
+      <tbody>
+        <tr class="ours"><td>🐂 BistBull.ai</td><td><span class="pcell">99 TL</span></td><td><span class="yes">✓ Dahil</span></td><td><span class="yes">✓ Tek biz</span></td><td><span class="yes">✓ Her yerde</span></td><td><span class="yes">✓ GİR/BEKLE/UZAK</span></td></tr>
+        <tr><td>Sentimentalgo</td><td><span class="pcell" style="color:var(--t2)">299+ TL</span></td><td><span class="yes">✓</span></td><td><span class="no">✗</span></td><td><span class="no">Kısmi</span></td><td><span class="no">✗</span></td></tr>
+        <tr><td>Matriks IQ</td><td><span class="pcell" style="color:var(--t2)">353–938 TL</span></td><td><span class="yes">✓</span></td><td><span class="no">✗</span></td><td><span class="no">✗ Jargon</span></td><td><span class="no">✗</span></td></tr>
+        <tr><td>TradingView Pro</td><td><span class="pcell" style="color:var(--t2)">~250 TL</span></td><td><span class="no">Kısmi</span></td><td><span class="no">✗</span></td><td><span class="no">✗</span></td><td><span class="no">✗</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<hr class="divider">
+
+<!-- TRUST -->
+<div class="section">
+  <div class="section-label">Neden güvenebilirsin?</div>
+  <h2 style="font-family:'Playfair Display',Georgia,serif;font-size:clamp(26px,4vw,40px);font-weight:800;line-height:1.2;max-width:480px">Veriye dayalı.<br>Tüyoya değil.</h2>
+  <div class="trust-grid">
+    <div class="trust-item"><span class="trust-item-icon">🔍</span><span>Gizli model yok — hesaplama mantığı "Nasıl Çalışır?" sayfasında açıklanıyor</span></div>
+    <div class="trust-item"><span class="trust-item-icon">🔁</span><span>Deterministik sonuç — aynı veri her zaman aynı skoru verir</span></div>
+    <div class="trust-item"><span class="trust-item-icon">🚫</span><span>Komisyon yok — al desek de sat desek de bize para girmiyor</span></div>
+    <div class="trust-item"><span class="trust-item-icon">📐</span><span>Akademik modeller — Piotroski, Altman Z, Graham, Buffett kriterleri</span></div>
+    <div class="trust-item"><span class="trust-item-icon">🏢</span><span>Sektör kalibrasyonu — banka ile sanayi şirketini adil karşılaştırır</span></div>
+    <div class="trust-item"><span class="trust-item-icon">⚡</span><span>Sürekli güncelleme — piyasa kapanışından sonra otomatik yenileme</span></div>
+  </div>
+  <div style="margin-top:40px;padding:20px 24px;background:var(--bg1);border:1px solid var(--bdr);border-radius:var(--r);display:flex;align-items:flex-start;gap:14px">
+    <span style="font-size:24px;flex-shrink:0">📌</span>
+    <div style="font-size:14px;color:var(--t2);line-height:1.7"><strong style="color:var(--t1)">Önemli not:</strong> BistBull yatırım tavsiyesi değildir. Veriler kamuya açık kaynaklardan derlenir, bazen eksik veya gecikmeli olabilir. Sistem karar vermenize yardımcı olur — karar her zaman sizindir. Yatırım risklidir. <a href="/" style="color:var(--gold);text-decoration:none">Detaylı bilgi →</a></div>
+  </div>
+</div>
+
+<hr class="divider">
+
+<!-- FINAL CTA -->
+<div class="final-cta">
+  <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--gold);letter-spacing:2px;text-transform:uppercase;margin-bottom:20px">Hazır mısın?</div>
+  <h2 style="font-family:'Playfair Display',Georgia,serif;font-size:clamp(32px,5vw,56px);font-weight:800;line-height:1.15;margin-bottom:16px">Tüyo'ya değil,<br><em style="color:var(--gold)">kendi kararına</em> güven.</h2>
+  <p style="font-size:16px;color:var(--t2);max-width:480px;margin:0 auto 36px;line-height:1.7">İlk 7 gün tamamen ücretsiz. Kredi kartı bilgisi gerekmez. İstediğin an iptal edebilirsin.</p>
+  <a href="/terminal" class="btn-primary" style="font-size:18px;padding:18px 40px">Ücretsiz Başla →</a>
+  <div style="margin-top:14px;font-size:13px;color:var(--t3)">Sonra sadece <strong style="color:var(--t1)">99 TL/ay</strong> · İstediğin an iptal · Rakipler 300–900 TL alıyor</div>
+</div>
+
+<footer>
+  <div class="footer-brand">BIST<b>BULL</b>.ai</div>
+  <div class="footer-legal">Bu platform yatırım tavsiyesi vermez. Tüm veriler bilgi amaçlıdır. Kamuya açık kaynaklardan derlenir, doğruluğu garanti edilmez. <a href="/" class="fl">Gizlilik</a> · <a href="/" class="fl">Kullanım Şartları</a> · <a href="/" class="fl">İletişim</a></div>
+  <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--t3)">© 2026 BistBull.ai</div>
+</footer>
+
+<script>
+const obs = new IntersectionObserver((entries) => {
+  entries.forEach(e => {
+    if (e.isIntersecting) { e.target.style.opacity='1'; e.target.style.transform='translateY(0)'; }
+  });
+}, { threshold: 0.1 });
+document.querySelectorAll('.solution-card,.problem-card,.feature-card,.step').forEach(el => {
+  el.style.opacity='0'; el.style.transform='translateY(20px)'; el.style.transition='opacity .5s ease,transform .5s ease';
+  obs.observe(el);
+});
+document.querySelectorAll('.solution-grid,.problem-grid,.features-grid').forEach(grid => {
+  Array.from(grid.children).forEach((card,i) => { card.style.transitionDelay = i*80 + 'ms'; });
+});
+</script>
+</body>
+</html>

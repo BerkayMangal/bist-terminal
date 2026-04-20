@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 120">
+  <defs>
+    <linearGradient id="bullGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#FFB300"/>
+      <stop offset="100%" style="stop-color:#E69500"/>
+    </linearGradient>
+  </defs>
+  <g transform="translate(10,8) scale(1.05)">
+    <path d="M20,48 Q6,20 5,6 Q12,22 24,36 Z" fill="url(#bullGrad)" opacity="0.85"/>
+    <path d="M70,48 Q84,20 85,6 Q78,22 66,36 Z" fill="url(#bullGrad)" opacity="0.85"/>
+    <ellipse cx="45" cy="54" rx="28" ry="22" fill="url(#bullGrad)"/>
+    <ellipse cx="45" cy="70" rx="17" ry="12" fill="#E69500"/>
+    <ellipse cx="37" cy="72" rx="2.8" ry="2.2" fill="#0a0f18"/>
+    <ellipse cx="53" cy="72" rx="2.8" ry="2.2" fill="#0a0f18"/>
+    <ellipse cx="34" cy="50" rx="5" ry="4.5" fill="#0a0f18"/>
+    <ellipse cx="56" cy="50" rx="5" ry="4.5" fill="#0a0f18"/>
+    <ellipse cx="35.5" cy="49" rx="2.2" ry="1.8" fill="#eaf0fa"/>
+    <ellipse cx="57.5" cy="49" rx="2.2" ry="1.8" fill="#eaf0fa"/>
+    <path d="M26,44 Q31,41.5 37,43.5" stroke="#0a0f18" stroke-width="2" fill="none" stroke-linecap="round"/>
+    <path d="M64,44 Q59,41.5 53,43.5" stroke="#0a0f18" stroke-width="2" fill="none" stroke-linecap="round"/>
+    <path d="M39,77 Q45,80.5 51,77" stroke="#0a0f18" stroke-width="1.4" fill="none" stroke-linecap="round"/>
+    <ellipse cx="20" cy="44" rx="6.5" ry="5" fill="url(#bullGrad)" transform="rotate(-12,20,44)"/>
+    <ellipse cx="70" cy="44" rx="6.5" ry="5" fill="url(#bullGrad)" transform="rotate(12,70,44)"/>
+  </g>
+  <text x="115" y="58" font-family="'JetBrains Mono',monospace" font-weight="700" font-size="42" fill="#eaf0fa" letter-spacing="-2">BIST</text>
+  <text x="243" y="58" font-family="'JetBrains Mono',monospace" font-weight="700" font-size="42" fill="#FFB300" letter-spacing="-2">BULL</text>
+  <text x="115" y="82" font-family="'JetBrains Mono',monospace" font-weight="400" font-size="12" fill="#5a6e90" letter-spacing="3">INTELLIGENCE TERMINAL</text>
+  <line x1="115" y1="88" x2="340" y2="88" stroke="#1a2540" stroke-width="1"/>
+  <text x="115" y="102" font-family="'DM Sans',sans-serif" font-weight="400" font-size="9" fill="#3a4d6a">Yapay Zeka Destekli Yatırım Asistanı</text>
+</svg>
