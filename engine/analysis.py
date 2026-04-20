@@ -181,10 +181,22 @@ def compute_metrics(symbol: str) -> dict:
 # ================================================================
 # ANALYZE SYMBOL — Full pipeline + V10 applicability
 # ================================================================
-def analyze_symbol(symbol: str) -> dict:
+def analyze_symbol(symbol: str, scoring_version: Optional[str] = None) -> dict:
     """V13 Pure Radar Pipeline.
 
     Flow: metrics → 7-dim FA (re-normalized) → Risk → K3 Turkey → K4 Academic → Final Score
+
+    Phase 4.9 — Production integration with calibrated scoring:
+      - scoring_version: 'v13_handpicked' (default) or 'calibrated_2026Q1'.
+        When None, read from SCORING_VERSION_DEFAULT env var (default
+        'v13_handpicked'). V13 path is BIT-IDENTICAL to pre-Phase-4.9
+        behavior (Rule 6 backward compat).
+      - Only value/quality/growth/balance buckets are routed through the
+        calibrated dispatcher; earnings/moat/capital remain V13 (no
+        calibrated versions exist yet).
+      - Response includes _meta.scoring_version + scoring_version_effective
+        so the client / telemetry sees when calibrated fell back to V13
+        (no fits available yet).
     
     KEY V13 CHANGES:
     1. Momentum DECOUPLED from Değer Skoru (kept as separate sentiment badge)
@@ -194,7 +206,13 @@ def analyze_symbol(symbol: str) -> dict:
     5. Final Score = clamp(TR_adjusted_FA + academic_penalty + risk_penalty, 1, 99)
     6. Deterministic verdict ("Grandma Test") generated
     """
-    cached = analysis_cache.get(symbol)
+    # Phase 4.9: resolve scoring_version (None -> env var -> v13_handpicked default)
+    if scoring_version is None:
+        scoring_version = os.getenv("SCORING_VERSION_DEFAULT", "v13_handpicked")
+
+    # Cache key includes scoring_version so A/B calls don't clash
+    cache_key = (symbol, scoring_version) if scoring_version != "v13_handpicked" else symbol
+    cached = analysis_cache.get(cache_key)
     if cached is not None:
         return cached
 
@@ -210,11 +228,18 @@ def analyze_symbol(symbol: str) -> dict:
     # ──────────────────────────────────────────────────
     # K1: 7 Boyutlu Temel Analiz — compute raw scores
     # ──────────────────────────────────────────────────
+    # Phase 4.9: value/quality/growth/balance routed through score_dispatch
+    # for A/B. Fallback to V13 is transparent (logged via
+    # scoring_version_effective below). earnings/moat/capital stay V13 (no
+    # calibrated versions exist -- they don't take sector_group either).
+    from engine.scoring_calibrated import score_dispatch
+    _dispatched = score_dispatch(m, sector_group, scoring_version=scoring_version)
+
     _raw_fa = {
-        "value": score_value(m, sector_group),
-        "quality": score_quality(m, sector_group),
-        "growth": score_growth(m, sector_group),
-        "balance": score_balance(m, sector_group),
+        "value": _dispatched["value"],
+        "quality": _dispatched["quality"],
+        "growth": _dispatched["growth"],
+        "balance": _dispatched["balance"],
         "earnings": score_earnings(m),
         "moat": score_moat(m),
         "capital": score_capital(m),
@@ -447,7 +472,12 @@ def analyze_symbol(symbol: str) -> dict:
     # Delta — daily snapshot + 7d change (never blocks)
     try:
         from engine.delta import save_daily_snapshot, compute_delta
-        save_daily_snapshot(symbol, r)
+        # Phase 4.9: pass scoring_version so A/B telemetry keeps both
+        # rows per symbol/day. When scoring_version == 'v13_handpicked'
+        # (default), pass None so the column DEFAULT path runs (backward
+        # compat -- bit-identical INSERT vs pre-Phase-4.9).
+        _sv_for_save = None if scoring_version == "v13_handpicked" else scoring_version
+        save_daily_snapshot(symbol, r, scoring_version=_sv_for_save)
         dd = compute_delta(symbol, r)
         if dd: r.update(dd)
     except Exception as e:
@@ -478,5 +508,21 @@ def analyze_symbol(symbol: str) -> dict:
     except Exception as e:
         log.debug(f"V13 verdict skipped for {symbol}: {e}")
 
-    analysis_cache.set(symbol, r)
+    # Phase 4.9: surface scoring_version telemetry so clients (and the
+    # A/B report endpoint) can see which version produced this result
+    # AND whether the calibrated path fell back to V13 (scoring_version
+    # requested == calibrated_2026Q1 but scoring_version_effective ==
+    # v13_handpicked means no fits available yet).
+    # This block is ONLY attached when the caller asked for a non-default
+    # version, so the V13 default path produces output bit-identical to
+    # pre-Phase-4.9 (Rule 6 backward compat).
+    if scoring_version != "v13_handpicked":
+        r["_meta"] = {
+            "scoring_version": _dispatched.get("scoring_version", scoring_version),
+            "scoring_version_effective": _dispatched.get(
+                "scoring_version_effective", "v13_handpicked"
+            ),
+        }
+
+    analysis_cache.set(cache_key, r)
     return r

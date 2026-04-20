@@ -5,13 +5,13 @@ def _sf(v,d=0):
  if v is None: return d
  try: return float(v)
  except: return d
-def save_daily_snapshot(symbol,a):
- try: _save(symbol,a)
+def save_daily_snapshot(symbol,a,scoring_version=None):
+ try: _save(symbol,a,scoring_version)
  except Exception as e: log.debug(f"delta save failed: {e}")
 def compute_delta(symbol,a):
  try: return _compute(symbol,a)
  except Exception as e: log.debug(f"delta compute failed: {e}"); return {}
-def _save(symbol,a):
+def _save(symbol,a,scoring_version=None):
  from infra.storage import _get_conn
  conn=_get_conn(); today=date.today().isoformat()
  # Phase 2: migration 003 added scoring_version to the PK triple so Phase 4
@@ -19,8 +19,15 @@ def _save(symbol,a):
  # kicks in via the column DEFAULT. ON CONFLICT target must match the full
  # PK, otherwise sqlite raises 'ON CONFLICT clause does not match any
  # PRIMARY KEY or UNIQUE constraint'.
- conn.execute("INSERT INTO score_history(symbol,snap_date,score,momentum,risk,fa_score,ivme,decision) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(symbol,snap_date,scoring_version) DO UPDATE SET score=excluded.score,momentum=excluded.momentum,risk=excluded.risk,fa_score=excluded.fa_score,ivme=excluded.ivme,decision=excluded.decision",
-  (symbol.upper(),today,_sf(a.get("overall") or a.get("deger")),_sf(a.get("ivme")),_sf(a.get("risk_score")),_sf(a.get("fa_score")),_sf(a.get("ivme")),a.get("decision","")))
+ # Phase 4.9: scoring_version can be explicitly passed to write distinct
+ # rows for V13 and calibrated on the same date (A/B telemetry). None =>
+ # the column DEFAULT takes over (v13_handpicked) for backward compat.
+ if scoring_version is None:
+  conn.execute("INSERT INTO score_history(symbol,snap_date,score,momentum,risk,fa_score,ivme,decision) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(symbol,snap_date,scoring_version) DO UPDATE SET score=excluded.score,momentum=excluded.momentum,risk=excluded.risk,fa_score=excluded.fa_score,ivme=excluded.ivme,decision=excluded.decision",
+   (symbol.upper(),today,_sf(a.get("overall") or a.get("deger")),_sf(a.get("ivme")),_sf(a.get("risk_score")),_sf(a.get("fa_score")),_sf(a.get("ivme")),a.get("decision","")))
+ else:
+  conn.execute("INSERT INTO score_history(symbol,snap_date,score,momentum,risk,fa_score,ivme,decision,scoring_version) VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(symbol,snap_date,scoring_version) DO UPDATE SET score=excluded.score,momentum=excluded.momentum,risk=excluded.risk,fa_score=excluded.fa_score,ivme=excluded.ivme,decision=excluded.decision",
+   (symbol.upper(),today,_sf(a.get("overall") or a.get("deger")),_sf(a.get("ivme")),_sf(a.get("risk_score")),_sf(a.get("fa_score")),_sf(a.get("ivme")),a.get("decision",""),scoring_version))
  conn.commit()
 def _compute(symbol,a):
  from infra.storage import _get_conn
