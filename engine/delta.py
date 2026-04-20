@@ -12,13 +12,13 @@ def compute_delta(symbol,a):
  try: return _compute(symbol,a)
  except Exception as e: log.debug(f"delta compute failed: {e}"); return {}
 def _save(symbol,a):
- from storage import _get_conn
+ from infra.storage import _get_conn
  conn=_get_conn(); today=date.today().isoformat()
  conn.execute("INSERT INTO score_history(symbol,snap_date,score,momentum,risk,fa_score,ivme,decision) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(symbol,snap_date) DO UPDATE SET score=excluded.score,momentum=excluded.momentum,risk=excluded.risk,fa_score=excluded.fa_score,ivme=excluded.ivme,decision=excluded.decision",
   (symbol.upper(),today,_sf(a.get("overall") or a.get("deger")),_sf(a.get("ivme")),_sf(a.get("risk_score")),_sf(a.get("fa_score")),_sf(a.get("ivme")),a.get("decision","")))
  conn.commit()
 def _compute(symbol,a):
- from storage import _get_conn
+ from infra.storage import _get_conn
  conn=_get_conn(); wa=(date.today()-timedelta(days=7)).isoformat()
  row=conn.execute("SELECT score,momentum,risk FROM score_history WHERE symbol=? AND snap_date<=? ORDER BY snap_date DESC LIMIT 1",(symbol.upper(),wa)).fetchone()
  if row is None: return {}
@@ -33,7 +33,7 @@ def _compute(symbol,a):
  return {"delta":{"score_7d":ds,"momentum_7d":dm,"risk_7d":dr},"what_changed":wc[:3]}
 def watchlist_changes(symbols):
  try:
-  from storage import _get_conn
+  from infra.storage import _get_conn
   conn=_get_conn(); wa=(date.today()-timedelta(days=7)).isoformat(); ch=[]
   for s in symbols:
    rows=conn.execute("SELECT snap_date,score FROM score_history WHERE symbol=? AND snap_date>=? ORDER BY snap_date ASC",(s.upper(),wa)).fetchall()
@@ -44,7 +44,7 @@ def watchlist_changes(symbols):
  except: return []
 def get_movers():
  try:
-  from storage import _get_conn
+  from infra.storage import _get_conn
   conn=_get_conn(); today=date.today().isoformat(); wa=(date.today()-timedelta(days=7)).isoformat()
   rows=conn.execute("SELECT h1.symbol,h2.score-h1.score AS d,h2.score FROM score_history h1 JOIN score_history h2 ON h1.symbol=h2.symbol WHERE h1.snap_date=(SELECT MIN(snap_date) FROM score_history WHERE snap_date>=? AND symbol=h1.symbol) AND h2.snap_date=? ORDER BY d DESC",(wa,today)).fetchall()
   if not rows: return {"gainers":[],"losers":[]}
