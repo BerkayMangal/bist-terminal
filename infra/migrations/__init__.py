@@ -85,18 +85,24 @@ def apply_migrations(conn: sqlite3.Connection) -> list[int]:
             continue
 
         sql = path.read_text(encoding="utf-8")
-        # Split into statements rather than using conn.executescript() --
-        # executescript() implicitly commits the pending transaction
-        # before running, which would defeat BEGIN IMMEDIATE/ROLLBACK
-        # atomicity. We control the .sql file format so a naive
-        # semicolon-split is safe here.
-        stmts = [s.strip() for s in sql.split(";") if s.strip()]
+        # Strip SQL comments BEFORE splitting on ';' so a ';' inside a
+        # -- comment doesn't create a garbage fragment the naive split
+        # would try to execute. Migrations do not contain string
+        # literals with '--' in them (would not make sense in DDL), so
+        # this simple pass is safe.
+        cleaned_lines: list[str] = []
+        for raw in sql.split("\n"):
+            idx = raw.find("--")
+            if idx >= 0:
+                raw = raw[:idx]
+            if raw.strip():
+                cleaned_lines.append(raw)
+        cleaned = "\n".join(cleaned_lines)
 
-        def _is_executable(stmt: str) -> bool:
-            non_comment = [ln for ln in stmt.split("\n")
-                          if ln.strip() and not ln.strip().startswith("--")]
-            return bool(non_comment)
-        stmts = [s for s in stmts if _is_executable(s)]
+        # Now split on ';' and run each statement inside our BEGIN IMMEDIATE
+        # transaction. conn.executescript() would auto-commit our pending
+        # transaction and defeat rollback -- so we intentionally do not use it.
+        stmts = [s.strip() for s in cleaned.split(";") if s.strip()]
 
         try:
             conn.execute("BEGIN IMMEDIATE")
