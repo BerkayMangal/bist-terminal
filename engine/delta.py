@@ -14,7 +14,12 @@ def compute_delta(symbol,a):
 def _save(symbol,a):
  from infra.storage import _get_conn
  conn=_get_conn(); today=date.today().isoformat()
- conn.execute("INSERT INTO score_history(symbol,snap_date,score,momentum,risk,fa_score,ivme,decision) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(symbol,snap_date) DO UPDATE SET score=excluded.score,momentum=excluded.momentum,risk=excluded.risk,fa_score=excluded.fa_score,ivme=excluded.ivme,decision=excluded.decision",
+ # Phase 2: migration 003 added scoring_version to the PK triple so Phase 4
+ # calibrated scoring can coexist with v13. Default value 'v13_handpicked'
+ # kicks in via the column DEFAULT. ON CONFLICT target must match the full
+ # PK, otherwise sqlite raises 'ON CONFLICT clause does not match any
+ # PRIMARY KEY or UNIQUE constraint'.
+ conn.execute("INSERT INTO score_history(symbol,snap_date,score,momentum,risk,fa_score,ivme,decision) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(symbol,snap_date,scoring_version) DO UPDATE SET score=excluded.score,momentum=excluded.momentum,risk=excluded.risk,fa_score=excluded.fa_score,ivme=excluded.ivme,decision=excluded.decision",
   (symbol.upper(),today,_sf(a.get("overall") or a.get("deger")),_sf(a.get("ivme")),_sf(a.get("risk_score")),_sf(a.get("fa_score")),_sf(a.get("ivme")),a.get("decision","")))
  conn.commit()
 def _compute(symbol,a):
