@@ -262,7 +262,7 @@ def analyze_symbol(symbol: str) -> dict:
     turkey_result = {"composite_multiplier": 1.0, "composite_grade": "?", "filters": {},
                      "adjusted_fa": fa_pure, "adjusted_deger": None, "summary": ""}
     try:
-        from turkey_realities import compute_turkey_realities
+        from engine.turkey_realities import compute_turkey_realities
         turkey_result = compute_turkey_realities(
             m, sector_group=sector_group, fa_pure=fa_pure,
             policy_rate=37.0,
@@ -278,7 +278,7 @@ def analyze_symbol(symbol: str) -> dict:
     academic_result = {"composite_score": 50, "composite_penalty": 0, "composite_grade": "?",
                        "filters": {}, "adjusted_fa": tr_adjusted_fa, "summary": ""}
     try:
-        from academic_layer import compute_academic_adjustments
+        from engine.academic_layer import compute_academic_adjustments
         academic_result = compute_academic_adjustments(
             m, sector_group=sector_group,
             fa_input=tr_adjusted_fa,
