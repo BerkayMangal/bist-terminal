@@ -109,8 +109,16 @@ def init_db() -> None:
                    "TEXT NOT NULL DEFAULT (datetime('now'))")
     conn.commit()
 
-    # Step 3: run versioned migrations (001 users, 002 marker, 003 score_history, ...).
+    # Step 3: run versioned migrations (001 users, 002 marker, 003 score_history,
+    # 004 pit, 005 audit marker, 006 prices).
     apply_migrations(conn)
+
+    # Step 4: post-migration column adds (SQLite can't do ADD COLUMN IF NOT EXISTS
+    # inside a migration .sql file when the base table exists from an earlier
+    # migration and may already have the column from a previous install).
+    # Migration 005 adds source_url to universe_history.
+    _ensure_column(conn, "universe_history", "source_url", "TEXT")
+    conn.commit()
 
     log.info(f"SQLite storage initialized: {DB_PATH}")
 
