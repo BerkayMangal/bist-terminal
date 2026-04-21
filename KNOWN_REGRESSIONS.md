@@ -248,3 +248,77 @@ Phase 4.x test module (4.1, 4.3, 4.4, 4.5, 4.6, 4.7, 4.9) —
 KR-006 prevention methodology fully adopted as the phase pattern.
 
 Phase 4 is DELIVERED & PRODUCTION-READY. Awaiting Phase 5 spec.
+
+
+---
+
+## HOTFIX 1 — Production incident remediation (post-Phase 4.9 deploy)
+
+Not a pre-existing KR; these are forward-fixes of two production issues
+reported after Phase 4.9 was deployed to bistbull.ai. Logged here for
+traceability.
+
+### HOTFIX-1-A — /api/heatmap 10-minute cold start
+
+Symptom: users landing on bistbull.ai saw a blank heatmap for up to
+10 minutes on fresh deploy. HTTP log showed `GET /api/heatmap 200 9m 48s`.
+
+Root cause (4 compounding):
+  - heatmap_cache was in-memory only (no Redis) → container restart = cold
+  - 15-min HEATMAP_STARTUP_DELAY before background loop's first run
+  - Cache miss fell through to sync 108-Ticker loop on the HTTP request path
+  - Frontend fetch() had no AbortController → 10-min browser wait
+
+Fix (3 commits, 4 layers):
+  - Commit 6a37138: removed sync 108-Ticker loop from /api/heatmap;
+    cache-miss returns {computing:true} in <200ms and kicks background
+    refresh (asyncio.Lock-guarded); HEATMAP_STARTUP_DELAY 900s→180s
+  - Commit d3156f4: frontend api() now uses AbortController with
+    per-endpoint timeout (3s for heatmap); loadHeatmap handles
+    computing=true with 30s polling retry
+  - Test commit f4d0b02: test_no_borsapy_calls_on_request_path
+    monkey-patches bp.Ticker to sentinel so any future regression
+    fires at CI time
+
+### HOTFIX-1-B — fetch_raw 25/108 fail rate with empty error messages
+
+Symptom: 25/108 symbols failing fetch_raw per scan, including BIST30
+blue-chips (ULKER, ASTOR, CCOLA, AKSA). Log line `fetch_raw failed
+for X:` was followed by empty string, making triage impossible.
+
+Root cause:
+  - Log template used `{e}` which renders empty for no-arg Exception()
+  - No retry logic; transient TradingView rate-limits killed any symbol
+    that got hit on first attempt
+  - CB threshold=50 ruled out as cascade cause
+  - Ticker format matched working reference (research/ingest_filings.py)
+
+Fix (commit 6a69e6f):
+  - All fetch_raw log sites now use
+    `f"{type(e).__name__}: {e!r}"` + exc_info=True
+  - fetch_raw_v9 wraps ThreadPoolExecutor in 3-attempt retry with
+    exponential backoff (0.5s/1.0s/2.0s)
+  - Non-retriable errors (TypeError/AttributeError/ImportError/KeyError)
+    fail fast to not waste retries on programmer bugs
+  - CircuitBreakerOpen fails fast (CB semantics preserved)
+  - New _fetch_attempts telemetry field for post-deploy dashboard
+
+### Test impact
+
+Baseline 831 (Phase 4.9) → 841 passed + 5 skipped (both CWDs).
+10 new regression tests:
+  - tests/test_hotfix_1_heatmap.py (7 tests, 1 skip borsapy-conditional)
+  - tests/test_hotfix_1_fetch_raw.py (8 tests, 4 skip borsapy-conditional)
+
+### Rollback
+
+Either hotfix can be reverted independently:
+  - SORUN 1 backend: git revert 6a37138
+  - SORUN 1 frontend: git revert d3156f4
+  - SORUN 2: git revert 6a69e6f
+  - Tests: git revert f4d0b02
+
+Detailed analysis in:
+  - PHASE_HOTFIX_1_REPORT.md
+  - reports/hotfix_1_timing.md
+  - reports/hotfix_1_fetch_raw_errors.md
