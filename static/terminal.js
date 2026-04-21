@@ -60,7 +60,37 @@ function tipHtml(label, tipKey){
 }
 
 // ===== API =====
-async function api(p){const r=await fetch(p);if(!r.ok)throw new Error(r.status);return r.json();}
+// HOTFIX 1 (2026-Q2 production incident): raw fetch() has no default
+// timeout, so a slow /api/heatmap (previously 10min on cold cache)
+// would block the whole UI. AbortController + per-endpoint timeout
+// caps any regression to a user-visible error instead of a blank page.
+const _API_TIMEOUTS = {
+  '/api/heatmap': 3000,    // < 3s or frontend shows empty-state
+  '/api/analyze': 15000,   // single-symbol deep analysis is slower
+  '/api/scan':    30000,   // user-initiated full scan
+  '/api/agent':   20000,   // AI call
+  '/api/ai-summary': 20000,
+};
+function _timeoutFor(path) {
+  for (const prefix of Object.keys(_API_TIMEOUTS)) {
+    if (path.startsWith(prefix)) return _API_TIMEOUTS[prefix];
+  }
+  return 8000;  // default
+}
+async function api(p){
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), _timeoutFor(p));
+  try {
+    const r = await fetch(p, {signal: ctrl.signal});
+    if (!r.ok) throw new Error(r.status);
+    return r.json();
+  } catch (e) {
+    if (e.name === 'AbortError') throw new Error('timeout');
+    throw e;
+  } finally {
+    clearTimeout(t);
+  }
+}
 
 // ===== CACHED API — stale-while-revalidate for frontend =====
 const _apiCache = {};
@@ -1098,10 +1128,27 @@ function _moveTip(e){const t=$('bbTip');if(!t||t.style.display==='none')return;c
 function _hideTip(){const t=$('bbTip');if(t)t.style.display='none';}
 
 // ===== HEATMAP — Finviz-grade treemap + glassmorphism tooltip =====
+// HOTFIX 1 (2026-Q2): /api/heatmap now returns quickly with
+// computing=true when the backend's cold cache is still warming up.
+// Show the empty-state message and poll every 30s up to 10 times
+// instead of blocking the UI. If the fetch itself times out (3s cap),
+// show the error message and let the user retry via nav.
+let _heatmapRetryTimer = null;
 async function loadHeatmap(){
+  if (_heatmapRetryTimer) { clearTimeout(_heatmapRetryTimer); _heatmapRetryTimer = null; }
   try{
     const d=await api('/api/heatmap');
-    if(!d.sectors||!d.sectors.length){S.heatmapHtml='<p style="color:var(--t4);font-size:12px">Tarama sonrası gelecek</p>';return;}
+    if(d.computing===true || !d.sectors || !d.sectors.length){
+      S.heatmapHtml='<p style="color:var(--t4);font-size:12px">Tarama sonrası gelecek — <span style="opacity:0.6">(arka planda hesaplanıyor)</span></p>';
+      // Poll again in 30s; cap at 10 retries (5 minutes total)
+      S._heatmapRetries = (S._heatmapRetries || 0) + 1;
+      if (S._heatmapRetries <= 10) {
+        _heatmapRetryTimer = setTimeout(() => loadHeatmap(), 30000);
+      }
+      if(S.page==='home')renderHome();
+      return;
+    }
+    S._heatmapRetries = 0;  // got real data, reset counter
     // 7-grade renk skalası: koyu kırmızı → siyah → neon yeşil
     function heatCol(chg){
       if(chg>=3)return'#00e676';if(chg>=2)return'#00c853';if(chg>=1)return'#2e7d32';if(chg>=0.3)return'#1b5e20';
@@ -1177,7 +1224,17 @@ async function loadHeatmap(){
     });
     h2+=`</div></div>`;
     S.heatmapHtml=h2;
-  }catch(e){S.heatmapHtml='<p style="color:var(--red);font-size:11px">Heatmap yüklenemedi</p>';}
+  }catch(e){
+    if (e.message === 'timeout') {
+      S.heatmapHtml='<p style="color:var(--t4);font-size:11px">Heatmap yavaş yanıt veriyor — 30s sonra tekrar deneniyor...</p>';
+      S._heatmapRetries = (S._heatmapRetries || 0) + 1;
+      if (S._heatmapRetries <= 5) {
+        _heatmapRetryTimer = setTimeout(() => loadHeatmap(), 30000);
+      }
+    } else {
+      S.heatmapHtml='<p style="color:var(--red);font-size:11px">Heatmap yüklenemedi</p>';
+    }
+  }
   if(S.page==='home')renderHome();
 }
 // Glassmorphism tooltip builder — scan data enriched
