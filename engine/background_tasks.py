@@ -17,11 +17,21 @@
 #   data was still resident in memory. This doubled peak RAM usage
 #   and crashed the Railway container.
 #
-#   Fix: heatmap_refresh_loop() waits HEATMAP_STARTUP_DELAY (15 min)
-#   before its first run, giving the scan's ThreadPoolExecutor and all
+#   Fix: heatmap_refresh_loop() waits HEATMAP_STARTUP_DELAY before
+#   its first run, giving the scan's ThreadPoolExecutor and all
 #   yfinance DataFrames time to be garbage-collected. Subsequent runs
-#   happen every HEATMAP_REFRESH_INTERVAL (10 min) independently of
+#   happen every HEATMAP_REFRESH_INTERVAL independently of
 #   the scan cycle — they are never co-scheduled.
+#
+#   HOTFIX 1 (2026-Q2 prod incident): startup delay trimmed from
+#   15min -> 3min. The 15min window meant users saw a blank heatmap
+#   for the first 15 minutes after deploy, which combined with the
+#   now-fixed `for t in UNIVERSE` sequential-fetch bug to produce a
+#   10-minute blank page. Empirically the scanner's RAM spike has
+#   dropped since Phase 3 (aggressive GC + streaming yfinance), so
+#   3min is safe. Additionally, /api/heatmap now kicks a one-shot
+#   background refresh on first cold-request (see app.py HOTFIX 1),
+#   so this loop's startup delay is no longer the critical path.
 #
 # EVENT LOOP CONTRACT:
 #   All synchronous operations (yfinance, pandas, borsapy) are wrapped
@@ -55,9 +65,11 @@ log = logging.getLogger("bistbull.bgtasks")
 # ================================================================
 # TIMING CONSTANTS
 # ================================================================
-# Heatmap: wait 15 min on startup so scan RAM is fully freed,
-# then refresh every 10 min.
-HEATMAP_STARTUP_DELAY:    int = 900   # 15 minutes
+# Heatmap: wait 3 min on startup (HOTFIX 1: reduced from 15 min —
+# /api/heatmap now has its own one-shot background kick on cold miss,
+# so the loop's first run isn't the critical path for user-visible
+# blank page prevention), then refresh every 30 min.
+HEATMAP_STARTUP_DELAY:    int = 180   # 3 minutes (was 900)
 HEATMAP_REFRESH_INTERVAL: int = 1800  # OPT: 600→1800 (10dk→30dk, API yükü -%66)
 
 # Paper trade: 90s startup delay, then every 5 min.

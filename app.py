@@ -599,39 +599,100 @@ async def api_social(request: Request):
 # ================================================================
 # HEATMAP
 # ================================================================
+# HOTFIX 1 (2026-Q2 production incident): /api/heatmap was taking
+# 10 minutes when cache was cold, because cache miss fell through to
+# a sequential `for t in UNIVERSE: bp.Ticker(t).fast_info` loop that
+# blocks the HTTP request. Result: users saw a blank page for 10min
+# on first visit. Fix: cache miss NEVER blocks. We return whatever
+# top10 data is already in memory (fast-path, <50ms) and flag the
+# response `computing=true` if the full snapshot isn't ready yet.
+# The slow 108-symbol fetch is handled EXCLUSIVELY by the background
+# loop (engine/background_tasks.py:heatmap_refresh_loop).
+
+_HEATMAP_REFRESH_LOCK = asyncio.Lock()  # prevents duplicate bg refreshes
+_HEATMAP_REFRESH_INFLIGHT = False
+
+
 def _fetch_heatmap_data():
+    """Fast-path only: derive heatmap from already-cached top10 scan
+    results + _daily_changes. Returns [] if snapshot not ready yet;
+    caller flags response as computing=true. NEVER does sequential
+    borsapy fetches on the request path (see HOTFIX 1 header)."""
     items = get_top10_items()
-    # Fast path: scan results + daily changes from history download
-    if items and len(items) >= 10 and _daily_changes:
-        results = []
-        for it in items:
-            ticker = it.get("ticker", ""); dc = _daily_changes.get(ticker, {})
-            price = dc.get("price") or it.get("price"); chg = dc.get("change_pct", 0); mcap = it.get("market_cap")
-            if price and mcap: results.append({"ticker": ticker, "price": round(float(price), 2), "change_pct": round(float(chg), 2), "market_cap": float(mcap), "sector": it.get("sector", "Diger") or "Diger", "score": it.get("overall")})
-        if results: return results
-    # Fallback: borsapy fast_info
-    item_map = {item["ticker"]: item for item in items} if items else {}; results = []
-    if not BORSAPY_AVAILABLE: return results
-    try:
-        import borsapy as bp_m
-        for t in UNIVERSE:
-            try:
-                _tk = bp_m.Ticker(t); fi = _tk.fast_info
-                last = getattr(fi, "last_price", None); prev = getattr(fi, "previous_close", None); mcap = getattr(fi, "market_cap", None)
-                if last is not None and prev is not None and prev > 0:
-                    si = item_map.get(t)
-                    results.append({"ticker": t, "price": round(float(last), 2), "change_pct": round(((last - prev) / prev) * 100, 2), "market_cap": float(mcap) if mcap else None, "sector": (si.get("sector", "Diger") if si else "Diger") or "Diger", "score": si["overall"] if si else None})
-            except Exception: continue
-    except Exception as e: log.warning(f"heatmap borsapy: {e}")
+    if not items or not _daily_changes:
+        return []
+    results = []
+    for it in items:
+        ticker = it.get("ticker", "")
+        dc = _daily_changes.get(ticker, {})
+        price = dc.get("price") or it.get("price")
+        chg = dc.get("change_pct", 0)
+        mcap = it.get("market_cap")
+        if price and mcap:
+            results.append({
+                "ticker": ticker,
+                "price": round(float(price), 2),
+                "change_pct": round(float(chg), 2),
+                "market_cap": float(mcap),
+                "sector": it.get("sector", "Diger") or "Diger",
+                "score": it.get("overall"),
+            })
     return results
+
+
+async def _kick_background_heatmap_refresh():
+    """Fire-and-forget: trigger a background heatmap fetch if none is
+    already running. Respects the async lock so we don't stampede the
+    borsapy API if multiple users hit /api/heatmap while cache is cold."""
+    global _HEATMAP_REFRESH_INFLIGHT
+    if _HEATMAP_REFRESH_INFLIGHT:
+        return
+    async with _HEATMAP_REFRESH_LOCK:
+        if _HEATMAP_REFRESH_INFLIGHT:
+            return
+        _HEATMAP_REFRESH_INFLIGHT = True
+
+    async def _bg_task():
+        global _HEATMAP_REFRESH_INFLIGHT
+        try:
+            from engine.background_tasks import _refresh_heatmap_once
+            await _refresh_heatmap_once()
+        except Exception as e:
+            log.warning(f"heatmap background refresh failed: {e}")
+        finally:
+            _HEATMAP_REFRESH_INFLIGHT = False
+
+    asyncio.create_task(_bg_task())
+
 
 @app.get("/api/heatmap")
 async def api_heatmap():
+    # HOTFIX 1: guaranteed <200ms response. Cache hit is unchanged.
+    # Cache miss: build partial from top10 (fast), kick off background
+    # refresh, flag computing=true so frontend shows its stale/empty
+    # state rather than blocking.
     cached = heatmap_cache.get("heatmap")
-    if cached is not None: return success(cached, cache_status="hit")
-    data = await asyncio.to_thread(_fetch_heatmap_data)
+    if cached is not None:
+        return success(cached, cache_status="hit")
+
+    # Fast-path: derive from top10 scan snapshot (already in memory)
+    data = _fetch_heatmap_data()  # synchronous, but NO network I/O
     result = build_heatmap_sectors(data)
-    heatmap_cache.set("heatmap", result); return success(result)
+
+    if not data:
+        # Top10 snapshot not ready either (fresh boot). Tell the
+        # frontend it's computing; no blocking.
+        await _kick_background_heatmap_refresh()
+        result["computing"] = True
+        return success(result, cache_status="cold")
+
+    # We built a partial heatmap. Cache it briefly AND kick a proper
+    # background refresh so the full version replaces it soon.
+    result["computing"] = False
+    result["source"] = "partial_from_top10"
+    heatmap_cache.set("heatmap", result)
+    await _kick_background_heatmap_refresh()
+    return success(result, cache_status="partial")
 
 # ================================================================
 # QUOTE + BOOK + AGENT + HERO + LIVE + BATCH
