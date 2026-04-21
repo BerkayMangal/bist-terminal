@@ -322,3 +322,64 @@ Detailed analysis in:
   - PHASE_HOTFIX_1_REPORT.md
   - reports/hotfix_1_timing.md
   - reports/hotfix_1_fetch_raw_errors.md
+
+
+---
+
+## Phase 4.7 final close (FA calibration lifecycle)
+
+Not a regression — logged for completeness of the Phase 4 line.
+
+Phase 4.7 was originally scaffolded in commit e01175c (Phase 4's
+main branch work) with synthetic FA event tests only. Real calibration
+required operator backfill of BIST30 quarterly fundamentals, which
+was blocked on:
+  - Operator time availability (2-hour Colab session)
+  - Dry-run-first pattern to avoid Phase 3b-era API mismatches
+
+This Phase 4.7 final turn delivered the full tooling:
+  - Commit 1e6b220: scripts/ingest_fa_for_calibration.py (550 LOC,
+    fetcher abstraction, checkpoint resume, 19 tests)
+  - Commit d9245a5: scripts/calibrate_fa_from_events.py (250 LOC,
+    coverage filter + sanity check, 13 tests)
+  - Commit c9acf3d: K3/K4 coverage tests + A/B coexistence (9 tests)
+  - Commit 744eaba: app.py A/B dual-write in background scanner
+
+Plus docs:
+  - scripts/RUN_FA_BACKFILL_COLAB.md (Türkçe operator guide, 206 lines)
+  - reports/fa_calibration_plan.md (pre-ingest plan, 129 lines)
+  - PHASE_4_7_FINAL_REPORT.md (lifecycle doc, 294 lines)
+
+Test impact: 841 (HOTFIX 1) -> 882 passed + 5 skipped (+41).
+Both CWDs pass. Reviewer target 880+ cleared.
+
+Important findings from this turn that were NOT regressions but
+worth recording:
+
+1. K3 (turkey_realities) + K4 (academic_layer) chain was NEVER
+   broken in the calibrated path. engine/analysis.py re-aggregates
+   all 7 buckets (4 calibrated + 3 V13) via the _active dict
+   normalization before K3/K4 receive fa_pure. Reviewer's concern
+   about "zincir kopuksa" was pre-emptively addressed with coverage
+   tests — no wiring fix needed.
+
+2. Decision to keep earnings/moat/capital in V13 (not extend to
+   calibrated versions). Rationale: composite metrics with discrete
+   branching (Beneish M thresholds, share_change cap-at-100,
+   asset_turnover trend classification) don't reduce to single
+   metric_value -> forward_return pairs. Documented in
+   PHASE_4_7_FINAL_REPORT.md and reports/fa_calibration_plan.md.
+
+3. Anti-correlation sanity check in the calibrator catches
+   data-quality issues: when forward returns are anti-correlated
+   with the registered direction, PAV forced-increasing pools
+   everything to a constant -> _check_fit_direction excludes.
+   test_wrong_direction_excluded locks this in. If the Colab
+   operator accidentally sign-flips the return column, bad fits
+   are rejected instead of deployed.
+
+Rollback: 4 Phase 4.7 commits can be reverted independently; V13
+handpicked remains the always-available fallback whether or not
+reports/fa_isotonic_fits.json is present on disk.
+
+Phase 4 total: 32 commits from Phase 3 baseline, 882 tests passing.
