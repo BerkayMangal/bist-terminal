@@ -72,7 +72,17 @@ def fetch_raw(symbol: str) -> dict:
             log.debug(f"fetch_raw OK: {symbol} (source: borsapy)")
             return raw
         except Exception as e:
-            log.warning(f"fetch_raw failed for {symbol}: {e}")
+            # HOTFIX 1 (2026-Q2): the previous log template
+            # `f"fetch_raw failed for {symbol}: {e}"` produced blank
+            # log lines for exceptions whose str() is empty (bare
+            # Exception(), some borsapy internal errors, KeyError
+            # before str-conversion). Without the type name and
+            # exc_info we can't debug the prod 25/108 fail rate.
+            log.warning(
+                f"fetch_raw failed for {symbol}: "
+                f"{type(e).__name__}: {e!r}",
+                exc_info=True,
+            )
             raise
 
     raise RuntimeError(f"borsapy kullanılamıyor — {symbol} verisi alınamadı")

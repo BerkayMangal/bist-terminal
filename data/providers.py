@@ -199,6 +199,21 @@ def _pick_debt(
 # ================================================================
 # FETCH RAW V9 — SafeCache + Circuit Breaker entegreli
 # ================================================================
+# HOTFIX 1 (2026-Q2 production incident): ~23% of symbols (25/108)
+# were failing this call. Root cause investigation showed:
+#   1. Empty-string exception messages (no-args Exception, some
+#      borsapy internal errors) made the "fetch_raw failed for X:"
+#      log line look blank, making triage impossible.
+#   2. No retry → any transient borsapy/TradingView rate-limit killed
+#      that symbol for the whole scan cycle.
+#   3. CB threshold=50 means 25 fails doesn't trip it (confirmed not
+#      a cascade).
+# Fix: log exception type + repr + exc_info; add retry-with-backoff
+# around the ThreadPoolExecutor block. CB interaction preserved.
+FETCH_RAW_MAX_ATTEMPTS = 3
+FETCH_RAW_BACKOFF_SEC = (0.5, 1.0, 2.0)   # per-attempt sleep before retry
+
+
 def fetch_raw_v9(symbol: str) -> dict:
     """borsapy ile ham veri çek — paralel HTTP. Thread-safe SafeCache + CB."""
     if not BORSAPY_AVAILABLE:
@@ -243,7 +258,7 @@ def fetch_raw_v9(symbol: str) -> dict:
                 except Exception:
                     d[a] = None
         except Exception as e:
-            log.warning(f"fast_info {tc}: {e}")
+            log.warning(f"fast_info {tc}: {type(e).__name__}: {e!r}")
         return d
 
     def _info():
@@ -271,14 +286,14 @@ def fetch_raw_v9(symbol: str) -> dict:
         try:
             return tk.get_income_stmt(quarterly=False, financial_group=fg, last_n=4)
         except Exception as e:
-            log.warning(f"income {tc}: {e}")
+            log.warning(f"income {tc}: {type(e).__name__}: {e!r}")
             return None
 
     def _balance():
         try:
             return tk.get_balance_sheet(quarterly=False, financial_group=fg, last_n=4)
         except Exception as e:
-            log.warning(f"balance {tc}: {e}")
+            log.warning(f"balance {tc}: {type(e).__name__}: {e!r}")
             return None
 
     def _cashflow():
@@ -286,52 +301,88 @@ def fetch_raw_v9(symbol: str) -> dict:
             return tk.get_cashflow(quarterly=False, financial_group=fg, last_n=4)
         except Exception as e:
             if not is_bank(tc):
-                log.warning(f"cashflow {tc}: {e}")
+                log.warning(f"cashflow {tc}: {type(e).__name__}: {e!r}")
             return None
 
-    try:
-        with ThreadPoolExecutor(max_workers=5) as pool:
-            f_fast = pool.submit(_fast)
-            f_info = pool.submit(_info)
-            f_fin = pool.submit(_income)
-            f_bal = pool.submit(_balance)
-            f_cf = pool.submit(_cashflow)
-            fast = f_fast.result(timeout=30)
-            info = f_info.result(timeout=30)
-            fin = f_fin.result(timeout=15)
-            bal = f_bal.result(timeout=15)
-            cf = f_cf.result(timeout=15)
+    last_exc: Optional[Exception] = None
+    for attempt in range(FETCH_RAW_MAX_ATTEMPTS):
+        if attempt > 0:
+            sleep_sec = FETCH_RAW_BACKOFF_SEC[min(attempt, len(FETCH_RAW_BACKOFF_SEC) - 1)]
+            log.info(
+                f"fetch_raw_v9 {tc}: retry attempt {attempt + 1}/"
+                f"{FETCH_RAW_MAX_ATTEMPTS} after {sleep_sec}s "
+                f"(prev error: {type(last_exc).__name__ if last_exc else '?'})"
+            )
+            import time as _t
+            _t.sleep(sleep_sec)
 
-        if info is None:
-            info = {
-                "currentPrice": fast.get("last_price"),
-                "marketCap": fast.get("market_cap"),
-                "trailingPE": fast.get("pe_ratio"),
-                "priceToBook": fast.get("pb_ratio"),
-                "currency": "TRY",
+        try:
+            with ThreadPoolExecutor(max_workers=5) as pool:
+                f_fast = pool.submit(_fast)
+                f_info = pool.submit(_info)
+                f_fin = pool.submit(_income)
+                f_bal = pool.submit(_balance)
+                f_cf = pool.submit(_cashflow)
+                fast = f_fast.result(timeout=30)
+                info = f_info.result(timeout=30)
+                fin = f_fin.result(timeout=15)
+                bal = f_bal.result(timeout=15)
+                cf = f_cf.result(timeout=15)
+
+            if info is None:
+                info = {
+                    "currentPrice": fast.get("last_price"),
+                    "marketCap": fast.get("market_cap"),
+                    "trailingPE": fast.get("pe_ratio"),
+                    "priceToBook": fast.get("pb_ratio"),
+                    "currency": "TRY",
+                }
+
+            raw = {
+                "info": info, "fast": fast,
+                "financials": fin, "balance": bal, "cashflow": cf,
+                "source": "borsapy", "ticker_clean": tc, "is_bank": is_bank(tc),
+                "_fetched_at": _dt.datetime.now(_dt.timezone.utc).isoformat(),
+                "_fetch_attempts": attempt + 1,  # telemetry
             }
 
-        raw = {
-            "info": info, "fast": fast,
-            "financials": fin, "balance": bal, "cashflow": cf,
-            "source": "borsapy", "ticker_clean": tc, "is_bank": is_bank(tc),
-            "_fetched_at": _dt.datetime.now(_dt.timezone.utc).isoformat(),
-        }
+            raw_cache.set(symbol, raw)
+            cb_borsapy.on_success()
+            return raw
 
-        raw_cache.set(symbol, raw)
-        cb_borsapy.on_success()
-        return raw
+        except CircuitBreakerOpen:
+            # Don't retry if CB is open — fail fast, let caller handle
+            raise
+        except Exception as e:
+            last_exc = e
+            # Don't retry on programmer errors; retry on transient I/O
+            non_retriable = (TypeError, AttributeError, ImportError, KeyError)
+            if isinstance(e, non_retriable):
+                log.error(
+                    f"fetch_raw_v9 {tc}: non-retriable "
+                    f"{type(e).__name__}: {e!r}",
+                    exc_info=True,
+                )
+                cb_borsapy.on_failure(e)
+                break
 
-    except CircuitBreakerOpen:
-        raise
-    except Exception as e:
-        cb_borsapy.on_failure(e)
-        # HOTFIX: borsapy fail → stale cache fallback
-        stale = raw_cache.get(symbol)
-        if stale is not None:
-            log.info(f"fetch_raw {symbol}: borsapy fail, stale cache kullanılıyor")
-            return stale
-        raise
+    # All retries exhausted (or non-retriable). Log with full context
+    # and fall back to stale cache if any.
+    if last_exc is not None:
+        log.warning(
+            f"fetch_raw_v9 {tc}: all {FETCH_RAW_MAX_ATTEMPTS} attempts failed, "
+            f"last error {type(last_exc).__name__}: {last_exc!r}",
+            exc_info=True,
+        )
+        cb_borsapy.on_failure(last_exc)
+    # HOTFIX: borsapy fail → stale cache fallback
+    stale = raw_cache.get(symbol)
+    if stale is not None:
+        log.info(f"fetch_raw {symbol}: borsapy fail, stale cache kullanılıyor")
+        return stale
+    if last_exc is not None:
+        raise last_exc
+    raise RuntimeError(f"fetch_raw_v9 {tc}: unreachable state, no exception + no cache")
 
 
 # ================================================================
