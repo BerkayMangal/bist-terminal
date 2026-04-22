@@ -517,3 +517,62 @@ Caveats (documented in PHASE_4_7_V3_ROUND_B_REPORT.md):
 
 Rollback: single commit revertable. pick_all_values is additive.
 V13 handpicked remains always-available fallback.
+
+
+---
+
+## Phase 4.7 deploy — close-out entry
+
+Not a regression. Closes the Phase 4.7 arc.
+
+Infrastructure shipped this turn (commits ff01c05 + dc994dd):
+  - tests/test_calibrated_loads_real_fits.py (10): loader path
+    resolution, fits-present path, fits-missing V13 fallback with
+    telemetry, empty-dict behavior, corrupt-JSON recovery
+  - scripts/smoke_test_calibrated.py (~230 LOC): CLI tool, 3-check
+    production smoke test, Türkçe output, zero external deps
+  - tests/test_smoke_script_logic.py (17): offline response-shape
+    parsing coverage
+  - DEPLOY_CALIBRATED_GUIDE.md (179 lines, Türkçe): 5-step deploy
+    path + troubleshooting + rollback
+
+Test impact: 934 -> 961 passed + 5 skipped (+27). Both CWDs.
+Reviewer target 940+ cleared by +21.
+
+IMPORTANT INTEGRITY NOTE — Uploaded Colab artifacts were empty:
+
+The turn prompt described a successful Colab backfill (1,900 rows,
+5 symbols, 11 fitted metrics, interest_coverage sanity-rejected).
+The actual fa_calibration_full_final.zip uploaded to the session
+contained 3 files totaling 304 bytes:
+  fa_events.csv: 117 bytes (header only, 0 data rows)
+  fa_isotonic_fits.json: 2 bytes (literal "{}", 0 metrics)
+  fa_calibration_summary.md: 185 bytes ("Input events: 0")
+
+The agent did NOT commit these empty files to reports/ because
+doing so would:
+  1. Put a lying audit trail in the repo (summary says "Input
+     events: 0" while reviewer narrative claims 1,900)
+  2. Cause loader to cache {}, producing same behavior as no fits
+     file, but with a misleading committed state
+  3. Complicate debugging when real Colab output arrives later
+
+Repo deployable in TWO states:
+  Path A: operator re-runs Colab, produces real fits, commits
+          reports/fa_isotonic_fits.json + events CSV + summary,
+          then pushes + deploys
+  Path B: operator pushes as-is. Calibrated requests fall back to
+          V13 with scoring_version_effective='v13_handpicked'
+          telemetry. Background scanner skips A/B dual-write
+          cleanly (_get_fits() is None). Zero crash, zero user
+          visible breakage — just calibrated is a no-op until
+          real fits arrive.
+
+Both paths documented in PHASE_4_7_DEPLOY_FINAL_REPORT.md.
+
+Rollback: all Phase 4.7 commits additive + independently revertable.
+V13 handpicked remains always-available fallback.
+
+Phase 4.7 arc: 577 (Phase 3) -> 961 tests (+384 over 4.0-4.9 + final
++ v2 + v3 ROUND B + deploy). 43 commits on feat/calibrated-scoring
+from feat/pit-backfill-validator baseline.
