@@ -69,27 +69,51 @@ log = logging.getLogger("bistbull.fa_ingest")
 # Each tuple: (metric_name, direction_higher_better, computation_hint).
 # computation_hint is human documentation; the real arithmetic lives
 # in _derive_metrics_from_statements below.
+#
+# Phase 4.7 v2: extended from 13 to 16. New additions are cleanly
+# derivable from the 3 standard statements without bank-specific
+# handling. Metrics NOT added (documented here for clarity):
+#   - piotroski_f, altman_z, beneish_m, cfo_to_ni, fcf_margin,
+#     eps_growth, ebitda_growth, peg, ev_ebitda, ev_sales,
+#     margin_safety, dividend_yield
+#   These are sub-metrics of V13's earnings/moat/capital composite
+#   buckets (kept in V13 — see PHASE_4_7_FINAL_REPORT.md decision
+#   "earnings/moat/capital V13'te bırakıldı") OR require multi-
+#   period history not cleanly available in quarterly statements.
 METRIC_REGISTRY: list[tuple[str, bool, str]] = [
-    # Higher = better
-    ("roe",             True,  "net_income / avg_equity"),
-    ("roic",            True,  "NOPAT / invested_capital"),
-    ("net_margin",      True,  "net_income / revenue"),
-    ("gross_margin",    True,  "gross_profit / revenue"),
-    ("operating_margin", True, "operating_income / revenue"),
-    ("revenue_growth",  True,  "yoy revenue change"),
-    ("fcf_yield",       True,  "free_cashflow / market_cap"),
-    ("current_ratio",   True,  "current_assets / current_liabilities"),
-    ("interest_coverage", True, "ebit / interest_expense"),
-    # Lower = better
-    ("pe",              False, "market_cap / trailing_net_income"),
-    ("pb",              False, "market_cap / equity"),
-    ("debt_equity",     False, "total_debt / equity"),
-    ("net_debt_ebitda", False, "(debt - cash) / ebitda"),
+    # Higher = better (12)
+    ("roe",              True,  "net_income / avg_equity"),
+    ("roic",             True,  "NOPAT / invested_capital"),
+    ("roa",              True,  "net_income / total_assets"),
+    ("net_margin",       True,  "net_income / revenue"),
+    ("gross_margin",     True,  "gross_profit / revenue"),
+    ("operating_margin", True,  "operating_income / revenue"),
+    ("revenue_growth",   True,  "yoy revenue change"),
+    ("fcf_yield",        True,  "free_cashflow / market_cap"),
+    ("fcf_margin",       True,  "free_cashflow / revenue"),
+    ("cfo_to_ni",        True,  "operating_cf / net_income"),
+    ("current_ratio",    True,  "current_assets / current_liabilities"),
+    ("interest_coverage",True,  "ebit / interest_expense"),
+    # Lower = better (4)
+    ("pe",               False, "market_cap / trailing_net_income"),
+    ("pb",               False, "market_cap / equity"),
+    ("debt_equity",      False, "total_debt / equity"),
+    ("net_debt_ebitda",  False, "(debt - cash) / ebitda"),
 ]
 
 FORWARD_DAYS = 60           # forward return window (trading days approx by calendar days)
 MIN_FILING_LAG_DAYS = 45    # KAP T+45 rule — filings come 40-75 days after period end
 DEFAULT_SOURCE = "borsapy"
+
+# Phase 4.7 v2: banks have a completely different KAP schema (Krediler,
+# Bankalar Bakiyeleri, etc.) that doesn't map to the standard IFRS line
+# items this script expects. Rather than produce 22 None-valued metric
+# rows per bank × quarter, we early-skip and let a future Phase 5
+# calibration pass handle them with bank-specific mappings.
+BANK_SYMBOLS: frozenset[str] = frozenset({
+    "AKBNK", "GARAN", "YKBNK", "ISCTR", "HALKB", "VAKBN",
+    "TSKB", "SKBNK", "ALBRK",
+})
 
 
 # ==========================================================================
@@ -201,8 +225,18 @@ def make_synthetic_fetcher(
 def make_borsapy_fetcher() -> Callable:
     """Real borsapy fetcher using quarterly statements.
 
-    Reuses the retry pattern from data/providers.py:fetch_raw_v9 via
-    internal try/except; any transient rate-limit is recoverable.
+    Phase 4.7 v2 hardening (post-Colab ROUND A diagnosis):
+      - Uses utils.label_matching.pick_value for diacritic-aware fuzzy
+        lookup instead of strict pandas.loc[exact_label, col].
+        The Colab ROUND A produced only 3/25 metrics because many
+        candidate strings had small diacritic/whitespace differences
+        from what borsapy actually returns.
+      - Point-in-time market_cap: for each quarter's filed_at date,
+        compute mcap = close_price_at_filed_at × shares_outstanding.
+        The old version used tk.fast_info.market_cap which is
+        TODAY's mcap applied to every historical quarter — producing
+        PB=7994 outliers.
+      - Reuses the retry pattern from data/providers.py:fetch_raw_v9.
     """
     try:
         import borsapy as bp
@@ -212,24 +246,29 @@ def make_borsapy_fetcher() -> Callable:
             "Colab runs. Use --dry-run for local testing."
         )
 
+    from utils.label_matching import pick_value
+
     def _fetcher(symbol: str, start: date, end: date) -> list[dict]:
         tc = symbol.upper().replace(".IS", "").replace(".E", "")
+
+        # Phase 4.7 v2: bank schema incompatibility — early skip.
+        # Callers (ingest_symbols) also check this, but we double-gate
+        # here so any future direct use of the fetcher is safe.
+        if tc in BANK_SYMBOLS:
+            log.info(f"{tc}: banka şeması farklı, skip (Phase 5 kandidatı)")
+            return []
+
         tk = bp.Ticker(tc)
-        # Fetch quarterly statements (one call per statement type)
         import time as _t
         attempts = 3
         income_df = balance_df = cashflow_df = None
         last_exc = None
         for attempt in range(attempts):
             try:
-                # Banks use UFRS financial_group
-                fg = "UFRS" if tc in {
-                    "AKBNK","GARAN","ISCTR","YKBNK","HALKB","VAKBN",
-                    "TSKB","SKBNK","ALBRK",
-                } else None
-                income_df = tk.get_income_stmt(quarterly=True, financial_group=fg, last_n=40)
-                balance_df = tk.get_balance_sheet(quarterly=True, financial_group=fg, last_n=40)
-                cashflow_df = tk.get_cashflow(quarterly=True, financial_group=fg, last_n=40)
+                # Non-banks use default financial_group=None
+                income_df = tk.get_income_stmt(quarterly=True, financial_group=None, last_n=40)
+                balance_df = tk.get_balance_sheet(quarterly=True, financial_group=None, last_n=40)
+                cashflow_df = tk.get_cashflow(quarterly=True, financial_group=None, last_n=40)
                 break
             except Exception as e:
                 last_exc = e
@@ -247,14 +286,25 @@ def make_borsapy_fetcher() -> Callable:
                 f"(last: {type(last_exc).__name__}: {last_exc!r})"
             )
 
-        # Reshape borsapy DataFrames (columns = period_ends) into
-        # per-quarter dicts.
-        out = []
+        # Try to fetch shares_outstanding for PIT market_cap computation.
+        # This is a CURRENT value; we assume shares don't change dramatically
+        # over 8 years for mature large-cap symbols (which BIST30 are).
+        # A future Phase 5 refinement could read "Ödenmiş Sermaye" per
+        # quarter from the balance sheet.
+        shares_outstanding_current: Optional[float] = None
+        try:
+            fi = tk.fast_info
+            shares_outstanding_current = getattr(fi, "shares_outstanding", None) \
+                                          or getattr(fi, "shares", None)
+        except Exception as e:
+            log.debug(f"{tc}: shares_outstanding unavailable: {type(e).__name__}")
+
+        # Reshape borsapy DataFrames into per-quarter dicts
+        out: list[dict] = []
         import pandas as pd
         if income_df is None or income_df.empty:
             return out
 
-        # Column names are period-end strings like '2024-06-30'
         for col in income_df.columns:
             try:
                 qe = pd.Timestamp(col).date()
@@ -263,93 +313,129 @@ def make_borsapy_fetcher() -> Callable:
             if qe < start or qe > end:
                 continue
 
-            def _col(df, label):
-                if df is None or df.empty:
-                    return None
-                try:
-                    val = df.loc[label, col]
-                    return float(val) if val is not None and not pd.isna(val) else None
-                except (KeyError, TypeError, ValueError):
-                    return None
-
-            # Common line-item labels from borsapy Turkish KAP
-            # (we try multiple aliases because KAP naming varies)
-            def _lookup(df, candidates):
-                for c in candidates:
-                    v = _col(df, c)
-                    if v is not None:
-                        return v
-                return None
-
+            # Fuzzy-matched statement field extraction
             income = {
-                "revenue": _lookup(income_df, [
+                "revenue": pick_value(income_df, col, [
                     "Hasılat", "Satış Gelirleri", "Toplam Gelirler",
+                    "Net Satışlar",
                 ]),
-                "gross_profit": _lookup(income_df, [
-                    "Brüt Kar", "Brüt Kar/Zarar",
+                "gross_profit": pick_value(income_df, col, [
+                    "Brüt Kar", "Brüt Kar/Zarar", "Brüt Esas Faaliyet Karı",
                 ]),
-                "operating_income": _lookup(income_df, [
-                    "Faaliyet Karı", "Esas Faaliyet Karı/Zararı",
+                "operating_income": pick_value(income_df, col, [
+                    "Esas Faaliyet Karı", "Esas Faaliyet Karı/Zararı",
+                    "Faaliyet Karı", "Faaliyet Karı/Zararı",
                 ]),
-                "net_income": _lookup(income_df, [
-                    "Dönem Net Karı", "Net Kar", "Dönem Karı/Zararı",
-                    "Net Dönem Karı", "Ana Ortaklığa Ait Net Kar",
+                "net_income": pick_value(income_df, col, [
+                    "Dönem Net Karı", "Ana Ortaklığa Ait Dönem Net Karı",
+                    "Dönem Net Karı/Zararı", "Net Dönem Karı",
+                    "Dönem Karı/Zararı", "Net Kar",
                 ]),
-                "ebit": _lookup(income_df, [
-                    "FAVÖK", "Esas Faaliyet Karı/Zararı",
-                    "Faaliyet Karı",
+                "ebit": pick_value(income_df, col, [
+                    "FAVÖK", "Esas Faaliyet Karı", "Faaliyet Karı",
                 ]),
-                "interest_expense": _lookup(income_df, [
+                "interest_expense": pick_value(income_df, col, [
                     "Finansman Giderleri", "Faiz Giderleri",
+                    "Finansal Giderler",
                 ]),
             }
             balance = {
-                "equity": _lookup(balance_df, [
+                "equity": pick_value(balance_df, col, [
                     "Özkaynaklar", "Toplam Özkaynaklar",
+                    "Ana Ortaklığa Ait Özkaynaklar",
                 ]),
-                "total_debt": _lookup(balance_df, [
+                "total_debt": pick_value(balance_df, col, [
                     "Toplam Finansal Borçlar", "Finansal Borçlar",
+                    "Toplam Borçlar",
                 ]),
-                "cash": _lookup(balance_df, [
+                "cash": pick_value(balance_df, col, [
                     "Nakit ve Nakit Benzerleri", "Nakit",
                 ]),
-                "current_assets": _lookup(balance_df, [
+                "current_assets": pick_value(balance_df, col, [
                     "Dönen Varlıklar", "Toplam Dönen Varlıklar",
                 ]),
-                "current_liabilities": _lookup(balance_df, [
+                "current_liabilities": pick_value(balance_df, col, [
                     "Kısa Vadeli Yükümlülükler",
+                    "Toplam Kısa Vadeli Yükümlülükler",
                 ]),
-                "total_assets": _lookup(balance_df, [
-                    "Toplam Varlıklar", "Aktifler Toplamı",
+                "total_assets": pick_value(balance_df, col, [
+                    "Toplam Varlıklar", "Aktifler Toplamı", "Aktif Toplamı",
+                ]),
+                # Phase 4.7 v2: paid-in capital for shares fallback
+                "paid_in_capital": pick_value(balance_df, col, [
+                    "Ödenmiş Sermaye", "Çıkarılmış Sermaye",
                 ]),
             }
             cashflow = {
-                "free_cashflow": _lookup(cashflow_df, [
+                "free_cashflow": pick_value(cashflow_df, col, [
                     "Serbest Nakit Akışı", "FCF",
                 ]),
-                "operating_cf": _lookup(cashflow_df, [
+                "operating_cf": pick_value(cashflow_df, col, [
                     "İşletme Faaliyetlerinden Sağlanan Nakit Akışı",
+                    "İşletme Faaliyetlerinden Elde Edilen Nakit Akışları",
                     "Faaliyetlerden Sağlanan Nakit",
                 ]),
             }
 
-            # Market cap at filing date via price history
-            fast = {}
-            try:
-                fi = tk.fast_info
-                fast["market_cap"] = getattr(fi, "market_cap", None)
-            except Exception:
-                pass
+            # Point-in-time market_cap
+            # Strategy (fallback chain):
+            #   1. If shares_outstanding_current + PIT close price -> mcap
+            #   2. If paid_in_capital (assuming 1 TL nominal) + PIT close -> mcap
+            #   3. Otherwise None (metrics that need mcap will fall out)
+            filed_at = qe + timedelta(days=MIN_FILING_LAG_DAYS)
+            pit_mcap = _pit_market_cap(
+                symbol=tc, filed_at=filed_at,
+                shares_current=shares_outstanding_current,
+                paid_in_capital=balance.get("paid_in_capital"),
+            )
+            fast = {"market_cap": pit_mcap}
 
             out.append({
                 "period_end": qe,
-                "filed_at": qe + timedelta(days=MIN_FILING_LAG_DAYS),
+                "filed_at": filed_at,
                 "income": income, "balance": balance,
                 "cashflow": cashflow, "fast": fast,
             })
         return out
 
     return _fetcher
+
+
+def _pit_market_cap(
+    symbol: str, filed_at: date,
+    shares_current: Optional[float],
+    paid_in_capital: Optional[float],
+) -> Optional[float]:
+    """Compute point-in-time market cap.
+
+    Phase 4.7 v2 fix: previously this script used tk.fast_info.market_cap
+    (TODAY's mcap) for every historical quarter, producing PB=7994
+    outliers. Fix: close_price_at_filed_at × shares_outstanding.
+
+    Fallback chain:
+      1. shares_outstanding (from fast_info, current) × PIT close price.
+         Works for BIST30 large-caps that don't issue/retire shares
+         frequently. Good enough for an initial calibration.
+      2. paid_in_capital (from balance sheet, PIT) × PIT close price,
+         assuming 1 TL nominal value per share (Turkish convention).
+         Works when shares_outstanding isn't available.
+      3. None — caller's metrics requiring mcap (PE, PB, FCF yield)
+         will fall out.
+    """
+    from infra.pit import get_price_at_or_before
+    row = get_price_at_or_before(symbol, filed_at)
+    if row is None:
+        return None
+    close_price = row.get("close") or row.get("adjusted_close")
+    if not close_price:
+        return None
+
+    if shares_current and shares_current > 0:
+        return float(close_price) * float(shares_current)
+    if paid_in_capital and paid_in_capital > 0:
+        # Paid-in capital / 1 TL nominal = share count (Turkish convention)
+        return float(close_price) * float(paid_in_capital)
+    return None
 
 
 # ==========================================================================
@@ -386,19 +472,24 @@ def _derive_metrics_from_statements(
     equity = bal.get("equity")
     debt = bal.get("total_debt")
     cash = bal.get("cash")
+    total_assets = bal.get("total_assets")
     mcap = fast.get("market_cap")
     ebit = inc.get("ebit")
     intexp = inc.get("interest_expense")
+    fcf = cf.get("free_cashflow")
+    ocf = cf.get("operating_cf")
 
     # TTM-style signals — for quarterly statements we approximate by
     # using the quarter's annualized figures where sensible.
     metrics: dict[str, Optional[float]] = {}
     metrics["roe"] = _safe_div(ni, equity) * 4 if _safe_div(ni, equity) else None
+    metrics["roa"] = _safe_div(ni, total_assets) * 4 if _safe_div(ni, total_assets) else None
     metrics["net_margin"] = _safe_div(ni, rev)
     metrics["gross_margin"] = _safe_div(inc.get("gross_profit"), rev)
     metrics["operating_margin"] = _safe_div(inc.get("operating_income"), rev)
-    metrics["fcf_yield"] = _safe_div(cf.get("free_cashflow") * 4
-                                      if cf.get("free_cashflow") else None, mcap)
+    metrics["fcf_yield"] = _safe_div(fcf * 4 if fcf is not None else None, mcap)
+    metrics["fcf_margin"] = _safe_div(fcf, rev)
+    metrics["cfo_to_ni"] = _safe_div(ocf, ni) if (ocf is not None and ni) else None
     metrics["current_ratio"] = _safe_div(bal.get("current_assets"),
                                           bal.get("current_liabilities"))
     metrics["interest_coverage"] = _safe_div(ebit, intexp) if (
@@ -407,10 +498,10 @@ def _derive_metrics_from_statements(
     metrics["pe"] = _safe_div(mcap, ni * 4 if ni is not None else None)
     metrics["pb"] = _safe_div(mcap, equity)
     metrics["debt_equity"] = _safe_div(debt, equity)
-    if cf.get("operating_cf") is not None:
+    if ocf is not None:
         # Approx net_debt_ebitda via operating_cf surrogate
         net_debt = (debt or 0) - (cash or 0)
-        ebitda_proxy = (ebit or 0) + (cf.get("operating_cf", 0) * 0.2)
+        ebitda_proxy = (ebit or 0) + (ocf * 0.2)
         metrics["net_debt_ebitda"] = (
             net_debt / ebitda_proxy if ebitda_proxy else None
         )
@@ -564,6 +655,19 @@ def ingest_symbols(
         for i, sym in enumerate(symbols):
             if sym in already_done:
                 log.info(f"[{i+1}/{len(symbols)}] {sym}: skip (checkpointed)")
+                continue
+
+            # Phase 4.7 v2: banks have incompatible KAP schema — early skip
+            if sym.upper() in BANK_SYMBOLS:
+                log.info(
+                    f"[{i+1}/{len(symbols)}] {sym}: SKIP — banka şeması farklı "
+                    f"(Krediler, Bankalar Bakiyeleri), ayrı calibration turu "
+                    f"gerekli (Phase 5 kandidatı)"
+                )
+                # Mark as completed so re-runs don't re-attempt; record reason
+                cp.completed_symbols.append(sym)
+                cp.errors[sym] = "SKIP: bank schema, deferred to Phase 5"
+                _write_checkpoint(checkpoint_path, cp)
                 continue
 
             log.info(f"[{i+1}/{len(symbols)}] {sym}: fetching...")

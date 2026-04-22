@@ -228,32 +228,34 @@ class TestIngestDriverEndToEnd:
         }
 
     def test_checkpoint_resume_skips_done(self, fresh_db, tmp_path):
+        # Phase 4.7 v2: AKBNK is now early-skipped as a bank.
+        # Use ASELS + BIMAS (both non-banks) for this resume test.
         fa_ingest._seed_synthetic_prices(
-            ["THYAO", "AKBNK"], date(2020, 1, 1), date(2021, 12, 31),
+            ["ASELS", "BIMAS"], date(2020, 1, 1), date(2021, 12, 31),
         )
         out = tmp_path / "events.csv"
         cp = tmp_path / "cp.json"
         fetcher = fa_ingest.make_synthetic_fetcher()
 
-        # First run: just THYAO
+        # First run: just ASELS
         fa_ingest.ingest_symbols(
-            ["THYAO"], date(2020, 1, 1), date(2021, 6, 30),
+            ["ASELS"], date(2020, 1, 1), date(2021, 6, 30),
             fetcher, out, cp, sleep_between_symbols=0,
         )
         n_after_first = sum(1 for _ in open(out))
 
-        # Second run: both symbols, THYAO already in checkpoint -> skip
+        # Second run: both symbols, ASELS already in checkpoint -> skip
         n_events, _ = fa_ingest.ingest_symbols(
-            ["THYAO", "AKBNK"], date(2020, 1, 1), date(2021, 6, 30),
+            ["ASELS", "BIMAS"], date(2020, 1, 1), date(2021, 6, 30),
             fetcher, out, cp, sleep_between_symbols=0,
         )
         n_after_second = sum(1 for _ in open(out))
 
-        # Second run only added AKBNK's rows
+        # Second run only added BIMAS's rows
         assert n_after_second > n_after_first
         # Checkpoint has both
         cp_data = json.loads(cp.read_text())
-        assert set(cp_data["completed_symbols"]) == {"THYAO", "AKBNK"}
+        assert set(cp_data["completed_symbols"]) == {"ASELS", "BIMAS"}
 
     def test_reset_checkpoint_cli_arg(self, fresh_db, tmp_path, monkeypatch):
         """--reset-checkpoint deletes both files before run."""
