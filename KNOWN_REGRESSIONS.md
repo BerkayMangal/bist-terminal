@@ -383,3 +383,73 @@ handpicked remains the always-available fallback whether or not
 reports/fa_isotonic_fits.json is present on disk.
 
 Phase 4 total: 32 commits from Phase 3 baseline, 882 tests passing.
+
+
+---
+
+## Phase 4.7 v2 — Ingest hardening (post Colab ROUND A post-mortem)
+
+Not a regression of any previous behavior; this entry documents the
+4 production-data bugs fixed by the v2 script hardening turn.
+
+Colab ROUND A produced 3/25 metrics × 23/30 symbols = 2,116 rows,
+PB values up to 7994 (nonsense). Post-mortem identified 4 causes:
+
+**FIXED in v2 (this turn):**
+
+1. Market cap not point-in-time — commit 9567c6f:
+   Previously tk.fast_info.market_cap (TODAY's mcap) was applied to
+   every historical quarter. Now _pit_market_cap() uses
+   get_price_at_or_before(filed_at) × shares_outstanding.
+   Fallback chain: shares_current → paid_in_capital (1 TL nominal)
+   → None. Verified by test_pit_prices_differ_across_quarters
+   (5x price diff produces 5x mcap diff, not constant).
+
+2. Bank schema incompatible — commit 9567c6f:
+   BANK_SYMBOLS frozenset of 9 BIST banks (AKBNK, GARAN, YKBNK,
+   ISCTR, HALKB, VAKBN, TSKB, SKBNK, ALBRK). Double-gated in
+   ingest_symbols driver AND make_borsapy_fetcher. Banks get
+   "SKIP: banka şeması farklı" log + checkpoint reason, zero CSV
+   rows. Verified by test_bank_symbol_passed_to_ingest_driver_is_skipped.
+
+3. Turkish KAP labels mismatched — commits 97610cc + 9567c6f:
+   utils/label_matching.py normalize_label() handles Turkish
+   diacritics (İ/ı/Ğ/Ş/Ç/Ö/Ü), NFD combining marks, punctuation,
+   whitespace. pick_label() has two-pass exact + substring match
+   with 4-char substring guard. pick_value() integrates pandas
+   lookup. make_borsapy_fetcher() now uses pick_value throughout.
+   24 tests in tests/test_label_normalization.py lock in behavior.
+
+**DEFERRED to ROUND B** (operator Colab run → agent label tune):
+
+4. Candidate lists incomplete — scripts/explore_borsapy_labels.py
+   (commit d758426) lists actual borsapy DataFrame.index labels
+   for 5 representative non-bank symbols. Operator runs in Colab
+   (5-10 min), sends output to agent, agent updates candidate
+   lists with verbatim labels in ROUND B commit.
+
+Additional improvement: METRIC_REGISTRY extended 13 → 16 (roa,
+fcf_margin, cfo_to_ni). All three safely derivable from existing
+statement inputs. engine/scoring_calibrated.METRIC_DIRECTIONS
+gains "roa": True entry.
+
+Test impact: 882 (Phase 4.7 final) -> 919 passed + 5 skipped (+37).
+Both CWDs. Reviewer target 895+ cleared by +24.
+
++37 test breakdown:
+  tests/test_label_normalization.py (24): Turkish fold,
+    pick_label, pick_value — all pure string logic, no borsapy dep
+  tests/test_pit_market_cap.py (9): PIT mcap fallback chain,
+    bank skip driver integration
+  tests/test_ingest_real_labels.py (4): end-to-end mock borsapy
+    with REAL Turkish KAP labels → 16 metrics populated
+    (the smoking gun: Colab ROUND A got 3, we get 16)
+
+Existing test adjusted: test_checkpoint_resume_skips_done swapped
+AKBNK → ASELS since AKBNK is now bank-skipped (same resume logic
+exercised, different symbols).
+
+Rollback: 3 code commits independently revertable:
+  git revert 9567c6f d758426 97610cc
+utils/label_matching.py is standalone (no runtime dep) — safe to
+keep even if ingest rolls back.
