@@ -212,6 +212,7 @@ def make_synthetic_fetcher(
                     "cashflow": {
                         "free_cashflow": ni * 0.6,
                         "operating_cf": ni * 0.9,
+                        "depreciation": rev * 0.03,  # ~3% of rev as D&A
                     },
                     "fast": {
                         "market_cap": equity * (2 + 3 * h),  # P/B between 2 and 5
@@ -246,7 +247,7 @@ def make_borsapy_fetcher() -> Callable:
             "Colab runs. Use --dry-run for local testing."
         )
 
-    from utils.label_matching import pick_value
+    from utils.label_matching import pick_value, pick_all_values
 
     def _fetcher(symbol: str, start: date, end: date) -> list[dict]:
         tc = symbol.upper().replace(".IS", "").replace(".E", "")
@@ -289,8 +290,8 @@ def make_borsapy_fetcher() -> Callable:
         # Try to fetch shares_outstanding for PIT market_cap computation.
         # This is a CURRENT value; we assume shares don't change dramatically
         # over 8 years for mature large-cap symbols (which BIST30 are).
-        # A future Phase 5 refinement could read "Ödenmiş Sermaye" per
-        # quarter from the balance sheet.
+        # Fallback: balance sheet "Ödenmiş Sermaye" (paid-in capital) × 1 TL
+        # nominal assumption. This is done per-quarter in the loop below.
         shares_outstanding_current: Optional[float] = None
         try:
             fi = tk.fast_info
@@ -313,41 +314,100 @@ def make_borsapy_fetcher() -> Callable:
             if qe < start or qe > end:
                 continue
 
-            # Fuzzy-matched statement field extraction
+            # ─────────────────────────────────────────────────────────
+            # INCOME STATEMENT — ground-truth labels per ROUND B Colab
+            # ─────────────────────────────────────────────────────────
+            # Real borsapy labels (verified 2026-04-22 across THYAO/ASELS/
+            # EREGL/BIMAS/TUPRS):
+            #   'Satış Gelirleri'                      → revenue
+            #   'BRÜT KAR (ZARAR)'                     → gross profit (ALL CAPS!)
+            #   'FAALİYET KARI (ZARARI)'               → operating income (ALL CAPS)
+            #   'Finansman Gideri Öncesi Faaliyet      → EBIT proxy
+            #    Karı/Zararı'
+            #   '(Esas Faaliyet Dışı) Finansal         → interest expense proxy
+            #    Giderler (-)'
+            #   'DÖNEM KARI (ZARARI)'                  → net income (ALL CAPS)
+            #   'Ana Ortaklık Payları'                 → attributable NI
+            # Candidate order: ROUND-B real labels first, prior v2 candidates
+            # as fallbacks so older fixtures don't break.
             income = {
                 "revenue": pick_value(income_df, col, [
-                    "Hasılat", "Satış Gelirleri", "Toplam Gelirler",
+                    "Satış Gelirleri", "Hasılat", "Toplam Gelirler",
                     "Net Satışlar",
                 ]),
                 "gross_profit": pick_value(income_df, col, [
-                    "Brüt Kar", "Brüt Kar/Zarar", "Brüt Esas Faaliyet Karı",
+                    "BRÜT KAR (ZARAR)", "Brüt Kar", "Brüt Kar/Zarar",
+                    "Brüt Esas Faaliyet Karı",
                 ]),
                 "operating_income": pick_value(income_df, col, [
+                    "FAALİYET KARI (ZARARI)",
+                    "Net Faaliyet Kar/Zararı",
                     "Esas Faaliyet Karı", "Esas Faaliyet Karı/Zararı",
                     "Faaliyet Karı", "Faaliyet Karı/Zararı",
                 ]),
                 "net_income": pick_value(income_df, col, [
+                    # Primary: consolidated net income. "Ana Ortaklık
+                    # Payları" (attributable) is a subset for ROE purists,
+                    # but for calibration consistency we use consolidated
+                    # (matches how engine/metrics derives it).
+                    "DÖNEM KARI (ZARARI)",
+                    "SÜRDÜRÜLEN FAALİYETLER DÖNEM KARI/ZARARI",
                     "Dönem Net Karı", "Ana Ortaklığa Ait Dönem Net Karı",
                     "Dönem Net Karı/Zararı", "Net Dönem Karı",
                     "Dönem Karı/Zararı", "Net Kar",
                 ]),
                 "ebit": pick_value(income_df, col, [
-                    "FAVÖK", "Esas Faaliyet Karı", "Faaliyet Karı",
+                    # KAP has no 'FAVÖK' line. Use "Finansman Gideri Öncesi
+                    # Faaliyet Karı/Zararı" which IS EBIT definitionally
+                    # (operating income + non-op investment income,
+                    # pre-interest).
+                    "Finansman Gideri Öncesi Faaliyet Karı/Zararı",
+                    "FAVÖK",
+                    "FAALİYET KARI (ZARARI)",
+                    "Esas Faaliyet Karı", "Faaliyet Karı",
                 ]),
                 "interest_expense": pick_value(income_df, col, [
+                    "(Esas Faaliyet Dışı) Finansal Giderler (-)",
                     "Finansman Giderleri", "Faiz Giderleri",
                     "Finansal Giderler",
                 ]),
             }
+
+            # ─────────────────────────────────────────────────────────
+            # BALANCE SHEET — ground-truth labels per ROUND B Colab
+            # ─────────────────────────────────────────────────────────
+            # Real labels (with indent-stripped via normalize_label):
+            #   'Dönen Varlıklar'            → current assets
+            #   '  Nakit ve Nakit Benzerleri' → cash (2-space indent)
+            #   'Kısa Vadeli Yükümlülükler'  → current liabilities
+            #   '  Finansal Borçlar'         → financial debt SHORT-TERM
+            #   'Uzun Vadeli Yükümlülükler'  → long-term liabilities
+            #   '  Finansal Borçlar'         → financial debt LONG-TERM (SAME LABEL!)
+            #   'Özkaynaklar'                → equity
+            #   '  Ana Ortaklığa Ait Özkaynaklar' → attributable equity
+            #   '  Ödenmiş Sermaye'          → paid-in capital
+            #   'TOPLAM VARLIKLAR'           → total assets (ALL CAPS)
+            #   'TOPLAM KAYNAKLAR'           → total liab + equity
+            #
+            # CRITICAL: "Finansal Borçlar" appears TWICE (short-term +
+            # long-term). We SUM both via pick_all_values.
+            financial_debt_parts = pick_all_values(
+                balance_df, col, ["Finansal Borçlar"], allow_substring=False,
+            )
+            total_debt_sum = sum(financial_debt_parts) if financial_debt_parts else None
+            if total_debt_sum is None:
+                # Fallback: single-label lookup for older schemas
+                total_debt_sum = pick_value(balance_df, col, [
+                    "Toplam Finansal Borçlar", "Finansal Borçlar",
+                    "Toplam Borçlar",
+                ])
+
             balance = {
                 "equity": pick_value(balance_df, col, [
                     "Özkaynaklar", "Toplam Özkaynaklar",
                     "Ana Ortaklığa Ait Özkaynaklar",
                 ]),
-                "total_debt": pick_value(balance_df, col, [
-                    "Toplam Finansal Borçlar", "Finansal Borçlar",
-                    "Toplam Borçlar",
-                ]),
+                "total_debt": total_debt_sum,
                 "cash": pick_value(balance_df, col, [
                     "Nakit ve Nakit Benzerleri", "Nakit",
                 ]),
@@ -359,21 +419,37 @@ def make_borsapy_fetcher() -> Callable:
                     "Toplam Kısa Vadeli Yükümlülükler",
                 ]),
                 "total_assets": pick_value(balance_df, col, [
+                    "TOPLAM VARLIKLAR",
                     "Toplam Varlıklar", "Aktifler Toplamı", "Aktif Toplamı",
                 ]),
-                # Phase 4.7 v2: paid-in capital for shares fallback
                 "paid_in_capital": pick_value(balance_df, col, [
                     "Ödenmiş Sermaye", "Çıkarılmış Sermaye",
                 ]),
             }
+
+            # ─────────────────────────────────────────────────────────
+            # CASH FLOW — ground-truth labels per ROUND B Colab
+            # ─────────────────────────────────────────────────────────
+            # Real labels (with leading-space indent stripped):
+            #   ' İşletme Faaliyetlerinden Kaynaklanan Net Nakit' → operating CF
+            #   ' Yatırım Faaliyetlerinden Kaynaklanan Nakit'      → investing CF
+            #   'Serbest Nakit Akım'                               → FCF (note: 'Akım' not 'Akışı')
+            #   'Amortisman Giderleri'                             → depreciation
             cashflow = {
                 "free_cashflow": pick_value(cashflow_df, col, [
+                    "Serbest Nakit Akım",
                     "Serbest Nakit Akışı", "FCF",
                 ]),
                 "operating_cf": pick_value(cashflow_df, col, [
+                    "İşletme Faaliyetlerinden Kaynaklanan Net Nakit",
                     "İşletme Faaliyetlerinden Sağlanan Nakit Akışı",
                     "İşletme Faaliyetlerinden Elde Edilen Nakit Akışları",
                     "Faaliyetlerden Sağlanan Nakit",
+                ]),
+                "depreciation": pick_value(cashflow_df, col, [
+                    "Amortisman Giderleri",
+                    "Amortisman ve İtfa Payları",
+                    "Amortisman",
                 ]),
             }
 
@@ -478,6 +554,9 @@ def _derive_metrics_from_statements(
     intexp = inc.get("interest_expense")
     fcf = cf.get("free_cashflow")
     ocf = cf.get("operating_cf")
+    # Phase 4.7 v3 (ROUND B): Amortisman available from cashflow now.
+    # EBITDA = EBIT + Depreciation/Amortization (real, not proxy).
+    depr = cf.get("depreciation")
 
     # TTM-style signals — for quarterly statements we approximate by
     # using the quarter's annualized figures where sensible.
@@ -498,8 +577,19 @@ def _derive_metrics_from_statements(
     metrics["pe"] = _safe_div(mcap, ni * 4 if ni is not None else None)
     metrics["pb"] = _safe_div(mcap, equity)
     metrics["debt_equity"] = _safe_div(debt, equity)
-    if ocf is not None:
-        # Approx net_debt_ebitda via operating_cf surrogate
+    # Phase 4.7 v3 (ROUND B): use real depreciation when available for EBITDA.
+    # EBITDA = EBIT + Depreciation (annualized × 4 from quarterly).
+    # Net debt / EBITDA is a standard leverage metric. Lower is better.
+    if ebit is not None:
+        ebitda_q = ebit + (depr or 0)
+        ebitda_ann = ebitda_q * 4
+        if ebitda_ann and ebitda_ann != 0:
+            net_debt = (debt or 0) - (cash or 0)
+            metrics["net_debt_ebitda"] = net_debt / ebitda_ann
+        else:
+            metrics["net_debt_ebitda"] = None
+    elif ocf is not None:
+        # Fallback when EBIT isn't computable (old v2 proxy)
         net_debt = (debt or 0) - (cash or 0)
         ebitda_proxy = (ebit or 0) + (ocf * 0.2)
         metrics["net_debt_ebitda"] = (

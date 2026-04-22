@@ -155,3 +155,82 @@ def pick_value(
     if f != f:
         return None
     return f
+
+
+def pick_all_values(
+    df,
+    col,
+    candidates: list[str],
+    allow_substring: bool = False,
+) -> list[float]:
+    """Return ALL numeric cells whose row-label matches any candidate.
+
+    Phase 4.7 v3 ROUND B context: some KAP labels appear TWICE in the
+    same DataFrame because balance sheets have parallel sections.
+    Example: 'Finansal Borçlar' appears once under 'Kısa Vadeli
+    Yükümlülükler' (short-term debt) and once under 'Uzun Vadeli
+    Yükümlülükler' (long-term debt). pick_value() returns only the
+    first match; total_debt needs the SUM.
+
+    Behavior:
+      - Iterates df.index, collects every row whose normalized label
+        matches any normalized candidate (exact by default; substring
+        match disabled by default because it's risky with the two-pass
+        logic when rows repeat).
+      - Returns list of floats (NaN/None filtered out). Empty list if
+        nothing matched.
+      - Duplicate entries in df.index with the same label are all
+        collected via df.loc[label, col] returning a Series (we
+        iterate it).
+
+    allow_substring default False here: we want EXACT matches only
+    when summing, since substring matches could double-count (e.g.
+    "Ticari Alacaklar" inside "Uzun Vadeli Ticari Alacaklar").
+    """
+    if df is None or getattr(df, "empty", True):
+        return []
+
+    cand_norms = [normalize_label(c) for c in candidates if normalize_label(c)]
+    if not cand_norms:
+        return []
+
+    try:
+        import pandas as _pd
+    except ImportError:
+        _pd = None
+
+    out: list[float] = []
+    # Walk every row in the index (may have duplicates) and collect matches
+    # We use positional iteration to handle duplicate labels correctly.
+    try:
+        index_list = list(df.index)
+    except Exception:
+        return []
+
+    for i, label in enumerate(index_list):
+        label_norm = normalize_label(label)
+        matched = False
+        for cn in cand_norms:
+            if label_norm == cn:
+                matched = True
+                break
+            if allow_substring and len(cn) >= 4 and cn in label_norm:
+                matched = True
+                break
+        if not matched:
+            continue
+        # Positional lookup avoids duplicate-label Series surprise
+        try:
+            val = df.iloc[i][col] if col in df.columns else None
+        except Exception:
+            continue
+        if val is None:
+            continue
+        try:
+            f = float(val)
+        except (TypeError, ValueError):
+            continue
+        if f != f:  # NaN
+            continue
+        out.append(f)
+    return out
