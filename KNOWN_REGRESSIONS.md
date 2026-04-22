@@ -453,3 +453,67 @@ Rollback: 3 code commits independently revertable:
   git revert 9567c6f d758426 97610cc
 utils/label_matching.py is standalone (no runtime dep) — safe to
 keep even if ingest rolls back.
+
+
+---
+
+## Phase 4.7 v3 ROUND B — Label mapping final tune
+
+Not a regression; this entry documents the label-candidate update
+from Colab ROUND A discovery output to `ingest_fa_for_calibration.py`.
+
+Ground-truth KAP labels observed across THYAO/ASELS/EREGL/BIMAS/TUPRS
+(5 non-bank sectors, Colab run):
+  - ALL-CAPS rows: 'BRÜT KAR (ZARAR)', 'FAALİYET KARI (ZARARI)',
+    'DÖNEM KARI (ZARARI)', 'TOPLAM VARLIKLAR', 'TOPLAM KAYNAKLAR'
+  - Indent-prefixed: '  Nakit ve Nakit Benzerleri',
+    '  Ödenmiş Sermaye', ' İşletme Faaliyetlerinden Kaynaklanan...'
+  - CRITICAL duplicate: 'Finansal Borçlar' appears TWICE (short-term +
+    long-term liability sections) — SUM required for total_debt
+  - 'Serbest Nakit Akım' (NOT 'Akışı' — different word)
+  - 'Finansman Gideri Öncesi Faaliyet Karı/Zararı' (EBIT, no FAVÖK row)
+  - '(Esas Faaliyet Dışı) Finansal Giderler (-)' (interest expense)
+  - 'Amortisman Giderleri' (depreciation, from cashflow statement)
+
+Changes (commits this turn):
+  - utils/label_matching.py: new pick_all_values() helper returns ALL
+    values whose row-label matches any candidate (for duplicate-label
+    summation). allow_substring defaults False to prevent double-count.
+  - scripts/ingest_fa_for_calibration.py:make_borsapy_fetcher
+    candidate lists updated with ground-truth KAP labels. total_debt
+    now uses pick_all_values to SUM both Finansal Borçlar rows.
+    New depreciation field from 'Amortisman Giderleri' enables real
+    EBITDA computation (vs v2's operating_cf proxy).
+  - scripts/ingest_fa_for_calibration.py:_derive_metrics_from_statements
+    net_debt_ebitda now computes ebitda = (ebit + depreciation) × 4
+    annualized. Fallback to v2 proxy preserved for symbols without
+    explicit depreciation.
+  - reports/borsapy_label_discovery.md: 114-line audit trail of what
+    borsapy returns and why candidate lists are ordered as they are.
+
+Tests added (+15):
+  tests/test_ingest_round_b_labels.py
+    TestRoundBLabels (9): every statement field resolves, total_debt
+      sums both Finansal Borçlar rows, all-caps labels match,
+      indent-prefix stripped, Serbest Nakit Akım variant, İşletme
+      Faaliyetlerinden prefix, depreciation available, real EBITDA
+      computed, all 16 metrics populate end-to-end.
+    TestPickAllValues (6): empty, single, duplicate returns both,
+      no-substring default (prevents double-count), substring opt-in,
+      NaN filtered.
+
+Test impact: 919 (v2) -> 934 passed + 5 skipped (+15). Both CWDs.
+Reviewer target 925+ cleared by +9.
+
+Caveats (documented in PHASE_4_7_V3_ROUND_B_REPORT.md):
+  - Banks deferred to Phase 5 (need dedicated metric registry)
+  - Shares outstanding proxy (current, not PIT)
+  - Consolidated NI used (matches production; attributable NI
+    available as secondary candidate)
+  - EBIT via 'Finansman Gideri Öncesi Faaliyet Karı/Zararı' is
+    definitional EBIT, not a proxy
+  - Some symbols may not report 'Serbest Nakit Akım' — fcf metrics
+    None for those, excluded from calibration
+
+Rollback: single commit revertable. pick_all_values is additive.
+V13 handpicked remains always-available fallback.
