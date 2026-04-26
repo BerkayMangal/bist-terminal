@@ -111,14 +111,25 @@ class TestFitsMissing:
         reset_fits_cache()
         assert _get_fits(fits_path=tmp_path / "does-not-exist.json") is None
 
-    def test_fallback_recorded_in_effective_flag(self):
+    def test_fallback_recorded_in_effective_flag(self, tmp_path, monkeypatch):
         """Calibrated requested, no fits on disk → V13 fallback with
-        scoring_version_effective='v13_handpicked' telemetry."""
+        scoring_version_effective='v13_handpicked' telemetry.
+
+        We point the loader's DEFAULT_FITS_PATH at a non-existent file in
+        a tmp dir so we exercise the missing-file path even when real
+        fits are committed in the repo's reports/ directory.
+        """
         from engine.scoring_calibrated import (
             score_dispatch, reset_fits_cache,
             CALIBRATED_VERSION, HANDPICKED_VERSION,
         )
+        import engine.scoring_calibrated as scoring_mod
+
+        # Force loader to look at a path that doesn't exist
+        missing = tmp_path / "no_fits_here.json"
+        monkeypatch.setattr(scoring_mod, "DEFAULT_FITS_PATH", missing)
         reset_fits_cache()
+
         m = {"pe": 10, "pb": 1.5, "roe": 0.15, "roic": 0.12,
              "net_margin": 0.10, "market_cap": 5000,
              "total_debt": 100, "cash": 50, "revenue": 1000,
