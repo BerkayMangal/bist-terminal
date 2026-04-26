@@ -110,7 +110,37 @@ def _fetch_real(
             raise RuntimeError(
                 "borsapy not installed. Pass fetcher=... for testing."
             ) from e
-        fetcher = lambda s, f, t: borsapy.get_prices(s, from_date=f, to_date=t)
+        # borsapy >= 0.8.x uses Ticker(sym).history(period=, interval=)
+        # rather than module-level borsapy.get_prices(). Adapt the DataFrame
+        # output to the dict-of-OHLCV shape this function expects.
+        def _bp_history(sym: str, fd, td) -> list[dict]:
+            import pandas as _pd
+            tk = borsapy.Ticker(sym)
+            df = tk.history(period="max", interval="1d")
+            if df is None or df.empty:
+                return []
+            idx = _pd.to_datetime(df.index)
+            if getattr(idx, "tz", None) is not None:
+                idx = idx.tz_localize(None)
+            df = df.copy()
+            df.index = idx
+            # column names vary in case ('Close' vs 'close'); normalize lower
+            df.columns = [str(c).lower() for c in df.columns]
+            out = []
+            for ts, row in df.iterrows():
+                out.append({
+                    "trade_date": ts.date(),
+                    "open": row.get("open"),
+                    "high": row.get("high"),
+                    "low": row.get("low"),
+                    "close": row.get("close"),
+                    "volume": row.get("volume"),
+                    "adjusted_close": row.get("adj close")
+                                       or row.get("adj_close")
+                                       or row.get("close"),
+                })
+            return out
+        fetcher = _bp_history
 
     raw = list(fetcher(symbol, from_date, to_date))
     out: list[dict] = []
