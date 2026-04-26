@@ -576,3 +576,48 @@ V13 handpicked remains always-available fallback.
 Phase 4.7 arc: 577 (Phase 3) -> 961 tests (+384 over 4.0-4.9 + final
 + v2 + v3 ROUND B + deploy). 43 commits on feat/calibrated-scoring
 from feat/pit-backfill-validator baseline.
+
+
+---
+
+## Phase 4.7 deploy — CLOSED (real fits committed)
+
+Earlier "uploads were empty" entry resolved.
+
+Root cause was found and patched: research/ingest_prices.py was using
+borsapy's old module-level get_prices() API, which doesn't exist in
+borsapy>=0.8. Fixed in commit 2aacdfe by switching to the production
+bp.Ticker(sym).history(period="max", interval="1d") API. After this
+fix, the Colab two-stage flow (price ingest → FA ingest → calibrate)
+produced 2,465 events / 15 fits cleanly.
+
+Real fits landed in commit c90d9e5:
+  reports/fa_events.csv (224 KB, 2,465 rows, 5 symbols, 16 metrics)
+  reports/fa_isotonic_fits.json (7.4 KB, 15 fitted, 1 sanity-rejected)
+  reports/fa_calibration_summary.md (1.5 KB)
+
+Test fix in same commit:
+  test_fallback_recorded_in_effective_flag was asserting V13 fallback
+  when no fits on disk, but with real fits now committed it was
+  finding them via DEFAULT_FITS_PATH and failing. Fixed by
+  monkeypatching DEFAULT_FITS_PATH to a non-existent tmp_path,
+  exercising the actual missing-file code path. Invariant preserved.
+
+Verification:
+  - End-to-end: _get_fits() loads 15 metrics from default path
+  - score_dispatch with calibrated_2026Q1 returns
+    scoring_version_effective='calibrated_2026Q1' (no V13 fallback)
+  - Bucket scores in expected ranges (value=55.5, quality=23.7
+    on representative test fixture)
+  - tests/test_calibrated_loads_real_fits.py: 10 passed
+  - tests/test_smoke_script_logic.py: 17 passed
+
+Coverage limitation noted for Phase 5:
+  155 samples per metric (5 symbols × 31 quarters). Phase 5 candidate
+  for recalibration with BIST30 non-bank set (~650 samples/metric).
+
+Phase 4.7 arc total: 577 (Phase 3) -> 961 (deploy) tests, 46 commits.
+Push + Railway redeploy flips production from V13 fallback to
+calibrated_2026Q1 active.
+
+Phase 4.7 deploy: CLOSED.
