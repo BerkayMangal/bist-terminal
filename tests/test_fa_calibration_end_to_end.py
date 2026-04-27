@@ -246,13 +246,21 @@ class TestCalibratedRespectsSectorGroup:
 # ==========================================================================
 
 class TestMissingFitsFallbackToV13:
-    def test_fallback_recorded_in_telemetry(self):
+    def test_fallback_recorded_in_telemetry(self, tmp_path, monkeypatch):
         """When scoring_version='calibrated_2026Q1' is requested but
         no fits are loaded, score_dispatch should fall back to V13
-        AND expose the fallback via scoring_version_effective."""
+        AND expose the fallback via scoring_version_effective.
+
+        Phase 4.7 deploy: real fits are now committed at
+        reports/fa_isotonic_fits.json; we monkeypatch DEFAULT_FITS_PATH
+        to a non-existent path to exercise the fallback code path.
+        """
         from engine.scoring_calibrated import (
             score_dispatch, reset_fits_cache,
         )
+        import engine.scoring_calibrated as scoring_mod
+        monkeypatch.setattr(scoring_mod, "DEFAULT_FITS_PATH",
+                            tmp_path / "no_fits.json")
         reset_fits_cache()
         m = {"pe": 10, "pb": 1.5, "market_cap": 5000, "total_debt": 100,
              "cash": 50, "revenue": 1000, "fcf_yield": 0.05,
@@ -276,6 +284,10 @@ class TestMissingFitsFallbackToV13:
             _get_fits, reset_fits_cache, score_dispatch,
             CALIBRATED_VERSION, HANDPICKED_VERSION,
         )
+        # Phase 4.7 deploy: monkeypatch default path so we exercise
+        # the missing-file branch even with real fits in repo
+        monkeypatch.setattr(scoring_calibrated, "DEFAULT_FITS_PATH",
+                            tmp_path / "no_fits.json")
         reset_fits_cache()
         nope_path = tmp_path / "nope.json"
         assert _get_fits(fits_path=nope_path) is None
