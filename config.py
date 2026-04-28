@@ -152,6 +152,42 @@ UNIVERSE_BIST30: list[str] = [
     "PGSUS", "EKGYO", "ARCLK", "TTKOM", "SOKM", "TKFEN", "KONTR", "AKSEN", "HEKTS", "SASA",
 ]
 
+# ================================================================
+# Phase 5 — BIST30 non-bank recalibration target set
+# ================================================================
+# 9 BIST banks must be skipped during isotonic recalibration: their
+# financial statements have a fundamentally different schema (Krediler,
+# Mevduatlar, Bankalar Bakiyeleri vs. industrial Ticari Alacaklar /
+# Stoklar) and require bank-specific metrics (NIM, CAR, NPL ratio).
+# Bank coverage is Phase 6's scope.
+#
+# Phase 5 calibrates on UNIVERSE_BIST30 minus banks → 21 non-bank
+# symbols × ~31 quarters = ~650 samples per metric (vs Phase 4.7's 155).
+BIST_BANKS: set[str] = {
+    "AKBNK", "GARAN", "ISCTR", "YKBNK",
+    "HALKB", "VAKBN", "TSKB", "SKBNK", "ALBRK",
+}
+
+UNIVERSE_BIST30_NON_BANK: list[str] = [
+    s for s in UNIVERSE_BIST30 if s not in BIST_BANKS
+]
+# BIST30 contains 4 of the 9 BIST banks (AKBNK, GARAN, ISCTR, YKBNK).
+# The other 5 (HALKB, VAKBN, TSKB, SKBNK, ALBRK) are in UNIVERSE_EXTRA.
+# So 30 - 4 = 26 non-bank BIST30 symbols.
+assert len(UNIVERSE_BIST30_NON_BANK) == 26, \
+    f"BIST30 non-bank should have 26 symbols, got {len(UNIVERSE_BIST30_NON_BANK)}"
+
+
+def is_bank(symbol: str) -> bool:
+    """True if symbol is a BIST bank.
+
+    Used to route to bank-specific calibration in Phase 6+. For
+    Phase 5 isotonic recalibration, banks are excluded from the
+    sample because their balance sheet schema differs structurally
+    from non-financial firms.
+    """
+    return (symbol or "").upper() in BIST_BANKS
+
 UNIVERSE_EXTRA: list[str] = [
     "VESTL", "DOHOL", "AYGAZ", "LOGO", "INDES", "ODAS", "GUBRF", "CIMSA", "MPARK",
     "OYAKC", "ISMEN", "TTRAK", "AEFES", "DOAS", "AGHOL", "OTKAR", "VESBE", "EGEEN", "TMSN",
