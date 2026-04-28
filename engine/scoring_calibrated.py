@@ -331,6 +331,7 @@ def score_dispatch(
     sector_group: Optional[str] = None,
     scoring_version: str = HANDPICKED_VERSION,
     fits: Optional[dict[str, IsotonicFit]] = None,
+    symbol: Optional[str] = None,
 ) -> dict:
     """Route to V13 (engine/scoring) or calibrated (this module).
 
@@ -345,7 +346,38 @@ def score_dispatch(
     Phase 5: calibrated_2026Q2 is also accepted and routes to
     fa_isotonic_fits_v2.json. Both versions share identical scoring
     code — only the fits artifact differs.
+
+    Phase 6: symbol kwarg lets the dispatcher detect bank symbols.
+    If a bank is requested with a calibrated version, we attempt to
+    load bank-specific fits first; if those don't exist yet, fall
+    through to the regular calibrated path (which itself falls back
+    to V13). The 'scoring_version_effective' field reports the actual
+    path taken.
     """
+    # Phase 6 — bank routing
+    bank_routing_used = False
+    if symbol and scoring_version in SUPPORTED_CALIBRATED_VERSIONS:
+        try:
+            from config import is_bank
+            if is_bank(symbol):
+                from engine.scoring_calibrated_banks import get_bank_fits
+                bank_fits = get_bank_fits()
+                if bank_fits is not None:
+                    return {
+                        "value":   score_value_calibrated(m, bank_fits),
+                        "quality": score_quality_calibrated(m, bank_fits),
+                        "growth":  score_growth_calibrated(m, bank_fits),
+                        "balance": score_balance_calibrated(m, bank_fits),
+                        "scoring_version": scoring_version,
+                        "scoring_version_effective": "calibrated_2026Q1_banks",
+                    }
+                # Bank fits not committed yet — flag and fall through
+                bank_routing_used = True
+                log.info(f"{symbol} is a bank but no bank fits available; "
+                         f"falling through to general calibrated path")
+        except Exception as e:
+            log.warning(f"bank routing failed for {symbol}: {e}")
+
     if scoring_version in SUPPORTED_CALIBRATED_VERSIONS:
         # Phase 5: pass scoring_version into _get_fits for path resolution
         fits_avail = fits if fits is not None else _get_fits(
