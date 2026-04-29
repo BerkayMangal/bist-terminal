@@ -51,7 +51,15 @@ from research.isotonic import (
 log = logging.getLogger("bistbull.scoring_calibrated")
 
 CALIBRATED_VERSION = "calibrated_2026Q1"
+# Phase 5: BIST30 non-bank recalibration (broader sample, ~650 per metric)
+CALIBRATED_V2_VERSION = "calibrated_2026Q2"
 HANDPICKED_VERSION = "v13_handpicked"
+
+# Set of supported calibrated versions (used by dispatcher for routing)
+SUPPORTED_CALIBRATED_VERSIONS: frozenset[str] = frozenset({
+    CALIBRATED_VERSION,
+    CALIBRATED_V2_VERSION,
+})
 
 
 # Direction per metric: True = higher is better (score_higher semantics),
@@ -60,6 +68,7 @@ METRIC_DIRECTIONS: dict[str, bool] = {
     # Higher = better
     "roe":                True,
     "roic":               True,
+    "roa":                True,
     "net_margin":         True,
     "gross_margin":       True,
     "operating_margin":   True,
@@ -91,6 +100,27 @@ DEFAULT_FITS_PATH = (
     Path(__file__).resolve().parent.parent
     / "reports" / "fa_isotonic_fits.json"
 )
+
+# Phase 5 — versioned fits paths (one per calibration generation)
+DEFAULT_FITS_V2_PATH = (
+    Path(__file__).resolve().parent.parent
+    / "reports" / "fa_isotonic_fits_v2.json"
+)
+
+
+def _resolve_fits_path(scoring_version: str) -> Path:
+    """Map scoring_version → on-disk fits artifact path.
+
+    Phase 4.7 (calibrated_2026Q1) → reports/fa_isotonic_fits.json
+    Phase 5 (calibrated_2026Q2)   → reports/fa_isotonic_fits_v2.json
+
+    Versioning so multiple calibration generations can coexist for
+    A/B comparison during recalibration rollouts. Old fits stay live
+    until new fits are tested + sanity-checked, then default flips.
+    """
+    if scoring_version == CALIBRATED_V2_VERSION:
+        return DEFAULT_FITS_V2_PATH
+    return DEFAULT_FITS_PATH
 
 
 # Metrics whose FA coverage was flagged < 50% in Phase 3. An operator
@@ -139,37 +169,49 @@ def calibrate_fa_metrics(
 # Scoring path (runtime dispatch)
 # ==========================================================================
 
-_FITS_CACHE: Optional[dict[str, IsotonicFit]] = None
+_FITS_CACHE: dict[str, Optional[dict]] = {}
 
 
 def _get_fits(fits_path: Optional[Union[str, Path]] = None,
-              force_reload: bool = False) -> Optional[dict[str, IsotonicFit]]:
+              force_reload: bool = False,
+              scoring_version: str = CALIBRATED_VERSION,
+              ) -> Optional[dict[str, IsotonicFit]]:
     """Load calibrated fits from disk, caching on first read.
 
     Returns None if the fits file doesn't exist (caller falls back to
     V13 handpicked). force_reload=True bypasses the cache -- tests
     set force_reload when swapping fits between test cases.
-    """
-    global _FITS_CACHE
-    if _FITS_CACHE is not None and not force_reload:
-        return _FITS_CACHE
 
-    path = Path(fits_path) if fits_path else DEFAULT_FITS_PATH
+    Phase 5: scoring_version selects the fits artifact (Q1 vs Q2).
+    Cache is keyed by version so both generations can coexist.
+    """
+    cache_key = scoring_version
+    if cache_key in _FITS_CACHE and not force_reload:
+        return _FITS_CACHE[cache_key]
+
+    if fits_path is not None:
+        path = Path(fits_path)
+    else:
+        path = _resolve_fits_path(scoring_version)
+
     if not path.exists():
         log.debug(f"no calibrated fits at {path}; falling back to handpicked")
+        _FITS_CACHE[cache_key] = None
         return None
     try:
-        _FITS_CACHE = load_isotonic_fits_json(path)
-        return _FITS_CACHE
+        loaded = load_isotonic_fits_json(path)
+        _FITS_CACHE[cache_key] = loaded
+        return loaded
     except Exception as e:
         log.warning(f"failed to load fits from {path}: {e}")
+        _FITS_CACHE[cache_key] = None
         return None
 
 
 def reset_fits_cache() -> None:
     """Clear the module-level fits cache. Tests call this to swap fits."""
     global _FITS_CACHE
-    _FITS_CACHE = None
+    _FITS_CACHE = {}
 
 
 def score_metric_calibrated(
@@ -289,30 +331,70 @@ def score_dispatch(
     sector_group: Optional[str] = None,
     scoring_version: str = HANDPICKED_VERSION,
     fits: Optional[dict[str, IsotonicFit]] = None,
+    symbol: Optional[str] = None,
 ) -> dict:
     """Route to V13 (engine/scoring) or calibrated (this module).
 
     Returns a dict with the same bucket scores regardless of version:
       {value, quality, growth, balance, scoring_version}
 
-    When scoring_version == 'calibrated_2026Q1' but no fits are
-    available (no calibration run yet / FA data not backfilled), this
-    falls back to V13 handpicked and records the fallback in the dict
-    via scoring_version_effective.
+    When a calibrated version is requested but no fits are available
+    (no calibration run yet / FA data not backfilled), this falls back
+    to V13 handpicked and records the fallback in the dict via
+    scoring_version_effective.
+
+    Phase 5: calibrated_2026Q2 is also accepted and routes to
+    fa_isotonic_fits_v2.json. Both versions share identical scoring
+    code — only the fits artifact differs.
+
+    Phase 6: symbol kwarg lets the dispatcher detect bank symbols.
+    If a bank is requested with a calibrated version, we attempt to
+    load bank-specific fits first; if those don't exist yet, fall
+    through to the regular calibrated path (which itself falls back
+    to V13). The 'scoring_version_effective' field reports the actual
+    path taken.
     """
-    if scoring_version == CALIBRATED_VERSION:
-        fits_avail = fits if fits is not None else _get_fits()
+    # Phase 6 — bank routing
+    bank_routing_used = False
+    if symbol and scoring_version in SUPPORTED_CALIBRATED_VERSIONS:
+        try:
+            from config import is_bank
+            if is_bank(symbol):
+                from engine.scoring_calibrated_banks import get_bank_fits
+                bank_fits = get_bank_fits()
+                if bank_fits is not None:
+                    return {
+                        "value":   score_value_calibrated(m, bank_fits),
+                        "quality": score_quality_calibrated(m, bank_fits),
+                        "growth":  score_growth_calibrated(m, bank_fits),
+                        "balance": score_balance_calibrated(m, bank_fits),
+                        "scoring_version": scoring_version,
+                        "scoring_version_effective": "calibrated_2026Q1_banks",
+                    }
+                # Bank fits not committed yet — flag and fall through
+                bank_routing_used = True
+                log.info(f"{symbol} is a bank but no bank fits available; "
+                         f"falling through to general calibrated path")
+        except Exception as e:
+            log.warning(f"bank routing failed for {symbol}: {e}")
+
+    if scoring_version in SUPPORTED_CALIBRATED_VERSIONS:
+        # Phase 5: pass scoring_version into _get_fits for path resolution
+        fits_avail = fits if fits is not None else _get_fits(
+            scoring_version=scoring_version,
+        )
         if fits_avail is not None:
             return {
                 "value":   score_value_calibrated(m, fits_avail),
                 "quality": score_quality_calibrated(m, fits_avail),
                 "growth":  score_growth_calibrated(m, fits_avail),
                 "balance": score_balance_calibrated(m, fits_avail),
-                "scoring_version": CALIBRATED_VERSION,
-                "scoring_version_effective": CALIBRATED_VERSION,
+                "scoring_version": scoring_version,
+                "scoring_version_effective": scoring_version,
             }
         # Fallback to V13
-        log.info(f"calibrated requested but no fits found; falling back to {HANDPICKED_VERSION}")
+        log.info(f"{scoring_version} requested but no fits found; "
+                 f"falling back to {HANDPICKED_VERSION}")
     # V13 handpicked path
     from engine.scoring import (
         score_value, score_quality, score_growth, score_balance,

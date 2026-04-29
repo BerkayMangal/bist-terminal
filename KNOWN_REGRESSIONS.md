@@ -322,3 +322,302 @@ Detailed analysis in:
   - PHASE_HOTFIX_1_REPORT.md
   - reports/hotfix_1_timing.md
   - reports/hotfix_1_fetch_raw_errors.md
+
+
+---
+
+## Phase 4.7 final close (FA calibration lifecycle)
+
+Not a regression — logged for completeness of the Phase 4 line.
+
+Phase 4.7 was originally scaffolded in commit e01175c (Phase 4's
+main branch work) with synthetic FA event tests only. Real calibration
+required operator backfill of BIST30 quarterly fundamentals, which
+was blocked on:
+  - Operator time availability (2-hour Colab session)
+  - Dry-run-first pattern to avoid Phase 3b-era API mismatches
+
+This Phase 4.7 final turn delivered the full tooling:
+  - Commit 1e6b220: scripts/ingest_fa_for_calibration.py (550 LOC,
+    fetcher abstraction, checkpoint resume, 19 tests)
+  - Commit d9245a5: scripts/calibrate_fa_from_events.py (250 LOC,
+    coverage filter + sanity check, 13 tests)
+  - Commit c9acf3d: K3/K4 coverage tests + A/B coexistence (9 tests)
+  - Commit 744eaba: app.py A/B dual-write in background scanner
+
+Plus docs:
+  - scripts/RUN_FA_BACKFILL_COLAB.md (Türkçe operator guide, 206 lines)
+  - reports/fa_calibration_plan.md (pre-ingest plan, 129 lines)
+  - PHASE_4_7_FINAL_REPORT.md (lifecycle doc, 294 lines)
+
+Test impact: 841 (HOTFIX 1) -> 882 passed + 5 skipped (+41).
+Both CWDs pass. Reviewer target 880+ cleared.
+
+Important findings from this turn that were NOT regressions but
+worth recording:
+
+1. K3 (turkey_realities) + K4 (academic_layer) chain was NEVER
+   broken in the calibrated path. engine/analysis.py re-aggregates
+   all 7 buckets (4 calibrated + 3 V13) via the _active dict
+   normalization before K3/K4 receive fa_pure. Reviewer's concern
+   about "zincir kopuksa" was pre-emptively addressed with coverage
+   tests — no wiring fix needed.
+
+2. Decision to keep earnings/moat/capital in V13 (not extend to
+   calibrated versions). Rationale: composite metrics with discrete
+   branching (Beneish M thresholds, share_change cap-at-100,
+   asset_turnover trend classification) don't reduce to single
+   metric_value -> forward_return pairs. Documented in
+   PHASE_4_7_FINAL_REPORT.md and reports/fa_calibration_plan.md.
+
+3. Anti-correlation sanity check in the calibrator catches
+   data-quality issues: when forward returns are anti-correlated
+   with the registered direction, PAV forced-increasing pools
+   everything to a constant -> _check_fit_direction excludes.
+   test_wrong_direction_excluded locks this in. If the Colab
+   operator accidentally sign-flips the return column, bad fits
+   are rejected instead of deployed.
+
+Rollback: 4 Phase 4.7 commits can be reverted independently; V13
+handpicked remains the always-available fallback whether or not
+reports/fa_isotonic_fits.json is present on disk.
+
+Phase 4 total: 32 commits from Phase 3 baseline, 882 tests passing.
+
+
+---
+
+## Phase 4.7 v2 — Ingest hardening (post Colab ROUND A post-mortem)
+
+Not a regression of any previous behavior; this entry documents the
+4 production-data bugs fixed by the v2 script hardening turn.
+
+Colab ROUND A produced 3/25 metrics × 23/30 symbols = 2,116 rows,
+PB values up to 7994 (nonsense). Post-mortem identified 4 causes:
+
+**FIXED in v2 (this turn):**
+
+1. Market cap not point-in-time — commit 9567c6f:
+   Previously tk.fast_info.market_cap (TODAY's mcap) was applied to
+   every historical quarter. Now _pit_market_cap() uses
+   get_price_at_or_before(filed_at) × shares_outstanding.
+   Fallback chain: shares_current → paid_in_capital (1 TL nominal)
+   → None. Verified by test_pit_prices_differ_across_quarters
+   (5x price diff produces 5x mcap diff, not constant).
+
+2. Bank schema incompatible — commit 9567c6f:
+   BANK_SYMBOLS frozenset of 9 BIST banks (AKBNK, GARAN, YKBNK,
+   ISCTR, HALKB, VAKBN, TSKB, SKBNK, ALBRK). Double-gated in
+   ingest_symbols driver AND make_borsapy_fetcher. Banks get
+   "SKIP: banka şeması farklı" log + checkpoint reason, zero CSV
+   rows. Verified by test_bank_symbol_passed_to_ingest_driver_is_skipped.
+
+3. Turkish KAP labels mismatched — commits 97610cc + 9567c6f:
+   utils/label_matching.py normalize_label() handles Turkish
+   diacritics (İ/ı/Ğ/Ş/Ç/Ö/Ü), NFD combining marks, punctuation,
+   whitespace. pick_label() has two-pass exact + substring match
+   with 4-char substring guard. pick_value() integrates pandas
+   lookup. make_borsapy_fetcher() now uses pick_value throughout.
+   24 tests in tests/test_label_normalization.py lock in behavior.
+
+**DEFERRED to ROUND B** (operator Colab run → agent label tune):
+
+4. Candidate lists incomplete — scripts/explore_borsapy_labels.py
+   (commit d758426) lists actual borsapy DataFrame.index labels
+   for 5 representative non-bank symbols. Operator runs in Colab
+   (5-10 min), sends output to agent, agent updates candidate
+   lists with verbatim labels in ROUND B commit.
+
+Additional improvement: METRIC_REGISTRY extended 13 → 16 (roa,
+fcf_margin, cfo_to_ni). All three safely derivable from existing
+statement inputs. engine/scoring_calibrated.METRIC_DIRECTIONS
+gains "roa": True entry.
+
+Test impact: 882 (Phase 4.7 final) -> 919 passed + 5 skipped (+37).
+Both CWDs. Reviewer target 895+ cleared by +24.
+
++37 test breakdown:
+  tests/test_label_normalization.py (24): Turkish fold,
+    pick_label, pick_value — all pure string logic, no borsapy dep
+  tests/test_pit_market_cap.py (9): PIT mcap fallback chain,
+    bank skip driver integration
+  tests/test_ingest_real_labels.py (4): end-to-end mock borsapy
+    with REAL Turkish KAP labels → 16 metrics populated
+    (the smoking gun: Colab ROUND A got 3, we get 16)
+
+Existing test adjusted: test_checkpoint_resume_skips_done swapped
+AKBNK → ASELS since AKBNK is now bank-skipped (same resume logic
+exercised, different symbols).
+
+Rollback: 3 code commits independently revertable:
+  git revert 9567c6f d758426 97610cc
+utils/label_matching.py is standalone (no runtime dep) — safe to
+keep even if ingest rolls back.
+
+
+---
+
+## Phase 4.7 v3 ROUND B — Label mapping final tune
+
+Not a regression; this entry documents the label-candidate update
+from Colab ROUND A discovery output to `ingest_fa_for_calibration.py`.
+
+Ground-truth KAP labels observed across THYAO/ASELS/EREGL/BIMAS/TUPRS
+(5 non-bank sectors, Colab run):
+  - ALL-CAPS rows: 'BRÜT KAR (ZARAR)', 'FAALİYET KARI (ZARARI)',
+    'DÖNEM KARI (ZARARI)', 'TOPLAM VARLIKLAR', 'TOPLAM KAYNAKLAR'
+  - Indent-prefixed: '  Nakit ve Nakit Benzerleri',
+    '  Ödenmiş Sermaye', ' İşletme Faaliyetlerinden Kaynaklanan...'
+  - CRITICAL duplicate: 'Finansal Borçlar' appears TWICE (short-term +
+    long-term liability sections) — SUM required for total_debt
+  - 'Serbest Nakit Akım' (NOT 'Akışı' — different word)
+  - 'Finansman Gideri Öncesi Faaliyet Karı/Zararı' (EBIT, no FAVÖK row)
+  - '(Esas Faaliyet Dışı) Finansal Giderler (-)' (interest expense)
+  - 'Amortisman Giderleri' (depreciation, from cashflow statement)
+
+Changes (commits this turn):
+  - utils/label_matching.py: new pick_all_values() helper returns ALL
+    values whose row-label matches any candidate (for duplicate-label
+    summation). allow_substring defaults False to prevent double-count.
+  - scripts/ingest_fa_for_calibration.py:make_borsapy_fetcher
+    candidate lists updated with ground-truth KAP labels. total_debt
+    now uses pick_all_values to SUM both Finansal Borçlar rows.
+    New depreciation field from 'Amortisman Giderleri' enables real
+    EBITDA computation (vs v2's operating_cf proxy).
+  - scripts/ingest_fa_for_calibration.py:_derive_metrics_from_statements
+    net_debt_ebitda now computes ebitda = (ebit + depreciation) × 4
+    annualized. Fallback to v2 proxy preserved for symbols without
+    explicit depreciation.
+  - reports/borsapy_label_discovery.md: 114-line audit trail of what
+    borsapy returns and why candidate lists are ordered as they are.
+
+Tests added (+15):
+  tests/test_ingest_round_b_labels.py
+    TestRoundBLabels (9): every statement field resolves, total_debt
+      sums both Finansal Borçlar rows, all-caps labels match,
+      indent-prefix stripped, Serbest Nakit Akım variant, İşletme
+      Faaliyetlerinden prefix, depreciation available, real EBITDA
+      computed, all 16 metrics populate end-to-end.
+    TestPickAllValues (6): empty, single, duplicate returns both,
+      no-substring default (prevents double-count), substring opt-in,
+      NaN filtered.
+
+Test impact: 919 (v2) -> 934 passed + 5 skipped (+15). Both CWDs.
+Reviewer target 925+ cleared by +9.
+
+Caveats (documented in PHASE_4_7_V3_ROUND_B_REPORT.md):
+  - Banks deferred to Phase 5 (need dedicated metric registry)
+  - Shares outstanding proxy (current, not PIT)
+  - Consolidated NI used (matches production; attributable NI
+    available as secondary candidate)
+  - EBIT via 'Finansman Gideri Öncesi Faaliyet Karı/Zararı' is
+    definitional EBIT, not a proxy
+  - Some symbols may not report 'Serbest Nakit Akım' — fcf metrics
+    None for those, excluded from calibration
+
+Rollback: single commit revertable. pick_all_values is additive.
+V13 handpicked remains always-available fallback.
+
+
+---
+
+## Phase 4.7 deploy — close-out entry
+
+Not a regression. Closes the Phase 4.7 arc.
+
+Infrastructure shipped this turn (commits ff01c05 + dc994dd):
+  - tests/test_calibrated_loads_real_fits.py (10): loader path
+    resolution, fits-present path, fits-missing V13 fallback with
+    telemetry, empty-dict behavior, corrupt-JSON recovery
+  - scripts/smoke_test_calibrated.py (~230 LOC): CLI tool, 3-check
+    production smoke test, Türkçe output, zero external deps
+  - tests/test_smoke_script_logic.py (17): offline response-shape
+    parsing coverage
+  - DEPLOY_CALIBRATED_GUIDE.md (179 lines, Türkçe): 5-step deploy
+    path + troubleshooting + rollback
+
+Test impact: 934 -> 961 passed + 5 skipped (+27). Both CWDs.
+Reviewer target 940+ cleared by +21.
+
+IMPORTANT INTEGRITY NOTE — Uploaded Colab artifacts were empty:
+
+The turn prompt described a successful Colab backfill (1,900 rows,
+5 symbols, 11 fitted metrics, interest_coverage sanity-rejected).
+The actual fa_calibration_full_final.zip uploaded to the session
+contained 3 files totaling 304 bytes:
+  fa_events.csv: 117 bytes (header only, 0 data rows)
+  fa_isotonic_fits.json: 2 bytes (literal "{}", 0 metrics)
+  fa_calibration_summary.md: 185 bytes ("Input events: 0")
+
+The agent did NOT commit these empty files to reports/ because
+doing so would:
+  1. Put a lying audit trail in the repo (summary says "Input
+     events: 0" while reviewer narrative claims 1,900)
+  2. Cause loader to cache {}, producing same behavior as no fits
+     file, but with a misleading committed state
+  3. Complicate debugging when real Colab output arrives later
+
+Repo deployable in TWO states:
+  Path A: operator re-runs Colab, produces real fits, commits
+          reports/fa_isotonic_fits.json + events CSV + summary,
+          then pushes + deploys
+  Path B: operator pushes as-is. Calibrated requests fall back to
+          V13 with scoring_version_effective='v13_handpicked'
+          telemetry. Background scanner skips A/B dual-write
+          cleanly (_get_fits() is None). Zero crash, zero user
+          visible breakage — just calibrated is a no-op until
+          real fits arrive.
+
+Both paths documented in PHASE_4_7_DEPLOY_FINAL_REPORT.md.
+
+Rollback: all Phase 4.7 commits additive + independently revertable.
+V13 handpicked remains always-available fallback.
+
+Phase 4.7 arc: 577 (Phase 3) -> 961 tests (+384 over 4.0-4.9 + final
++ v2 + v3 ROUND B + deploy). 43 commits on feat/calibrated-scoring
+from feat/pit-backfill-validator baseline.
+
+
+---
+
+## Phase 4.7 deploy — CLOSED (real fits committed)
+
+Earlier "uploads were empty" entry resolved.
+
+Root cause was found and patched: research/ingest_prices.py was using
+borsapy's old module-level get_prices() API, which doesn't exist in
+borsapy>=0.8. Fixed in commit 2aacdfe by switching to the production
+bp.Ticker(sym).history(period="max", interval="1d") API. After this
+fix, the Colab two-stage flow (price ingest → FA ingest → calibrate)
+produced 2,465 events / 15 fits cleanly.
+
+Real fits landed in commit c90d9e5:
+  reports/fa_events.csv (224 KB, 2,465 rows, 5 symbols, 16 metrics)
+  reports/fa_isotonic_fits.json (7.4 KB, 15 fitted, 1 sanity-rejected)
+  reports/fa_calibration_summary.md (1.5 KB)
+
+Test fix in same commit:
+  test_fallback_recorded_in_effective_flag was asserting V13 fallback
+  when no fits on disk, but with real fits now committed it was
+  finding them via DEFAULT_FITS_PATH and failing. Fixed by
+  monkeypatching DEFAULT_FITS_PATH to a non-existent tmp_path,
+  exercising the actual missing-file code path. Invariant preserved.
+
+Verification:
+  - End-to-end: _get_fits() loads 15 metrics from default path
+  - score_dispatch with calibrated_2026Q1 returns
+    scoring_version_effective='calibrated_2026Q1' (no V13 fallback)
+  - Bucket scores in expected ranges (value=55.5, quality=23.7
+    on representative test fixture)
+  - tests/test_calibrated_loads_real_fits.py: 10 passed
+  - tests/test_smoke_script_logic.py: 17 passed
+
+Coverage limitation noted for Phase 5:
+  155 samples per metric (5 symbols × 31 quarters). Phase 5 candidate
+  for recalibration with BIST30 non-bank set (~650 samples/metric).
+
+Phase 4.7 arc total: 577 (Phase 3) -> 961 (deploy) tests, 46 commits.
+Push + Railway redeploy flips production from V13 fallback to
+calibrated_2026Q1 active.
+
+Phase 4.7 deploy: CLOSED.

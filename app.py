@@ -124,6 +124,40 @@ async def _background_scanner():
                         try: tech = tech_cache.get(r.get("symbol", "")); generate_trader_summary(r, tech)
                         except Exception: pass
                 await asyncio.to_thread(scan_coordinator.start_scan, UNIVERSE, _analyze_fn, _history_fn, _cross_fn, _ai_enrich_fn)
+
+                # Phase 4.7 A/B dual-write: when calibrated fits are
+                # available on disk, run a secondary calibrated pass
+                # so score_history has BOTH scoring_versions per
+                # (symbol, snap_date). This drives /api/scoring/ab_report
+                # and /ab_report with real paired telemetry. If fits
+                # aren't loaded, this is a no-op (calibrated path just
+                # falls back to v13 internally, which is a duplicate
+                # write that upserts harmlessly — but we skip to save
+                # the cost). Rule 6: this NEVER affects the primary v13
+                # scan, only adds calibrated rows when meaningful.
+                try:
+                    from engine.scoring_calibrated import _get_fits
+                    if _get_fits() is not None:
+                        log.info("Phase 4.7 A/B dual-write: starting calibrated pass")
+                        def _analyze_cal(ticker):
+                            try:
+                                return analyze_symbol(
+                                    normalize_symbol(ticker),
+                                    scoring_version="calibrated_2026Q1",
+                                )
+                            except Exception:
+                                return None
+                        # Sequential pass — we already did the parallel
+                        # heavy work; this just re-scores using cached raw
+                        # data + writes the second snapshot row.
+                        for sym in UNIVERSE:
+                            await asyncio.to_thread(_analyze_cal, sym)
+                        log.info("Phase 4.7 A/B dual-write: calibrated pass done")
+                    else:
+                        log.debug("Phase 4.7 A/B dual-write: no fits, skipping calibrated pass")
+                except Exception as e:
+                    log.warning(f"A/B dual-write pass failed: {e}")
+
                 heatmap_cache.clear()
                 if AI_AVAILABLE and get_top10_items():
                     try: await _generate_briefing_internal()
