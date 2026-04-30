@@ -183,3 +183,116 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg0);color:var(
   .hero-wrap{padding:12px}
   .nav-b{padding:8px 12px}
 }
+/* ===== PHASE 5.1.1 — HEATMAP SKELETON SHIMMER ===== */
+.heat-skel-wrap{padding:8px;background:var(--bg2);border:1px solid var(--bdr);border-radius:var(--rad)}
+.heat-skel-grid{display:flex;flex-wrap:wrap;gap:4px;width:100%;max-width:750px;margin-bottom:8px}
+.heat-skel-cell{background:linear-gradient(90deg,var(--bg3) 0%,var(--bg4) 50%,var(--bg3) 100%);background-size:200% 100%;animation:heatShimmer 1.4s ease-in-out infinite;border-radius:2px;border:0.5px solid rgba(0,0,0,0.35)}
+.heat-skel-caption{color:var(--t4);font-size:12px;margin-top:8px;text-align:center}
+@keyframes heatShimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+
+/* ===== PHASE 5.1.3 — MOBILE-FIRST BREAKPOINTS ===== */
+/* Default: phones 320-480px. min-width queries scale up. */
+.is-mobile-only{display:block}
+.is-tablet-only,.is-desktop-only{display:none}
+
+/* Tap targets — every interactive element ≥44px on mobile */
+.btn,.btn-sm,.btn-orn,.btn-blu,.btn-dim,button,.nav-b,.qtk,.disc-chip{min-height:44px;min-width:44px}
+
+/* Sticky bottom nav (mobile) — 5 tabs */
+.mob-bnav{position:fixed;bottom:0;left:0;right:0;height:calc(56px + var(--safe-b));padding-bottom:var(--safe-b);background:var(--bg1);border-top:1px solid var(--bdr);display:flex;justify-content:space-around;align-items:stretch;z-index:90}
+.mob-bnav-item{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;color:var(--t3);font-family:'JetBrains Mono',monospace;font-size:9px;text-transform:uppercase;letter-spacing:0.5px;cursor:pointer;border:0;background:0;padding:6px 4px;min-height:56px}
+.mob-bnav-item .ico{font-size:18px;line-height:1}
+.mob-bnav-item.on{color:var(--acc)}
+.mob-bnav-item:hover{color:var(--t1)}
+
+/* Heatmap mobile list-view alternative */
+.heat-list-mobile{display:none}
+.heat-list-row{display:flex;align-items:center;gap:8px;padding:8px;border-bottom:1px solid var(--bdr);font-family:'JetBrains Mono',monospace;font-size:12px;min-height:44px}
+.heat-list-row .tk{color:var(--cyn);font-weight:700;min-width:60px}
+.heat-list-row .pr{color:var(--t1);text-align:right;flex:1}
+.heat-list-row .ch{font-weight:700;min-width:60px;text-align:right}
+
+/* mobile breakpoint: show list view, hide grid */
+@media(max-width:480px){
+  .heat-grid-mobile-hide{display:none!important}
+  .heat-list-mobile{display:block}
+  body{padding-bottom:calc(56px + var(--safe-b))}
+  .mob-bnav{display:flex}
+  .hdr-nav{display:none}
+}
+@media(min-width:481px){
+  .mob-bnav{display:none}
+}
+
+/* Tablet (768px+) tweaks */
+@media(min-width:768px){
+  .g2{grid-template-columns:1fr 1fr}
+  .g3{grid-template-columns:1fr 1fr 1fr}
+  .g4{grid-template-columns:repeat(4,1fr)}
+}
+
+/* ===== PHASE 5.2.1 — TURKEY 4 FILTER SECTION ===== */
+.tr-filter-section{background:linear-gradient(135deg,#0d1628,var(--bg3));border:1px solid var(--bdr2);border-radius:var(--rad2);padding:18px;margin-top:16px;margin-bottom:16px}
+.tr-filter-title{display:flex;align-items:center;gap:8px;font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:700;color:var(--acc);text-transform:uppercase;letter-spacing:1.2px;margin-bottom:14px}
+.tr-filter-title .info{margin-left:auto;color:var(--t4);font-size:11px;cursor:pointer;background:0;border:0;padding:4px 8px;min-height:32px;min-width:32px}
+.tr-filter-title .info:hover{color:var(--acc)}
+.tr-filter-row{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--bdr)}
+.tr-filter-row:last-child{border-bottom:0}
+.tr-filter-icon{font-size:22px;flex-shrink:0;width:32px;text-align:center}
+.tr-filter-body{flex:1;min-width:0}
+.tr-filter-name{font-family:'DM Sans',sans-serif;font-size:14px;font-weight:600;color:var(--t1);margin-bottom:4px;display:flex;align-items:center;gap:8px}
+.tr-filter-grade{font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;padding:2px 6px;border-radius:3px;background:var(--bg3);color:var(--t2)}
+.tr-filter-grade.A{background:var(--grnd);color:var(--grn)}
+.tr-filter-grade.B{background:var(--grnd);color:var(--grn);opacity:0.8}
+.tr-filter-grade.C{background:var(--ylwd);color:var(--ylw)}
+.tr-filter-grade.D{background:var(--redd);color:var(--red);opacity:0.8}
+.tr-filter-grade.F{background:var(--redd);color:var(--red)}
+.tr-filter-bar-wrap{height:6px;background:var(--bg4);border-radius:3px;overflow:hidden;margin-bottom:4px;position:relative}
+.tr-filter-bar{height:100%;border-radius:3px;transition:width .4s}
+.tr-filter-bar.up{background:linear-gradient(90deg,var(--grn2),var(--grn))}
+.tr-filter-bar.down{background:linear-gradient(90deg,var(--red),#ff7676)}
+.tr-filter-bar.flat{background:var(--t4)}
+.tr-filter-mid{position:absolute;left:50%;top:0;bottom:0;width:1px;background:var(--bdr2)}
+.tr-filter-mult{font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;min-width:48px;text-align:right}
+.tr-filter-mult.up{color:var(--grn)}
+.tr-filter-mult.down{color:var(--red)}
+.tr-filter-mult.flat{color:var(--t3)}
+.tr-filter-explanation{font-size:11px;color:var(--t3);line-height:1.4}
+.tr-filter-summary{margin-top:14px;padding:10px 12px;background:var(--accd);border:1px solid rgba(255,179,0,0.2);border-radius:var(--rad);font-size:12px;color:var(--t1);line-height:1.5}
+
+/* ===== PHASE 5.2.2 — SIGNAL EXPLANATION CARDS ===== */
+.sig-explain-card{background:var(--bg2);border:1px solid var(--bdr);border-radius:var(--rad);padding:12px 14px;margin-bottom:8px}
+.sig-explain-head{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.sig-explain-name{font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;color:var(--t1)}
+.sig-explain-rel{margin-left:auto;font-size:11px}
+.sig-explain-body{font-size:12px;color:var(--t2);line-height:1.5;margin-bottom:6px}
+.sig-explain-meta{display:flex;gap:12px;flex-wrap:wrap;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--t4)}
+.sig-explain-meta .tag{padding:2px 6px;border-radius:3px;background:var(--bg3);border:1px solid var(--bdr);color:var(--t2)}
+.sig-explain-action{margin-top:8px;padding:6px 10px;background:var(--accd);border-radius:4px;font-size:11px;color:var(--acc);font-weight:600}
+
+/* ===== PHASE 5.2.3 — AI MULTI-MODEL SHOWDOWN ===== */
+.ai-consensus-wrap{background:var(--bg2);border:1px solid var(--bdr);border-radius:var(--rad2);padding:0;overflow:hidden}
+.ai-consensus-leader{padding:14px 16px;background:linear-gradient(135deg,var(--accd),transparent);border-bottom:1px solid var(--bdr)}
+.ai-consensus-badge{display:inline-flex;align-items:center;gap:6px;font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;color:var(--acc);text-transform:uppercase;letter-spacing:1px;padding:3px 8px;background:var(--accd);border:1px solid rgba(255,179,0,0.25);border-radius:4px;margin-bottom:8px}
+.ai-consensus-badge.split{color:var(--ylw);background:var(--ylwd);border-color:rgba(245,158,11,0.25)}
+.ai-consensus-leader-name{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--t3);margin-bottom:8px}
+.ai-consensus-text{font-size:13px;color:var(--t1);line-height:1.6}
+.ai-consensus-others{padding:0}
+.ai-consensus-others summary{padding:10px 16px;cursor:pointer;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--t3);user-select:none;border-top:1px solid var(--bdr)}
+.ai-consensus-others summary:hover{background:var(--bg3);color:var(--t1)}
+.ai-consensus-other{padding:10px 16px;border-top:1px solid var(--bdr);background:var(--bg1)}
+.ai-consensus-other-head{display:flex;align-items:center;gap:8px;margin-bottom:6px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--t3)}
+.ai-consensus-other-head .conf{margin-left:auto}
+.ai-consensus-other-text{font-size:12px;color:var(--t2);line-height:1.5}
+
+/* ===== PHASE 5.2.4 — SCORE EXPLAIN MODAL ===== */
+.score-help-btn{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:50%;background:var(--bg3);border:1px solid var(--bdr);color:var(--t3);font-size:11px;font-weight:700;cursor:pointer;margin-left:6px;font-family:'JetBrains Mono',monospace}
+.score-help-btn:hover{color:var(--acc);border-color:var(--acc)}
+.score-modal-bd{padding:18px;font-size:13px;color:var(--t2);line-height:1.7}
+.score-modal-bd h4{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--acc);text-transform:uppercase;letter-spacing:1px;margin:14px 0 6px}
+.score-modal-bd .num{font-family:'JetBrains Mono',monospace;font-size:14px;color:var(--t1);font-weight:700}
+
+/* ===== PHASE 5.4 — TRADINGVIEW WIDGET CONTAINERS ===== */
+.tv-widget{background:var(--bg2);border:1px solid var(--bdr);border-radius:var(--rad2);overflow:hidden;min-height:200px;position:relative}
+.tv-widget-loading{display:flex;align-items:center;justify-content:center;min-height:200px;color:var(--t4);font-family:'JetBrains Mono',monospace;font-size:11px}
+.tv-widget-error{padding:14px;color:var(--red);font-family:'JetBrains Mono',monospace;font-size:11px;text-align:center}

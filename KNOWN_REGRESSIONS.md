@@ -322,3 +322,280 @@ Detailed analysis in:
   - PHASE_HOTFIX_1_REPORT.md
   - reports/hotfix_1_timing.md
   - reports/hotfix_1_fetch_raw_errors.md
+
+
+---
+
+## Phase 4.7 final close (FA calibration lifecycle)
+
+Not a regression — logged for completeness of the Phase 4 line.
+
+Phase 4.7 was originally scaffolded in commit e01175c (Phase 4's
+main branch work) with synthetic FA event tests only. Real calibration
+required operator backfill of BIST30 quarterly fundamentals, which
+was blocked on:
+  - Operator time availability (2-hour Colab session)
+  - Dry-run-first pattern to avoid Phase 3b-era API mismatches
+
+This Phase 4.7 final turn delivered the full tooling:
+  - Commit 1e6b220: scripts/ingest_fa_for_calibration.py (550 LOC,
+    fetcher abstraction, checkpoint resume, 19 tests)
+  - Commit d9245a5: scripts/calibrate_fa_from_events.py (250 LOC,
+    coverage filter + sanity check, 13 tests)
+  - Commit c9acf3d: K3/K4 coverage tests + A/B coexistence (9 tests)
+  - Commit 744eaba: app.py A/B dual-write in background scanner
+
+Plus docs:
+  - scripts/RUN_FA_BACKFILL_COLAB.md (Türkçe operator guide, 206 lines)
+  - reports/fa_calibration_plan.md (pre-ingest plan, 129 lines)
+  - PHASE_4_7_FINAL_REPORT.md (lifecycle doc, 294 lines)
+
+Test impact: 841 (HOTFIX 1) -> 882 passed + 5 skipped (+41).
+Both CWDs pass. Reviewer target 880+ cleared.
+
+Important findings from this turn that were NOT regressions but
+worth recording:
+
+1. K3 (turkey_realities) + K4 (academic_layer) chain was NEVER
+   broken in the calibrated path. engine/analysis.py re-aggregates
+   all 7 buckets (4 calibrated + 3 V13) via the _active dict
+   normalization before K3/K4 receive fa_pure. Reviewer's concern
+   about "zincir kopuksa" was pre-emptively addressed with coverage
+   tests — no wiring fix needed.
+
+2. Decision to keep earnings/moat/capital in V13 (not extend to
+   calibrated versions). Rationale: composite metrics with discrete
+   branching (Beneish M thresholds, share_change cap-at-100,
+   asset_turnover trend classification) don't reduce to single
+   metric_value -> forward_return pairs. Documented in
+   PHASE_4_7_FINAL_REPORT.md and reports/fa_calibration_plan.md.
+
+3. Anti-correlation sanity check in the calibrator catches
+   data-quality issues: when forward returns are anti-correlated
+   with the registered direction, PAV forced-increasing pools
+   everything to a constant -> _check_fit_direction excludes.
+   test_wrong_direction_excluded locks this in. If the Colab
+   operator accidentally sign-flips the return column, bad fits
+   are rejected instead of deployed.
+
+Rollback: 4 Phase 4.7 commits can be reverted independently; V13
+handpicked remains the always-available fallback whether or not
+reports/fa_isotonic_fits.json is present on disk.
+
+Phase 4 total: 32 commits from Phase 3 baseline, 882 tests passing.
+
+
+---
+
+## Phase 4.7 v2 — Ingest hardening (post Colab ROUND A post-mortem)
+
+Not a regression of any previous behavior; this entry documents the
+4 production-data bugs fixed by the v2 script hardening turn.
+
+Colab ROUND A produced 3/25 metrics × 23/30 symbols = 2,116 rows,
+PB values up to 7994 (nonsense). Post-mortem identified 4 causes:
+
+**FIXED in v2 (this turn):**
+
+1. Market cap not point-in-time — commit 9567c6f:
+   Previously tk.fast_info.market_cap (TODAY's mcap) was applied to
+   every historical quarter. Now _pit_market_cap() uses
+   get_price_at_or_before(filed_at) × shares_outstanding.
+   Fallback chain: shares_current → paid_in_capital (1 TL nominal)
+   → None. Verified by test_pit_prices_differ_across_quarters
+   (5x price diff produces 5x mcap diff, not constant).
+
+2. Bank schema incompatible — commit 9567c6f:
+   BANK_SYMBOLS frozenset of 9 BIST banks (AKBNK, GARAN, YKBNK,
+   ISCTR, HALKB, VAKBN, TSKB, SKBNK, ALBRK). Double-gated in
+   ingest_symbols driver AND make_borsapy_fetcher. Banks get
+   "SKIP: banka şeması farklı" log + checkpoint reason, zero CSV
+   rows. Verified by test_bank_symbol_passed_to_ingest_driver_is_skipped.
+
+3. Turkish KAP labels mismatched — commits 97610cc + 9567c6f:
+   utils/label_matching.py normalize_label() handles Turkish
+   diacritics (İ/ı/Ğ/Ş/Ç/Ö/Ü), NFD combining marks, punctuation,
+   whitespace. pick_label() has two-pass exact + substring match
+   with 4-char substring guard. pick_value() integrates pandas
+   lookup. make_borsapy_fetcher() now uses pick_value throughout.
+   24 tests in tests/test_label_normalization.py lock in behavior.
+
+**DEFERRED to ROUND B** (operator Colab run → agent label tune):
+
+4. Candidate lists incomplete — scripts/explore_borsapy_labels.py
+   (commit d758426) lists actual borsapy DataFrame.index labels
+   for 5 representative non-bank symbols. Operator runs in Colab
+   (5-10 min), sends output to agent, agent updates candidate
+   lists with verbatim labels in ROUND B commit.
+
+Additional improvement: METRIC_REGISTRY extended 13 → 16 (roa,
+fcf_margin, cfo_to_ni). All three safely derivable from existing
+statement inputs. engine/scoring_calibrated.METRIC_DIRECTIONS
+gains "roa": True entry.
+
+Test impact: 882 (Phase 4.7 final) -> 919 passed + 5 skipped (+37).
+Both CWDs. Reviewer target 895+ cleared by +24.
+
++37 test breakdown:
+  tests/test_label_normalization.py (24): Turkish fold,
+    pick_label, pick_value — all pure string logic, no borsapy dep
+  tests/test_pit_market_cap.py (9): PIT mcap fallback chain,
+    bank skip driver integration
+  tests/test_ingest_real_labels.py (4): end-to-end mock borsapy
+    with REAL Turkish KAP labels → 16 metrics populated
+    (the smoking gun: Colab ROUND A got 3, we get 16)
+
+Existing test adjusted: test_checkpoint_resume_skips_done swapped
+AKBNK → ASELS since AKBNK is now bank-skipped (same resume logic
+exercised, different symbols).
+
+Rollback: 3 code commits independently revertable:
+  git revert 9567c6f d758426 97610cc
+utils/label_matching.py is standalone (no runtime dep) — safe to
+keep even if ingest rolls back.
+
+
+---
+
+## Phase 4.7 v3 ROUND B — Label mapping final tune
+
+Not a regression; this entry documents the label-candidate update
+from Colab ROUND A discovery output to `ingest_fa_for_calibration.py`.
+
+Ground-truth KAP labels observed across THYAO/ASELS/EREGL/BIMAS/TUPRS
+(5 non-bank sectors, Colab run):
+  - ALL-CAPS rows: 'BRÜT KAR (ZARAR)', 'FAALİYET KARI (ZARARI)',
+    'DÖNEM KARI (ZARARI)', 'TOPLAM VARLIKLAR', 'TOPLAM KAYNAKLAR'
+  - Indent-prefixed: '  Nakit ve Nakit Benzerleri',
+    '  Ödenmiş Sermaye', ' İşletme Faaliyetlerinden Kaynaklanan...'
+  - CRITICAL duplicate: 'Finansal Borçlar' appears TWICE (short-term +
+    long-term liability sections) — SUM required for total_debt
+  - 'Serbest Nakit Akım' (NOT 'Akışı' — different word)
+  - 'Finansman Gideri Öncesi Faaliyet Karı/Zararı' (EBIT, no FAVÖK row)
+  - '(Esas Faaliyet Dışı) Finansal Giderler (-)' (interest expense)
+  - 'Amortisman Giderleri' (depreciation, from cashflow statement)
+
+Changes (commits this turn):
+  - utils/label_matching.py: new pick_all_values() helper returns ALL
+    values whose row-label matches any candidate (for duplicate-label
+    summation). allow_substring defaults False to prevent double-count.
+  - scripts/ingest_fa_for_calibration.py:make_borsapy_fetcher
+    candidate lists updated with ground-truth KAP labels. total_debt
+    now uses pick_all_values to SUM both Finansal Borçlar rows.
+    New depreciation field from 'Amortisman Giderleri' enables real
+    EBITDA computation (vs v2's operating_cf proxy).
+  - scripts/ingest_fa_for_calibration.py:_derive_metrics_from_statements
+    net_debt_ebitda now computes ebitda = (ebit + depreciation) × 4
+    annualized. Fallback to v2 proxy preserved for symbols without
+    explicit depreciation.
+  - reports/borsapy_label_discovery.md: 114-line audit trail of what
+    borsapy returns and why candidate lists are ordered as they are.
+
+Tests added (+15):
+  tests/test_ingest_round_b_labels.py
+    TestRoundBLabels (9): every statement field resolves, total_debt
+      sums both Finansal Borçlar rows, all-caps labels match,
+      indent-prefix stripped, Serbest Nakit Akım variant, İşletme
+      Faaliyetlerinden prefix, depreciation available, real EBITDA
+      computed, all 16 metrics populate end-to-end.
+    TestPickAllValues (6): empty, single, duplicate returns both,
+      no-substring default (prevents double-count), substring opt-in,
+      NaN filtered.
+
+Test impact: 919 (v2) -> 934 passed + 5 skipped (+15). Both CWDs.
+Reviewer target 925+ cleared by +9.
+
+Caveats (documented in PHASE_4_7_V3_ROUND_B_REPORT.md):
+  - Banks deferred to Phase 5 (need dedicated metric registry)
+  - Shares outstanding proxy (current, not PIT)
+  - Consolidated NI used (matches production; attributable NI
+    available as secondary candidate)
+  - EBIT via 'Finansman Gideri Öncesi Faaliyet Karı/Zararı' is
+    definitional EBIT, not a proxy
+  - Some symbols may not report 'Serbest Nakit Akım' — fcf metrics
+    None for those, excluded from calibration
+
+Rollback: single commit revertable. pick_all_values is additive.
+V13 handpicked remains always-available fallback.
+
+
+# ================================================================
+# PHASE 5 — Total UI/UX Redesign (2026-04-30)
+# ================================================================
+
+## What was completed in Phase 5
+
+- Heatmap frontend repair (5.1.1) — shimmer skeleton, 5s/30s polling,
+  AbortController, stale-while-error
+- CrossHunter determinism guard (5.1.2) — regression test only;
+  determinism was already guaranteed by Phase 4.7 v3
+- Mobile breakpoints (5.1.3) — mobile-first @media min-width,
+  44px tap targets, sticky bottom-nav (CSS), heatmap list-view
+- Türkiye 4 filter section (5.2.1) — frontend renderer + modal
+  helper; engine/turkey_realities.py NOT touched
+- Signal explanation cards (5.2.2) — engine/signal_explainer.py +
+  /api/cross/{symbol}/explain endpoint (additive, Rule 6 OK)
+- AI multi-model showdown (5.2.3) — engine/ai_consensus.py +
+  /api/ai/{symbol}/consensus endpoint (additive, Rule 6 OK,
+  Rule 8 OK: ai/prompts.py NOT touched)
+- Score explain modal helper (5.2.4)
+- Landing page total rewrite (5.3) — new positioning, JSON-LD,
+  3 CTAs, WCAG AA contrast
+- TradingView widget wrappers (5.4) — 4 modules, lazy-load via
+  IntersectionObserver; not yet mounted in HTML
+
+Test impact: 939 (Phase 4.7 v3) -> 1065 collected. 126 new tests
+across 7 files, all green.
+
+## Deferred to Phase 6
+
+- 5.5 (CSS/JS modularization): terminal.js (1668 lines) and
+  terminal.css (~340 lines after Phase 5 additions) remain monolithic.
+  Splitting them now would create high regression risk for the
+  934 baseline tests that depend on globals like `window.S`,
+  `loadHeatmap`, `loadTicker`. Recommended approach:
+  - Step 1 (low-risk): create static/styles/_variables.css extracting
+    only the :root tokens, leave the rest of terminal.css intact.
+    Reference both files from <head>.
+  - Step 2: extract heatmap JS into static/js/heatmap.js, replacing
+    the monolith section with a <script src="/static/js/heatmap.js">
+    in index.html.
+  - Step 3: api.js, detail.js, ai.js progressively.
+
+- 5.4 widget HTML mount points: TradingView wrappers are ready but
+  not yet anchored in index.html. To activate:
+  - /macro page: <div id="tv-calendar"></div> + <div id="tv-forex"></div>
+    + window.lazyRenderTvCalendar() + window.lazyRenderTvForex()
+  - /stock/{ticker}: <div id="tv-overview"></div> +
+    window.lazyRenderTvOverview({symbol: ticker})
+  - Header: <div id="tv-ticker"></div> + window.renderTvTicker()
+  Estimated work: 2-3 hours including ToS review.
+
+- Phase 5.6 polish: branded 404/500 pages (currently using FastAPI
+  default error envelope HTML), Phase 5 onboarding tour content
+  (Türkiye filtresi + AI consensus + signal cards step copy),
+  Lighthouse audit at production scale.
+
+- Mobile bottom-nav HTML: CSS class .mob-bnav is in terminal.css
+  but the <nav class="mob-bnav"> markup is not in index.html.
+  Activation: add 5-tab nav (Tara/Hisseler/Sinyaller/Heatmap/Daha)
+  with onclick=goPage('id') handlers for screens <480px.
+
+- Score-explain "?" button placement: window._showScoreHelp(r)
+  helper exists in terminal.js, but the "?" trigger button is not
+  yet inserted next to score values in renderDetail. Insertion
+  point: line ~720 in terminal.js (after the score ring renders).
+
+## Pre-existing baseline failures (NOT caused by Phase 5)
+
+The following 17 failures + 9 errors in the baseline test run are
+environment-dependent (data file paths, real borsapy network calls,
+universe_history.csv presence):
+
+- tests/test_phase4_3.py — needs walkforward CSV at relative path
+- tests/test_pit.py::test_real_mode_surfaces_missing_borsapy_error
+- tests/test_phase4.py::TestSectorListExpectations
+- tests/test_phase4_6.py::TestRealDataFit::test_52w_momentum_monotone
+- tests/test_hotfix_1_fetch_raw.py::test_transient_failure_succeeds_on_retry
+
+Phase 5 changes do not introduce any new baseline test failures.

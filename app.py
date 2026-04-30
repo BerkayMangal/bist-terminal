@@ -124,6 +124,40 @@ async def _background_scanner():
                         try: tech = tech_cache.get(r.get("symbol", "")); generate_trader_summary(r, tech)
                         except Exception: pass
                 await asyncio.to_thread(scan_coordinator.start_scan, UNIVERSE, _analyze_fn, _history_fn, _cross_fn, _ai_enrich_fn)
+
+                # Phase 4.7 A/B dual-write: when calibrated fits are
+                # available on disk, run a secondary calibrated pass
+                # so score_history has BOTH scoring_versions per
+                # (symbol, snap_date). This drives /api/scoring/ab_report
+                # and /ab_report with real paired telemetry. If fits
+                # aren't loaded, this is a no-op (calibrated path just
+                # falls back to v13 internally, which is a duplicate
+                # write that upserts harmlessly — but we skip to save
+                # the cost). Rule 6: this NEVER affects the primary v13
+                # scan, only adds calibrated rows when meaningful.
+                try:
+                    from engine.scoring_calibrated import _get_fits
+                    if _get_fits() is not None:
+                        log.info("Phase 4.7 A/B dual-write: starting calibrated pass")
+                        def _analyze_cal(ticker):
+                            try:
+                                return analyze_symbol(
+                                    normalize_symbol(ticker),
+                                    scoring_version="calibrated_2026Q1",
+                                )
+                            except Exception:
+                                return None
+                        # Sequential pass — we already did the parallel
+                        # heavy work; this just re-scores using cached raw
+                        # data + writes the second snapshot row.
+                        for sym in UNIVERSE:
+                            await asyncio.to_thread(_analyze_cal, sym)
+                        log.info("Phase 4.7 A/B dual-write: calibrated pass done")
+                    else:
+                        log.debug("Phase 4.7 A/B dual-write: no fits, skipping calibrated pass")
+                except Exception as e:
+                    log.warning(f"A/B dual-write pass failed: {e}")
+
                 heatmap_cache.clear()
                 if AI_AVAILABLE and get_top10_items():
                     try: await _generate_briefing_internal()
@@ -364,6 +398,73 @@ async def api_cross():
         return success({"signals": new_signals, "ai_commentary": ai_commentary, "summary": {"total": len(new_signals), "bullish": bullish, "bearish": bearish, "kirilim": kirilim_count, "momentum": momentum_count, "total_stars": total_stars, "vol_confirmed": vol_confirmed, "quality_a": quality_a, "quality_b": quality_b, "scanned": len(UNIVERSE)}}, as_of=now_iso())
     except Exception as e:
         log.error(f"cross: {e}"); return error("Cross Hunter hatası", status_code=500)
+
+
+# ================================================================
+# Phase 5.2.2 — /api/cross/{symbol}/explain
+#
+# Returns plain-Turkish explanations + walk-forward Sharpe + reliability
+# badges for the signals currently active on a single symbol. Uses the
+# cross hunter's last_results snapshot — does NOT trigger a new scan.
+#
+# Rule 6 (byte-identical default): /api/cross response unchanged. This
+# is a NEW endpoint, additive only.
+# ================================================================
+@app.get("/api/cross/{symbol}/explain")
+async def api_cross_explain(symbol: str):
+    try:
+        from engine.signal_explainer import explain_signals_for_symbol
+        sym = normalize_symbol(symbol or "")
+        if not sym:
+            return error("symbol gerekli", status_code=400)
+        # Filter cross hunter's last_results to this symbol
+        sig_for_sym = [s for s in (cross_hunter.last_results or [])
+                       if (s.get("ticker") or "").upper() == sym]
+        payload = explain_signals_for_symbol(sym, sig_for_sym)
+        payload["as_of"] = now_iso()
+        return success(payload, as_of=now_iso())
+    except Exception as e:
+        log.error(f"cross_explain: {e}"); return error("Sinyal açıklaması hatası", status_code=500)
+
+
+# ================================================================
+# Phase 5.2.3 — /api/ai/{symbol}/consensus
+#
+# Multi-model AI showdown — calls Perplexity + Grok + OpenAI + Anthropic
+# IN PARALLEL with the same prompt (built via ai/prompts.py — Rule 8: that
+# module is dokunulmaz). Returns leader text + per-model scores +
+# agreement metric.
+#
+# Opt-in via ?consensus=1 query parameter so default response shape of the
+# legacy /api/ai-summary endpoint stays byte-identical (Rule 6).
+# ================================================================
+@app.get("/api/ai/{symbol}/consensus")
+async def api_ai_consensus(symbol: str, request: Request):
+    try:
+        from engine.ai_consensus import call_all_providers, compute_consensus
+        sym = normalize_symbol(symbol or "")
+        if not sym:
+            return error("symbol gerekli", status_code=400)
+        # Build prompt via existing trader_summary infrastructure — DO NOT
+        # modify ai/prompts.py. We only call its existing builders.
+        try:
+            from ai.prompts import trader_summary_prompt
+            r = analysis_cache.get(sym) or analyze_symbol(sym)
+            prompt = trader_summary_prompt(r)
+        except Exception as e:
+            log.warning(f"consensus: prompt build failed: {e}")
+            return error("Prompt hazırlanamadı", status_code=500)
+
+        responses = await asyncio.to_thread(call_all_providers, prompt, 220, 18.0)
+        consensus = compute_consensus(responses)
+        return success({
+            "symbol": sym,
+            "consensus": consensus,
+            "raw_responses": [{"provider": r.get("provider"), "has_text": bool(r.get("text")), "error": r.get("error")} for r in responses],
+        }, as_of=now_iso())
+    except Exception as e:
+        log.error(f"ai_consensus: {e}"); return error("AI consensus hatası", status_code=500)
+
 
 # ================================================================
 # HEALTH & STATUS

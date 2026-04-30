@@ -60,6 +60,7 @@ METRIC_DIRECTIONS: dict[str, bool] = {
     # Higher = better
     "roe":                True,
     "roic":               True,
+    "roa":                True,
     "net_margin":         True,
     "gross_margin":       True,
     "operating_margin":   True,
