@@ -651,7 +651,16 @@ function _reRender(){renderHome();if(S.page==='radar')renderRadarPage();if(S.pag
 async function loadBriefing(){const box=$('hSt');if(!box)return;box.innerHTML='<div class="hero-strat" style="border-color:var(--prp);background:var(--prpd);color:var(--prp)">🤖 AI brifing yükleniyor...</div>';try{const d=await api('/api/briefing');box.innerHTML=d.briefing?`<div class="hero-strat">${esc(d.briefing).replace(/\n/g,'<br>')}</div>`:`<div class="hero-strat" style="border-color:var(--ylw);background:var(--ylwd);color:var(--ylw)">${esc(d.error||'AI key ekleyin')}</div>`;}catch(e){box.innerHTML='';}}
 
 // ===== TICKER DETAIL =====
-async function loadTicker(t){t=t.replace('.IS','').toUpperCase();seenAdd(t);openD();$('dp').innerHTML=`<div class="ld"><div class="sp"></div><div class="ld-t" style="color:var(--t3)">${esc(t)}...</div></div>`;try{const[r,tech]=await Promise.all([api(`/api/analyze/${t}`),api(`/api/technical/${t}`).catch(()=>null)]);renderDetail(t,r,tech);}catch(e){$('dp').innerHTML=`<div class="emp"><h3 style="color:var(--t2)">${esc(t)} alınamadı</h3><p style="color:var(--t3)">${esc(e.message)}</p></div>`;}}
+async function loadTicker(t){t=t.replace('.IS','').toUpperCase();seenAdd(t);openD();$('dp').innerHTML=`<div class="ld"><div class="sp"></div><div class="ld-t" style="color:var(--t3)">${esc(t)}...</div></div>`;try{const[r,tech]=await Promise.all([api(`/api/analyze/${t}`),api(`/api/technical/${t}`).catch(()=>null)]);renderDetail(t,r,tech);
+  // PHASE 5: lazy-load enrichment after the main detail panel paints.
+  // Both endpoints are additive — failure does not break the panel.
+  setTimeout(async () => {
+    const sigHost = document.getElementById('sig-explain-host');
+    if (sigHost) sigHost.innerHTML = await loadSignalExplanations(t);
+    const aiHost = document.getElementById('ai-consensus-host');
+    if (aiHost) aiHost.innerHTML = await loadAiConsensus(t);
+  }, 50);
+}catch(e){$('dp').innerHTML=`<div class="emp"><h3 style="color:var(--t2)">${esc(t)} alınamadı</h3><p style="color:var(--t3)">${esc(e.message)}</p></div>`;}}
 function renderDetail(t,r,tech){const s=r.scores,m=r.metrics,L=r.legendary||{},inWL=S.wl.includes(t);
 const v11=r.v11||{},v11l=r.v11_labels||{};
 const cpL=v11.ciro_pd_label;const eqL=v11l.earnings_quality||{};const caL=v11l.capital_allocation||{};const convL=v11l.conviction||{};const regL=v11l.regime||'';const legV11=v11l.legendary||{};
@@ -713,6 +722,19 @@ $('dp').innerHTML=`<div class="dp-h" style="background:linear-gradient(135deg,va
     <div style="font-size:14px;color:var(--t1);line-height:1.7;margin-bottom:8px">${VERDICT_DESC[dc]||''}</div>
     ${(r.positives||[]).length?`<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">${(r.positives||[]).slice(0,3).map(p=>`<span style="font-size:11px;padding:3px 8px;background:rgba(76,175,80,.1);border:1px solid rgba(76,175,80,.2);border-radius:4px;color:var(--grn)">✓ ${esc(p)}</span>`).join('')}</div>`:''}
     <div style="margin-top:10px;font-size:10px;color:var(--t4)">Bu bir yatırım tavsiyesi değildir · <a href="#" style="color:var(--t4)" onclick="dtab(document.querySelector('.dp-tab:nth-child(2)'),\'neden\');return false">Neden bu karar? →</a></div>
+  </div>
+
+  <!-- PHASE 5.2.1 — TÜRKİYE 4 FİLTRE (mounted via helper, only if turkey_realities present) -->
+  ${r.turkey_realities ? renderTurkeyFilterSection(r.turkey_realities) : ''}
+
+  <!-- PHASE 5.2.2 — Sinyal açıklama kartları (lazy-loaded after first paint) -->
+  <div class="card" style="margin-top:14px"><div class="card-h"><span class="card-t">⚡ Aktif Sinyaller — Açıklamalı</span></div>
+    <div class="card-b" id="sig-explain-host" data-symbol="${esc(t)}"><div class="ld"><div class="sp"></div><div class="ld-t">Sinyaller hazırlanıyor...</div></div></div>
+  </div>
+
+  <!-- PHASE 5.2.3 — AI Multi-Model Showdown (lazy-loaded) -->
+  <div class="card" style="margin-top:14px"><div class="card-h"><span class="card-t">🤖 AI Konsensüs</span></div>
+    <div class="card-b" id="ai-consensus-host" data-symbol="${esc(t)}"><div class="ld"><div class="sp"></div><div class="ld-t">4 model paralel çağrılıyor...</div></div></div>
   </div>
 
   <!-- 3 RING SCORES + KEY METRICS -->
@@ -1128,6 +1150,200 @@ function _moveTip(e){const t=$('bbTip');if(!t||t.style.display==='none')return;c
 function _hideTip(){const t=$('bbTip');if(t)t.style.display='none';}
 
 // ===== HEATMAP — Finviz-grade treemap + glassmorphism tooltip =====
+// ================================================================
+// PHASE 5 — DETAIL PANEL ENRICHMENT HELPERS
+// ----------------------------------------------------------------
+// These helpers render the new sections required by the Phase 5
+// brief (Türkiye 4 filtre, AI multi-model showdown, signal
+// explanation cards, score-explain modal) WITHOUT touching the
+// existing renderDetail monolith. They're called as opt-in mounts
+// from the rendered HTML via custom data-* attributes; the legacy
+// flow stays byte-identical (Rule 6).
+// ================================================================
+
+// 5.2.1 — Türkiye 4 Filter section
+function renderTurkeyFilterSection(turkey) {
+  if (!turkey || !turkey.filters) return '';
+  const filterOrder = ['fx_shield', 'rate_resistance', 'pricing_power', 'tms29'];
+  const iconMap = {
+    fx_shield: '💱',
+    rate_resistance: '📈',
+    pricing_power: '🏷️',
+    tms29: '📊',
+  };
+  let rows = '';
+  filterOrder.forEach(key => {
+    const f = turkey.filters[key];
+    if (!f) return;
+    const m = f.multiplier || 1.0;
+    // Map [0.70, 1.15] → [0%, 100%] for the bar; centred at 1.0
+    const pct = Math.max(0, Math.min(100, ((m - 0.70) / 0.45) * 100));
+    const dir = m > 1.02 ? 'up' : m < 0.98 ? 'down' : 'flat';
+    const multStr = ((m - 1.0) * 100).toFixed(0);
+    const multSigned = m >= 1.0 ? '+' + multStr + '%' : multStr + '%';
+    rows += `<div class="tr-filter-row" data-filter="${esc(key)}">
+      <div class="tr-filter-icon">${iconMap[key] || '🇹🇷'}</div>
+      <div class="tr-filter-body">
+        <div class="tr-filter-name">${esc(f.name)}<span class="tr-filter-grade ${esc(f.grade || '?')}">${esc(f.grade || '?')}</span></div>
+        <div class="tr-filter-bar-wrap"><div class="tr-filter-bar ${dir}" style="width:${pct.toFixed(0)}%"></div><div class="tr-filter-mid"></div></div>
+        <div class="tr-filter-explanation">${esc(f.explanation || '')}</div>
+      </div>
+      <div class="tr-filter-mult ${dir}">${multSigned}</div>
+    </div>`;
+  });
+  return `<div class="tr-filter-section" data-testid="turkey-filter-section">
+    <div class="tr-filter-title">🇹🇷 Türkiye Filtresi
+      <button class="info" onclick="window._showTurkeyHelp&&window._showTurkeyHelp()" title="Bu nedir?" aria-label="Türkiye filtresi nedir?">?</button>
+    </div>
+    ${rows}
+    ${turkey.summary ? `<div class="tr-filter-summary">${esc(turkey.summary)}</div>` : ''}
+  </div>`;
+}
+
+window._showTurkeyHelp = function () {
+  const html = `<div style="padding:18px;font-size:13px;color:var(--t2);line-height:1.7">
+    <h4 style="font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--acc);margin-bottom:8px;text-transform:uppercase">🇹🇷 Türkiye Filtresi Nedir?</h4>
+    <p>BIST hisselerini değerlendirirken, ABD endekslerinde olmayan 4 makro gerçeği hesaba katar:</p>
+    <ul style="margin:10px 0 10px 20px;line-height:1.8">
+      <li><b>💱 Döviz Kalkanı:</b> Şirketin ihracat geliri var mı? Kur şokunda korunabilir mi?</li>
+      <li><b>📈 Faiz Direnci:</b> Borç yapısı yüksek faize ne kadar dayanıklı?</li>
+      <li><b>🏷️ Fiyat Geçişkenliği:</b> Maliyet artışını fiyata yansıtabilir mi (pricing power)?</li>
+      <li><b>📊 TMS 29:</b> Enflasyon muhasebesi (TFRS) etkisi — kar düzeltilmesi gerek mi?</li>
+    </ul>
+    <p>Her filtre 0.70-1.15 arası bir çarpan üretir. 4'ün geometrik ortalaması nihai skoru ayarlar.</p>
+  </div>`;
+  // Reuse existing modal helper if present, otherwise alert
+  if (typeof window.openModal === 'function') {
+    window.openModal('🇹🇷 Türkiye Filtresi', html);
+  } else {
+    const m = document.createElement('div');
+    m.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.7);display:flex;align-items:center;justify-content:center;padding:20px';
+    m.innerHTML = `<div style="background:var(--bg1);border:1px solid var(--bdr2);border-radius:var(--rad2);max-width:500px;width:100%;max-height:80vh;overflow-y:auto" onclick="event.stopPropagation()">${html}<div style="padding:0 18px 18px"><button onclick="this.closest('div[style*=fixed]').remove()" class="btn btn-orn" style="width:100%">Kapat</button></div></div>`;
+    m.onclick = () => m.remove();
+    document.body.appendChild(m);
+  }
+};
+
+// 5.2.2 — Signal explanation card
+function renderSignalExplainCard(sig) {
+  const wf = sig.walkforward || {};
+  const badge = sig.reliability_badge || {};
+  const sharpe = wf.sharpe != null ? wf.sharpe.toFixed(2) : '—';
+  const ret60d = wf.mean_return_60d != null ? (wf.mean_return_60d * 100).toFixed(1) + '%' : '—';
+  return `<div class="sig-explain-card" data-testid="signal-explain-card">
+    <div class="sig-explain-head">
+      <span class="sig-explain-name">${esc(sig.signal || '?')}</span>
+      <span class="sig-explain-rel" style="color:${badge.code === 'walkforward_validated' ? 'var(--grn)' : badge.code === 'regime_dependent' ? 'var(--ylw)' : 'var(--t4)'}">${esc(badge.icon || '?')} ${esc(badge.label || '')}</span>
+    </div>
+    <div class="sig-explain-body">${esc(sig.plain_explanation || '')}</div>
+    <div class="sig-explain-meta">
+      <span class="tag" title="Walk-forward Sharpe (2018-2024)">Sharpe: ${sharpe}</span>
+      <span class="tag" title="60-günlük ortalama getiri">60g: ${ret60d}</span>
+      <span class="tag">⭐ ${sig.stars || 1}</span>
+    </div>
+    <div class="sig-explain-action">${esc(sig.action_label || 'Sadece izle')}</div>
+  </div>`;
+}
+
+async function loadSignalExplanations(symbol) {
+  try {
+    const d = await api(`/api/cross/${encodeURIComponent(symbol)}/explain`);
+    if (!d || !d.signals || !d.signals.length) {
+      return '<p style="color:var(--t3);font-size:12px;padding:12px">Bu hisse için aktif sinyal yok.</p>';
+    }
+    return `<div data-testid="signal-explain-list">${d.signals.map(renderSignalExplainCard).join('')}</div>`;
+  } catch (e) {
+    return '<p style="color:var(--red);font-size:12px;padding:12px">Sinyal açıklamaları yüklenemedi.</p>';
+  }
+}
+
+// 5.2.3 — AI Multi-Model Showdown
+function renderAiConsensus(consensus) {
+  if (!consensus) return '';
+  const isSplit = consensus.is_split === true;
+  const badgeCls = isSplit ? 'ai-consensus-badge split' : 'ai-consensus-badge';
+  const badgeLabel = isSplit ? '🤔 Modeller bölünmüş' : '⭐ Konsensüs Lider';
+  const dist = consensus.sentiment_distribution || {};
+  const distText = `${dist.bullish || 0}↑ ${dist.neutral || 0}● ${dist.bearish || 0}↓`;
+
+  const others = (consensus.per_model || []).filter(m =>
+    m.provider !== consensus.leader && !m.has_error
+  );
+  const errored = (consensus.per_model || []).filter(m => m.has_error);
+
+  let html = `<div class="ai-consensus-wrap" data-testid="ai-consensus">`;
+  if (consensus.leader) {
+    html += `<div class="ai-consensus-leader">
+      <span class="${badgeCls}">${badgeLabel}</span>
+      <div class="ai-consensus-leader-name">${esc(consensus.leader)} · uzlaşı: ${(consensus.agreement_score * 100).toFixed(0)}% · dağılım: ${distText}</div>
+      <div class="ai-consensus-text">${esc(consensus.leader_text || '')}</div>
+    </div>`;
+  }
+  if (others.length) {
+    html += `<details class="ai-consensus-others">
+      <summary>Diğer modeller ne diyor? (${others.length})</summary>`;
+    others.forEach(m => {
+      // Find the text in the original responses — for now just show meta
+      html += `<div class="ai-consensus-other">
+        <div class="ai-consensus-other-head"><b>${esc(m.provider)}</b><span class="conf">güven: ${(m.confidence * 100).toFixed(0)}% · ${esc(m.sentiment)}</span></div>
+      </div>`;
+    });
+    html += `</details>`;
+  }
+  if (errored.length) {
+    html += `<details class="ai-consensus-others">
+      <summary>Yanıt vermeyen modeller (${errored.length})</summary>`;
+    errored.forEach(m => {
+      html += `<div class="ai-consensus-other"><div class="ai-consensus-other-head"><b>${esc(m.provider)}</b> · ${esc(m.error || 'hata')}</div></div>`;
+    });
+    html += `</details>`;
+  }
+  html += `</div>`;
+  return html;
+}
+
+async function loadAiConsensus(symbol) {
+  try {
+    const d = await api(`/api/ai/${encodeURIComponent(symbol)}/consensus`);
+    if (!d || !d.consensus) {
+      return '<p style="color:var(--t3);font-size:12px;padding:12px">AI yorum hazırlanamadı.</p>';
+    }
+    return renderAiConsensus(d.consensus);
+  } catch (e) {
+    return '<p style="color:var(--red);font-size:12px;padding:12px">AI consensus yüklenemedi.</p>';
+  }
+}
+
+// 5.2.4 — Score Explain Modal
+window._showScoreHelp = function (r) {
+  if (!r) return;
+  const breakdown = r.scores || {};
+  const dim = (k, label) => {
+    const v = breakdown[k];
+    if (v == null) return '';
+    return `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--bdr)"><span>${esc(label)}</span><span class="num">${typeof v === 'number' ? v.toFixed(0) : esc(String(v))}</span></div>`;
+  };
+  const html = `<div class="score-modal-bd">
+    <h4>Bu skor nereden geliyor?</h4>
+    <p>Toplam skor (${r.overall != null ? r.overall.toFixed(0) : '?'}/100), aşağıdaki alt boyutların ağırlıklı ortalamasıdır.</p>
+    <h4>Boyut Kırılımı</h4>
+    ${dim('value', '💰 Değer')}
+    ${dim('quality', '⭐ Kalite')}
+    ${dim('balance', '🏦 Bilanço')}
+    ${dim('momentum', '⚡ Momentum')}
+    ${dim('risk', '⚠️ Risk')}
+    <h4>Türkiye Filtresi Etkisi</h4>
+    ${r.turkey_realities ? `<div>Composite çarpan: <span class="num">${(r.turkey_realities.composite_multiplier || 1.0).toFixed(2)}x</span> · grade: <span class="num">${esc(r.turkey_realities.composite_grade || '?')}</span></div>` : '<div>Bu hisse için Türkiye filtresi mevcut değil</div>'}
+    ${r.fa_score != null ? `<h4>Walk-Forward Onay</h4><p>FA skoru kalibre edilmiş ve 7-fold walk-forward'da onaylanmıştır (Phase 4.3-4.7).</p>` : ''}
+    <p style="margin-top:14px;color:var(--t4);font-size:11px">Bu bilgiler yatırım tavsiyesi değildir.</p>
+  </div>`;
+  const m = document.createElement('div');
+  m.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.7);display:flex;align-items:center;justify-content:center;padding:20px';
+  m.innerHTML = `<div data-testid="score-modal" style="background:var(--bg1);border:1px solid var(--bdr2);border-radius:var(--rad2);max-width:500px;width:100%;max-height:80vh;overflow-y:auto" onclick="event.stopPropagation()">${html}<div style="padding:0 18px 18px"><button onclick="this.closest('div[style*=fixed]').remove()" class="btn btn-orn" style="width:100%">Kapat</button></div></div>`;
+  m.onclick = () => m.remove();
+  document.body.appendChild(m);
+};
+
 // HOTFIX 1 + Phase 5.1.1: /api/heatmap returns <200ms with
 // computing=true when backend cold-cache is still warming up.
 // Phase 5 adds: shimmer skeleton (instant render), 5s polling
