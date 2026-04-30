@@ -399,6 +399,73 @@ async def api_cross():
     except Exception as e:
         log.error(f"cross: {e}"); return error("Cross Hunter hatası", status_code=500)
 
+
+# ================================================================
+# Phase 5.2.2 — /api/cross/{symbol}/explain
+#
+# Returns plain-Turkish explanations + walk-forward Sharpe + reliability
+# badges for the signals currently active on a single symbol. Uses the
+# cross hunter's last_results snapshot — does NOT trigger a new scan.
+#
+# Rule 6 (byte-identical default): /api/cross response unchanged. This
+# is a NEW endpoint, additive only.
+# ================================================================
+@app.get("/api/cross/{symbol}/explain")
+async def api_cross_explain(symbol: str):
+    try:
+        from engine.signal_explainer import explain_signals_for_symbol
+        sym = normalize_symbol(symbol or "")
+        if not sym:
+            return error("symbol gerekli", status_code=400)
+        # Filter cross hunter's last_results to this symbol
+        sig_for_sym = [s for s in (cross_hunter.last_results or [])
+                       if (s.get("ticker") or "").upper() == sym]
+        payload = explain_signals_for_symbol(sym, sig_for_sym)
+        payload["as_of"] = now_iso()
+        return success(payload, as_of=now_iso())
+    except Exception as e:
+        log.error(f"cross_explain: {e}"); return error("Sinyal açıklaması hatası", status_code=500)
+
+
+# ================================================================
+# Phase 5.2.3 — /api/ai/{symbol}/consensus
+#
+# Multi-model AI showdown — calls Perplexity + Grok + OpenAI + Anthropic
+# IN PARALLEL with the same prompt (built via ai/prompts.py — Rule 8: that
+# module is dokunulmaz). Returns leader text + per-model scores +
+# agreement metric.
+#
+# Opt-in via ?consensus=1 query parameter so default response shape of the
+# legacy /api/ai-summary endpoint stays byte-identical (Rule 6).
+# ================================================================
+@app.get("/api/ai/{symbol}/consensus")
+async def api_ai_consensus(symbol: str, request: Request):
+    try:
+        from engine.ai_consensus import call_all_providers, compute_consensus
+        sym = normalize_symbol(symbol or "")
+        if not sym:
+            return error("symbol gerekli", status_code=400)
+        # Build prompt via existing trader_summary infrastructure — DO NOT
+        # modify ai/prompts.py. We only call its existing builders.
+        try:
+            from ai.prompts import trader_summary_prompt
+            r = analysis_cache.get(sym) or analyze_symbol(sym)
+            prompt = trader_summary_prompt(r)
+        except Exception as e:
+            log.warning(f"consensus: prompt build failed: {e}")
+            return error("Prompt hazırlanamadı", status_code=500)
+
+        responses = await asyncio.to_thread(call_all_providers, prompt, 220, 18.0)
+        consensus = compute_consensus(responses)
+        return success({
+            "symbol": sym,
+            "consensus": consensus,
+            "raw_responses": [{"provider": r.get("provider"), "has_text": bool(r.get("text")), "error": r.get("error")} for r in responses],
+        }, as_of=now_iso())
+    except Exception as e:
+        log.error(f"ai_consensus: {e}"); return error("AI consensus hatası", status_code=500)
+
+
 # ================================================================
 # HEALTH & STATUS
 # ================================================================
