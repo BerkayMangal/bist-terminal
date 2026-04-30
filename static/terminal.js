@@ -1128,27 +1128,63 @@ function _moveTip(e){const t=$('bbTip');if(!t||t.style.display==='none')return;c
 function _hideTip(){const t=$('bbTip');if(t)t.style.display='none';}
 
 // ===== HEATMAP — Finviz-grade treemap + glassmorphism tooltip =====
-// HOTFIX 1 (2026-Q2): /api/heatmap now returns quickly with
-// computing=true when the backend's cold cache is still warming up.
-// Show the empty-state message and poll every 30s up to 10 times
-// instead of blocking the UI. If the fetch itself times out (3s cap),
-// show the error message and let the user retry via nav.
+// HOTFIX 1 + Phase 5.1.1: /api/heatmap returns <200ms with
+// computing=true when backend cold-cache is still warming up.
+// Phase 5 adds: shimmer skeleton (instant render), 5s polling
+// with 30s timeout (was 30s/5min — too slow for a power-user),
+// stale-while-error pattern (keeps last good heatmap on 5xx),
+// and AbortController cleanup on page change.
 let _heatmapRetryTimer = null;
+let _heatmapAbort = null;
+let _heatmapPollDeadline = 0;
+const _HEATMAP_POLL_INTERVAL = 5000;   // 5s — Phase 5
+const _HEATMAP_POLL_TIMEOUT  = 30000;  // 30s wall-clock cap
+
+// Shimmer skeleton rendered immediately on cache miss / computing=true.
+function _heatmapSkeletonHtml(){
+  let cells = '';
+  // 24 placeholder tiles with CSS shimmer animation
+  for (let i = 0; i < 24; i++) {
+    const w = 30 + Math.random() * 90;
+    const h = 30 + Math.random() * 60;
+    cells += `<div class="heat-skel-cell" style="width:${w.toFixed(0)}px;height:${h.toFixed(0)}px"></div>`;
+  }
+  return `<div class="heat-skel-wrap" data-testid="heatmap-skeleton">
+    <div class="heat-skel-grid">${cells}</div>
+    <p class="heat-skel-caption">Tarama sonrası gelecek — <span style="opacity:0.6">(arka planda hesaplanıyor)</span></p>
+  </div>`;
+}
+
 async function loadHeatmap(){
   if (_heatmapRetryTimer) { clearTimeout(_heatmapRetryTimer); _heatmapRetryTimer = null; }
+  // Cancel any in-flight request from a previous loadHeatmap call.
+  if (_heatmapAbort) { try { _heatmapAbort.abort(); } catch(_){} }
+  _heatmapAbort = new AbortController();
+
+  // Initialise wall-clock deadline on first call in a polling chain.
+  if (!_heatmapPollDeadline) _heatmapPollDeadline = Date.now() + _HEATMAP_POLL_TIMEOUT;
+
+  // If we have NO heatmap on screen yet, render skeleton immediately.
+  if (!S.heatmapHtml || S.heatmapHtml.indexOf('heat-skel') >= 0) {
+    S.heatmapHtml = _heatmapSkeletonHtml();
+    if (S.page === 'home') renderHome();
+  }
+
   try{
     const d=await api('/api/heatmap');
     if(d.computing===true || !d.sectors || !d.sectors.length){
-      S.heatmapHtml='<p style="color:var(--t4);font-size:12px">Tarama sonrası gelecek — <span style="opacity:0.6">(arka planda hesaplanıyor)</span></p>';
-      // Poll again in 30s; cap at 10 retries (5 minutes total)
-      S._heatmapRetries = (S._heatmapRetries || 0) + 1;
-      if (S._heatmapRetries <= 10) {
-        _heatmapRetryTimer = setTimeout(() => loadHeatmap(), 30000);
+      // Keep the skeleton on screen, schedule another poll if within deadline.
+      if (Date.now() < _heatmapPollDeadline) {
+        _heatmapRetryTimer = setTimeout(() => loadHeatmap(), _HEATMAP_POLL_INTERVAL);
+      } else {
+        S.heatmapHtml = '<p data-testid="heatmap-timeout" style="color:var(--t4);font-size:12px">Veri henüz hazır değil, sayfa yenile.</p>';
+        _heatmapPollDeadline = 0;
+        if (S.page==='home') renderHome();
       }
-      if(S.page==='home')renderHome();
       return;
     }
-    S._heatmapRetries = 0;  // got real data, reset counter
+    _heatmapPollDeadline = 0;  // got real data, reset deadline
+    S._heatmapRetries = 0;
     // 7-grade renk skalası: koyu kırmızı → siyah → neon yeşil
     function heatCol(chg){
       if(chg>=3)return'#00e676';if(chg>=2)return'#00c853';if(chg>=1)return'#2e7d32';if(chg>=0.3)return'#1b5e20';
@@ -1225,18 +1261,43 @@ async function loadHeatmap(){
     h2+=`</div></div>`;
     S.heatmapHtml=h2;
   }catch(e){
+    if (e.name === 'AbortError') {
+      // user navigated away — don't render anything, don't retry
+      return;
+    }
     if (e.message === 'timeout') {
-      S.heatmapHtml='<p style="color:var(--t4);font-size:11px">Heatmap yavaş yanıt veriyor — 30s sonra tekrar deneniyor...</p>';
-      S._heatmapRetries = (S._heatmapRetries || 0) + 1;
-      if (S._heatmapRetries <= 5) {
-        _heatmapRetryTimer = setTimeout(() => loadHeatmap(), 30000);
+      // Soft fail: keep skeleton, retry in 5s if within deadline.
+      if (Date.now() < _heatmapPollDeadline) {
+        _heatmapRetryTimer = setTimeout(() => loadHeatmap(), _HEATMAP_POLL_INTERVAL);
+      } else {
+        S.heatmapHtml='<p data-testid="heatmap-timeout" style="color:var(--t4);font-size:12px">Veri henüz hazır değil, sayfa yenile.</p>';
+        _heatmapPollDeadline = 0;
       }
     } else {
-      S.heatmapHtml='<p style="color:var(--red);font-size:11px">Heatmap yüklenemedi</p>';
+      // Stale-while-error: if we already have a rendered heatmap on screen,
+      // keep it visible with a small banner. Only show error state if there
+      // is literally nothing to display.
+      const hasGoodHeatmap = S.heatmapHtml && S.heatmapHtml.indexOf('heat-skel') < 0
+                             && S.heatmapHtml.indexOf('heatmap-error') < 0
+                             && S.heatmapHtml.indexOf('heatmap-timeout') < 0
+                             && S.heatmapHtml.length > 200;  // crude "real content" check
+      if (hasGoodHeatmap) {
+        S.heatmapHtml = `<div data-testid="heatmap-stale-banner" style="padding:8px;border:1px dashed var(--red);border-radius:var(--rad);margin-bottom:8px;color:var(--red);font-size:11px;background:var(--redd)">Bağlantı sorunu — son veriler gösteriliyor</div>` + S.heatmapHtml;
+      } else {
+        S.heatmapHtml='<p data-testid="heatmap-error" style="color:var(--red);font-size:12px">Heatmap yüklenemedi — bağlantı sorunu</p>';
+      }
+      _heatmapPollDeadline = 0;
     }
   }
   if(S.page==='home')renderHome();
 }
+
+// Public hook so navigation can cancel pending heatmap requests.
+window.cancelHeatmapPolling = function(){
+  if (_heatmapRetryTimer) { clearTimeout(_heatmapRetryTimer); _heatmapRetryTimer = null; }
+  if (_heatmapAbort) { try { _heatmapAbort.abort(); } catch(_){} _heatmapAbort = null; }
+  _heatmapPollDeadline = 0;
+};
 // Glassmorphism tooltip builder — scan data enriched
 function _heatTip(e,idx){
   const s=window._heatStocks?.[idx];if(!s)return;
