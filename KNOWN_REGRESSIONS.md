@@ -517,3 +517,85 @@ Caveats (documented in PHASE_4_7_V3_ROUND_B_REPORT.md):
 
 Rollback: single commit revertable. pick_all_values is additive.
 V13 handpicked remains always-available fallback.
+
+
+# ================================================================
+# PHASE 5 — Total UI/UX Redesign (2026-04-30)
+# ================================================================
+
+## What was completed in Phase 5
+
+- Heatmap frontend repair (5.1.1) — shimmer skeleton, 5s/30s polling,
+  AbortController, stale-while-error
+- CrossHunter determinism guard (5.1.2) — regression test only;
+  determinism was already guaranteed by Phase 4.7 v3
+- Mobile breakpoints (5.1.3) — mobile-first @media min-width,
+  44px tap targets, sticky bottom-nav (CSS), heatmap list-view
+- Türkiye 4 filter section (5.2.1) — frontend renderer + modal
+  helper; engine/turkey_realities.py NOT touched
+- Signal explanation cards (5.2.2) — engine/signal_explainer.py +
+  /api/cross/{symbol}/explain endpoint (additive, Rule 6 OK)
+- AI multi-model showdown (5.2.3) — engine/ai_consensus.py +
+  /api/ai/{symbol}/consensus endpoint (additive, Rule 6 OK,
+  Rule 8 OK: ai/prompts.py NOT touched)
+- Score explain modal helper (5.2.4)
+- Landing page total rewrite (5.3) — new positioning, JSON-LD,
+  3 CTAs, WCAG AA contrast
+- TradingView widget wrappers (5.4) — 4 modules, lazy-load via
+  IntersectionObserver; not yet mounted in HTML
+
+Test impact: 939 (Phase 4.7 v3) -> 1065 collected. 126 new tests
+across 7 files, all green.
+
+## Deferred to Phase 6
+
+- 5.5 (CSS/JS modularization): terminal.js (1668 lines) and
+  terminal.css (~340 lines after Phase 5 additions) remain monolithic.
+  Splitting them now would create high regression risk for the
+  934 baseline tests that depend on globals like `window.S`,
+  `loadHeatmap`, `loadTicker`. Recommended approach:
+  - Step 1 (low-risk): create static/styles/_variables.css extracting
+    only the :root tokens, leave the rest of terminal.css intact.
+    Reference both files from <head>.
+  - Step 2: extract heatmap JS into static/js/heatmap.js, replacing
+    the monolith section with a <script src="/static/js/heatmap.js">
+    in index.html.
+  - Step 3: api.js, detail.js, ai.js progressively.
+
+- 5.4 widget HTML mount points: TradingView wrappers are ready but
+  not yet anchored in index.html. To activate:
+  - /macro page: <div id="tv-calendar"></div> + <div id="tv-forex"></div>
+    + window.lazyRenderTvCalendar() + window.lazyRenderTvForex()
+  - /stock/{ticker}: <div id="tv-overview"></div> +
+    window.lazyRenderTvOverview({symbol: ticker})
+  - Header: <div id="tv-ticker"></div> + window.renderTvTicker()
+  Estimated work: 2-3 hours including ToS review.
+
+- Phase 5.6 polish: branded 404/500 pages (currently using FastAPI
+  default error envelope HTML), Phase 5 onboarding tour content
+  (Türkiye filtresi + AI consensus + signal cards step copy),
+  Lighthouse audit at production scale.
+
+- Mobile bottom-nav HTML: CSS class .mob-bnav is in terminal.css
+  but the <nav class="mob-bnav"> markup is not in index.html.
+  Activation: add 5-tab nav (Tara/Hisseler/Sinyaller/Heatmap/Daha)
+  with onclick=goPage('id') handlers for screens <480px.
+
+- Score-explain "?" button placement: window._showScoreHelp(r)
+  helper exists in terminal.js, but the "?" trigger button is not
+  yet inserted next to score values in renderDetail. Insertion
+  point: line ~720 in terminal.js (after the score ring renders).
+
+## Pre-existing baseline failures (NOT caused by Phase 5)
+
+The following 17 failures + 9 errors in the baseline test run are
+environment-dependent (data file paths, real borsapy network calls,
+universe_history.csv presence):
+
+- tests/test_phase4_3.py — needs walkforward CSV at relative path
+- tests/test_pit.py::test_real_mode_surfaces_missing_borsapy_error
+- tests/test_phase4.py::TestSectorListExpectations
+- tests/test_phase4_6.py::TestRealDataFit::test_52w_momentum_monotone
+- tests/test_hotfix_1_fetch_raw.py::test_transient_failure_succeeds_on_retry
+
+Phase 5 changes do not introduce any new baseline test failures.
