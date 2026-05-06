@@ -70,7 +70,7 @@ const _API_TIMEOUTS = {
   '/api/scan':    30000,   // user-initiated full scan
   '/api/agent':   20000,   // AI call
   '/api/ai-summary': 20000,
-  '/api/bullwatch': 120000,  // first-run scan can take 60-90s on cold cache
+  '/api/bullwatch': 300000,  // first-run scan can take 1-3 min on cold cache (yfinance is slow)
 };
 function _timeoutFor(path) {
   for (const prefix of Object.keys(_API_TIMEOUTS)) {
@@ -684,7 +684,7 @@ function renderBullwatchPage(){
   const pg=$('pg-bullwatch');
   // Initial load — auto-trigger on first visit
   if(S.bullwatch===undefined){
-    pg.innerHTML=`<div class="ld"><div class="sp"></div><div class="ld-t">BullWatch taraması başlıyor — düşük float ayak izleri aranıyor…</div><div style="font-size:11px;color:var(--t4);margin-top:6px">İlk tarama 30-60 saniye sürebilir</div></div>`;
+    pg.innerHTML=`<div class="ld"><div class="sp"></div><div class="ld-t">BullWatch taraması başlıyor — düşük float ayak izleri aranıyor…</div><div style="font-size:11px;color:var(--t4);margin-top:6px">İlk tarama 1-3 dakika sürebilir (yfinance soğuk cache) — sayfa kapatma</div></div>`;
     loadBullwatch();
     return;
   }
@@ -757,13 +757,26 @@ function renderBullwatchPage(){
 }
 async function loadBullwatch(refresh){
   if(refresh){
-    $('pg-bullwatch').innerHTML=`<div class="ld"><div class="sp"></div><div class="ld-t">BullWatch yeniden taranıyor — sessiz birikim aranıyor…</div></div>`;
+    $('pg-bullwatch').innerHTML=`<div class="ld"><div class="sp"></div><div class="ld-t">BullWatch yeniden taranıyor — sessiz birikim aranıyor…</div><div style="font-size:11px;color:var(--t4);margin-top:6px">İlk tarama 1-3 dakika sürebilir, sayfa kapatma</div></div>`;
   }
   try{
     S.bullwatch=await api('/api/bullwatch'+(refresh?'?refresh=true':''));
     renderBullwatchPage();
   }catch(e){
-    S.bullwatch={items:[],error:e.message};
+    if(e.message==='timeout'){
+      // Server scan'i devam ediyor olabilir — 30s bekle, cache'den dene
+      $('pg-bullwatch').innerHTML=`<div class="ld"><div class="sp"></div><div class="ld-t">Tarama uzun sürüyor — sonucu beklemek için 30 sn daha sabırlı ol…</div><div style="font-size:11px;color:var(--t4);margin-top:6px">Server arka planda tarıyor, otomatik tekrar denenecek</div></div>`;
+      await new Promise(r=>setTimeout(r,30000));
+      try{
+        S.bullwatch=await api('/api/bullwatch');
+        renderBullwatchPage();
+        return;
+      }catch(e2){
+        S.bullwatch={items:[],error:'Tarama 5 dakika+ sürdü — yfinance yavaş olabilir. Birkaç dakika sonra tekrar dene.'};
+      }
+    }else{
+      S.bullwatch={items:[],error:e.message};
+    }
     renderBullwatchPage();
   }
 }
