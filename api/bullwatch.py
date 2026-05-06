@@ -35,6 +35,8 @@ _CACHE: dict[str, Any] = {
     "running": False,
 }
 _CACHE_TTL_SEC = 300  # 5 minutes
+_SCAN_DONE: Optional[asyncio.Event] = None  # set by the runner, awaited by waiters
+_SCAN_MAX_WAIT_SEC = 180  # hard ceiling — even slow scans should fit
 
 
 def _resolve_universe() -> list[str]:
@@ -109,26 +111,39 @@ async def api_bullwatch(
         and now < _CACHE["stale_after"]
     )
 
+    global _SCAN_DONE
+
     if use_cache:
         payload = _CACHE["items"]
         cache_status = "hit"
     else:
         if _CACHE["running"]:
-            # Another scan is in flight — serve stale cache if available,
-            # otherwise wait briefly and retry once.
+            # Another scan is in flight. If we have stale cache, serve it
+            # immediately (warm path). Otherwise wait for the running scan
+            # to finish — do NOT 503, the user is already waiting.
             if _CACHE["items"] is not None:
                 payload = _CACHE["items"]
                 cache_status = "stale_during_refresh"
             else:
-                await asyncio.sleep(0.5)
-                if _CACHE["items"] is not None:
-                    payload = _CACHE["items"]
-                    cache_status = "stale_during_refresh"
-                else:
-                    return error("BullWatch scan in progress, try again shortly",
+                evt = _SCAN_DONE
+                if evt is None:
+                    return error("scan state inconsistent — please retry",
                                  status_code=503)
+                try:
+                    await asyncio.wait_for(evt.wait(),
+                                           timeout=_SCAN_MAX_WAIT_SEC)
+                except asyncio.TimeoutError:
+                    return error(
+                        f"scan still running after {_SCAN_MAX_WAIT_SEC}s — try again",
+                        status_code=504)
+                if _CACHE["items"] is None:
+                    return error("scan finished but cache empty",
+                                 status_code=500)
+                payload = _CACHE["items"]
+                cache_status = "fresh_after_wait"
         else:
             _CACHE["running"] = True
+            _SCAN_DONE = asyncio.Event()
             try:
                 # Run the blocking scan off the event loop.
                 payload = await asyncio.get_event_loop().run_in_executor(
@@ -145,8 +160,13 @@ async def api_bullwatch(
                     payload = _CACHE["items"]
                     cache_status = "stale_after_error"
                 else:
+                    _SCAN_DONE.set()  # release any waiters before returning
+                    _CACHE["running"] = False
                     return error(f"BullWatch scan failed: {exc}", status_code=500)
             finally:
+                # Wake up any other requests parked on this scan
+                if _SCAN_DONE is not None:
+                    _SCAN_DONE.set()
                 _CACHE["running"] = False
 
     items = list(payload["items"])
