@@ -186,8 +186,23 @@ async def lifespan(application: FastAPI):
     restore_results = restore_all_from_redis()
     log.info(f"{APP_NAME} {BOT_VERSION} | Universe: {len(UNIVERSE)} | AI: {','.join(AI_PROVIDERS) or 'OFF'} | Chart: {'ON' if CHART_AVAILABLE else 'OFF'} | Redis: {'ON' if redis_client.is_available() else 'OFF'} | Restore: {restore_results}")
     task = asyncio.create_task(_background_scanner())
+    # BullWatch cache warmup — keeps /api/bullwatch instant for users.
+    # Runs independently from the main scanner; failures here never affect
+    # any other endpoint. Imported lazily so the optional module doesn't
+    # block app startup if it has an import-time error.
+    bullwatch_task = None
+    try:
+        from api.bullwatch import warmup_cache_loop as _bw_warmup
+        bullwatch_task = asyncio.create_task(_bw_warmup())
+        log.info("BullWatch warmup task started")
+    except Exception as e:
+        log.warning(f"BullWatch warmup not started: {e}")
     yield
-    task.cancel(); redis_client.shutdown(); log.info(f"{APP_NAME} shutting down")
+    task.cancel()
+    if bullwatch_task is not None:
+        bullwatch_task.cancel()
+    redis_client.shutdown()
+    log.info(f"{APP_NAME} shutting down")
 
 app = FastAPI(title="BistBull Terminal", version=BOT_VERSION, lifespan=lifespan)
 app.add_middleware(GZipMiddleware, minimum_size=500)

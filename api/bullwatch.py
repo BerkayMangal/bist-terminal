@@ -129,6 +129,79 @@ def _run_scan(min_score: float = 0.0,
     return payload
 
 
+# ================================================================
+# BACKGROUND WARMUP — keep the cache hot so user clicks are instant.
+#
+# Called from app.py's lifespan, runs in parallel with the main
+# background scanner. Strategy:
+#   1. Wait WARMUP_INITIAL_DELAY seconds after boot (let the main scan
+#      run first — yfinance bandwidth is shared, no point fighting).
+#   2. Run a BullWatch scan, populate _CACHE.
+#   3. Sleep WARMUP_INTERVAL, repeat.
+#
+# Errors are logged but never propagate — a failed warmup just means
+# the next user click triggers a fresh scan (current behaviour).
+# ================================================================
+WARMUP_INITIAL_DELAY = 90      # seconds — let main background scan finish first
+WARMUP_INTERVAL = 600          # seconds — refresh every 10 minutes
+WARMUP_RETRY_AFTER_ERROR = 300 # seconds — back off on yfinance flakiness
+
+
+async def warmup_cache_loop() -> None:
+    """
+    Background coroutine: keep _CACHE warm so the BullWatch tab opens
+    instantly. Started by app.py lifespan, cancelled on shutdown.
+    """
+    global _SCAN_DONE
+
+    log.info("BullWatch warmup task scheduled (initial delay: %ds, interval: %ds)",
+             WARMUP_INITIAL_DELAY, WARMUP_INTERVAL)
+    await asyncio.sleep(WARMUP_INITIAL_DELAY)
+
+    while True:
+        # Skip if a user-triggered scan is already running — just wait and try later
+        if _CACHE["running"]:
+            log.debug("BullWatch warmup: another scan in flight, waiting one cycle")
+            await asyncio.sleep(WARMUP_INTERVAL)
+            continue
+
+        log.info("BullWatch warmup: starting background scan")
+        _CACHE["running"] = True
+        _SCAN_DONE = asyncio.Event()
+        sleep_for = WARMUP_INTERVAL
+        try:
+            t0 = time.time()
+            payload = await asyncio.get_event_loop().run_in_executor(
+                None, _run_scan, 0.0, None, None, False,
+            )
+            _CACHE["items"] = payload
+            _CACHE["as_of"] = payload["as_of"]
+            _CACHE["stale_after"] = time.time() + _CACHE_TTL_SEC
+            elapsed = time.time() - t0
+            log.info(
+                "BullWatch warmup: cache refreshed in %.1fs — %d eligible / %d scanned",
+                elapsed,
+                payload.get("eligible_count", 0),
+                payload.get("scanned", 0),
+            )
+        except asyncio.CancelledError:
+            # Graceful shutdown — release waiters and exit
+            if _SCAN_DONE is not None:
+                _SCAN_DONE.set()
+            _CACHE["running"] = False
+            log.info("BullWatch warmup: cancelled (shutdown)")
+            raise
+        except Exception as exc:
+            log.warning("BullWatch warmup failed (will retry): %r", exc)
+            sleep_for = WARMUP_RETRY_AFTER_ERROR
+        finally:
+            if _SCAN_DONE is not None:
+                _SCAN_DONE.set()
+            _CACHE["running"] = False
+
+        await asyncio.sleep(sleep_for)
+
+
 @router.get("/api/bullwatch")
 async def api_bullwatch(
     refresh: bool = Query(False, description="Force a fresh scan, bypassing cache"),
