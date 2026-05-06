@@ -70,6 +70,7 @@ const _API_TIMEOUTS = {
   '/api/scan':    30000,   // user-initiated full scan
   '/api/agent':   20000,   // AI call
   '/api/ai-summary': 20000,
+  '/api/bullwatch': 120000,  // first-run scan can take 60-90s on cold cache
 };
 function _timeoutFor(path) {
   for (const prefix of Object.keys(_API_TIMEOUTS)) {
