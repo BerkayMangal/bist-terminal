@@ -310,7 +310,8 @@ def _pattern_label(active_engines: list[str], patterns: dict,
 # ================================================================
 def score_symbol(metrics: dict,
                  df: Any = None,
-                 ownership: Optional[dict] = None) -> BullWatchResult:
+                 ownership: Optional[dict] = None,
+                 cap_tl: Optional[float] = None) -> BullWatchResult:
     """
     Score a single symbol.
 
@@ -321,10 +322,13 @@ def score_symbol(metrics: dict,
         df:      OHLCV DataFrame (Open/High/Low/Close/Volume),
                  trailing ~80+ sessions recommended.
         ownership: Optional ownership snapshot (see features module).
+        cap_tl:  Optional override for float-mcap cap (defaults to
+                 FLOAT_MARKET_CAP_CAP_TL). Useful for live tuning.
 
     Returns BullWatchResult — always returns a result; ineligible
     symbols are flagged via `eligible=False` and `reject_reason`.
     """
+    effective_cap = float(cap_tl) if cap_tl else FLOAT_MARKET_CAP_CAP_TL
     symbol = str(metrics.get("symbol") or metrics.get("ticker") or "?")
     market_cap = metrics.get("market_cap")
     free_float = metrics.get("free_float")
@@ -339,14 +343,14 @@ def score_symbol(metrics: dict,
     fmc = float_market_cap(market_cap, free_float)
 
     # ---- Universe filters ----
-    if not passes_float_cap(market_cap, free_float):
+    if not passes_float_cap(market_cap, free_float, cap_tl=effective_cap):
         return BullWatchResult(
             symbol=symbol, score=0.0, zone="EARLY",
             pattern="Outside BullWatch universe",
             eligible=False,
             reject_reason=(
                 "no float data" if fmc is None
-                else f"float mcap {fmc/1e6:.0f}M TL > {FLOAT_MARKET_CAP_CAP_TL/1e6:.0f}M cap"
+                else f"float mcap {fmc/1e6:.0f}M TL > {effective_cap/1e6:.0f}M cap"
             ),
             metrics={"float_market_cap": fmc, "market_cap": market_cap,
                      "free_float": free_float},
@@ -497,7 +501,8 @@ def scan(symbols: list[str],
          ownership_fn: Optional[Callable[[str], Optional[dict]]] = None,
          max_workers: int = 8,
          min_score: float = 0.0,
-         include_ineligible: bool = False) -> list[BullWatchResult]:
+         include_ineligible: bool = False,
+         cap_tl: Optional[float] = None) -> list[BullWatchResult]:
     """
     Run BullWatch across a universe.
 
@@ -539,7 +544,7 @@ def scan(symbols: list[str],
         except Exception:
             ownership = None
         try:
-            return score_symbol(metrics, df, ownership)
+            return score_symbol(metrics, df, ownership, cap_tl=cap_tl)
         except Exception as exc:
             log.warning("BullWatch %s: scoring failed: %r", sym, exc)
             return None

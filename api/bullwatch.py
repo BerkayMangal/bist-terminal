@@ -58,23 +58,57 @@ def _resolve_universe() -> list[str]:
 
 
 def _run_scan(min_score: float = 0.0,
-              limit: Optional[int] = None) -> dict[str, Any]:
-    """Synchronous scan — called from a thread executor."""
+              limit: Optional[int] = None,
+              cap_tl: Optional[float] = None,
+              diagnostic: bool = False) -> dict[str, Any]:
+    """Synchronous scan — called from a thread executor.
+
+    When `diagnostic=True`, the response also includes the top 20
+    ineligible-but-closest-to-passing symbols, sorted by float mcap
+    ascending. Useful for tuning the cap when nothing qualifies.
+    """
     from engine.bullwatch import scan
     universe = _resolve_universe()
     t0 = time.time()
-    results = scan(universe, min_score=min_score)
+    # When diagnostic, run with include_ineligible so we can surface "near misses"
+    results = scan(universe, min_score=min_score,
+                   include_ineligible=diagnostic, cap_tl=cap_tl)
     eligible = [r for r in results if r.eligible]
     if limit:
         eligible = eligible[:limit]
-    return {
+
+    payload: dict[str, Any] = {
         "items": [r.to_dict() for r in eligible],
         "scanned": len(universe),
         "eligible_count": sum(1 for r in results if r.eligible),
         "ineligible_count": sum(1 for r in results if not r.eligible),
+        "cap_tl": cap_tl or 250_000_000.0,
         "as_of": dt.datetime.now(dt.timezone.utc).isoformat(),
         "duration_ms": round((time.time() - t0) * 1000, 0),
     }
+
+    if diagnostic:
+        # Find ineligible ones with KNOWN float mcaps (drop "no float data"),
+        # sort ascending — smallest float caps are the closest to passing if we
+        # were to bump the cap. Cap at 20 for response size.
+        ineligible = [
+            r for r in results
+            if not r.eligible and r.metrics.get("float_market_cap") is not None
+        ]
+        ineligible.sort(key=lambda r: r.metrics.get("float_market_cap") or 0)
+        payload["near_misses"] = [
+            {
+                "symbol": r.symbol,
+                "float_market_cap": r.metrics.get("float_market_cap"),
+                "market_cap": r.metrics.get("market_cap"),
+                "free_float": r.metrics.get("free_float"),
+                "avg_traded_value_20d": r.metrics.get("avg_traded_value_20d"),
+                "reject_reason": r.reject_reason,
+            }
+            for r in ineligible[:20]
+        ]
+
+    return payload
 
 
 @router.get("/api/bullwatch")
@@ -86,6 +120,10 @@ async def api_bullwatch(
                                 description="Filter by zone: EARLY, CONFIRMED, CONVICTION"),
     limit: int = Query(50, ge=1, le=200,
                        description="Max results to return"),
+    cap_tl: Optional[float] = Query(None, ge=10_000_000, le=10_000_000_000,
+                                     description="Override float-mcap cap (TL). Default 250M."),
+    diagnostic: bool = Query(False,
+                             description="Include top 20 near-miss ineligible stocks"),
 ):
     """
     Return ranked BullWatch candidates.
@@ -105,15 +143,30 @@ async def api_bullwatch(
         }
     """
     now = time.time()
+    # Experimental requests (custom cap or diagnostic mode) bypass the
+    # cache entirely — they're for one-off tuning, not user-facing default.
+    is_experimental = (cap_tl is not None) or diagnostic
     use_cache = (
         not refresh
+        and not is_experimental
         and _CACHE["items"] is not None
         and now < _CACHE["stale_after"]
     )
 
     global _SCAN_DONE
 
-    if use_cache:
+    if is_experimental:
+        # Run fresh, directly. No cache update, no _SCAN_DONE coordination —
+        # this is an ad-hoc query.
+        try:
+            payload = await asyncio.get_event_loop().run_in_executor(
+                None, _run_scan, min_score, None, cap_tl, diagnostic,
+            )
+            cache_status = "experimental"
+        except Exception as exc:
+            log.exception("BullWatch experimental scan failed: %r", exc)
+            return error(f"BullWatch scan failed: {exc}", status_code=500)
+    elif use_cache:
         payload = _CACHE["items"]
         cache_status = "hit"
     else:
@@ -186,6 +239,8 @@ async def api_bullwatch(
             "scanned": payload.get("scanned", 0),
             "eligible_count": payload.get("eligible_count", 0),
             "ineligible_count": payload.get("ineligible_count", 0),
+            "cap_tl": payload.get("cap_tl"),
+            "near_misses": payload.get("near_misses", []),
             "duration_ms": payload.get("duration_ms"),
         },
         as_of=payload.get("as_of"),

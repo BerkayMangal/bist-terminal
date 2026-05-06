@@ -32,7 +32,7 @@ except Exception:  # pragma: no cover — exercised only if pandas missing
 # Tunable thresholds — kept here as module constants so the engine
 # layer stays focused on scoring logic.
 # ----------------------------------------------------------------
-FLOAT_MARKET_CAP_CAP_TL: float = 150_000_000.0       # universe filter
+FLOAT_MARKET_CAP_CAP_TL: float = 250_000_000.0       # universe filter
 LIQUIDITY_FLOOR_TL: float = 5_000_000.0              # 20d avg traded value
 PRICE_CALM_PCT: float = 0.08                         # |5d return| < 8%
 

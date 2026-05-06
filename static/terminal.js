@@ -705,15 +705,18 @@ function renderBullwatchPage(){
   const asof=bw?._meta?.as_of||bw?.asof;
   const scanned=bw?.scanned||0;
   const eligible=bw?.eligible_count||items.length;
+  const capTl=bw?.cap_tl||250e6;
+  const capStr=`${(capTl/1e6).toFixed(0)}M TL`;
+  const nearMisses=bw?.near_misses||[];
   let h=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px">
     <div>
       <h2 style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-lg);color:var(--acc)">🐂 BullWatch — Sessiz Birikim Radarı</h2>
-      <p style="font-size:var(--fs-sm);color:var(--t3);margin-top:2px">${asof?new Date(asof).toLocaleString('tr-TR'):''} · ${scanned} hisse tarandı · ${eligible} eleğe takıldı</p>
+      <p style="font-size:var(--fs-sm);color:var(--t3);margin-top:2px">${asof?new Date(asof).toLocaleString('tr-TR'):''} · ${scanned} hisse tarandı · ${eligible} eleğe takıldı · float ≤${capStr}</p>
     </div>
     <button class="btn btn-grn" onclick="loadBullwatch(true)">🔄 YENİDEN TARA</button>
   </div>
   <div style="padding:12px 16px;background:var(--bg3);border-radius:var(--rad);margin-bottom:14px;font-size:var(--fs-base);color:var(--t2);line-height:1.6">
-    <b style="color:var(--acc)">BullWatch nasıl çalışır?</b> Düşük float (≤150M TL float piyasa değeri), likit (≥5M TL günlük hacim) BIST mikro-kaplarında <b>sessiz birikim ayak izlerini</b> tespit eder. 7 motor: Float Pressure, Revenue Mispricing, Silent Volume, Price Action (Shakeout / Absorption / Tight Closes / Walk-Up), Compression, Ownership Intelligence, Fundamental Quality. <span style="color:var(--t4);font-size:11px">Yatırım tavsiyesi değildir — yalnızca tape okuma.</span>
+    <b style="color:var(--acc)">BullWatch nasıl çalışır?</b> Düşük float (≤${capStr} float piyasa değeri), likit (≥5M TL günlük hacim) BIST mikro-kaplarında <b>sessiz birikim ayak izlerini</b> tespit eder. 7 motor: Float Pressure, Revenue Mispricing, Silent Volume, Price Action (Shakeout / Absorption / Tight Closes / Walk-Up), Compression, Ownership Intelligence, Fundamental Quality. <span style="color:var(--t4);font-size:11px">Yatırım tavsiyesi değildir — yalnızca tape okuma.</span>
   </div>
   <div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap">
     <button class="btn btn-sm ${filt==='all'?'btn-grn':''}" style="${filt!=='all'?'background:var(--bg3);color:var(--t2)':''}" onclick="S._bwZone='all';renderBullwatchPage()">Tümü (${counts.all})</button>
@@ -722,7 +725,31 @@ function renderBullwatchPage(){
     <button class="btn btn-sm ${filt==='EARLY'?'btn-grn':''}" style="${filt!=='EARLY'?'background:var(--bg3);color:var(--blu)':''}" onclick="S._bwZone='EARLY';renderBullwatchPage()">🔵 Early (${counts.EARLY})</button>
   </div>`;
   if(!filtered.length){
-    h+=`<div class="emp"><h3 style="color:var(--t2)">${items.length?'Bu zone için aday yok':'BullWatch evrenine uyan hisse bulunamadı'}</h3><p style="color:var(--t4);font-size:12px;margin-top:8px">${items.length?'Başka bir zone seç ya da yeniden tara':'Filtreler: float ≤150M TL · 20g hacim ≥5M TL'}</p></div>`;
+    h+=`<div class="emp" style="padding:30px 20px"><h3 style="color:var(--t2)">${items.length?'Bu zone için aday yok':'BullWatch evrenine uyan hisse bulunamadı'}</h3>
+      <p style="color:var(--t4);font-size:12px;margin-top:8px">Filtreler: float ≤${capStr} · 20g hacim ≥5M TL</p>
+      ${items.length?'<p style="color:var(--t4);font-size:12px">Başka bir zone seç ya da yeniden tara</p>':''}
+    </div>`;
+    // Boşsa otomatik "yakın adaylar"ı yükle
+    if(!items.length && !nearMisses.length && !S._bwLoadingDiag){
+      S._bwLoadingDiag=true;
+      api('/api/bullwatch?diagnostic=true').then(d=>{
+        S.bullwatch={...bw,near_misses:d.near_misses||[]};
+        S._bwLoadingDiag=false;renderBullwatchPage();
+      }).catch(()=>{S._bwLoadingDiag=false;});
+    }
+    if(nearMisses.length){
+      h+=`<div style="margin-top:20px"><h3 style="color:var(--ylw);font-family:'JetBrains Mono',monospace;font-size:14px;margin-bottom:8px">📊 Yakın Adaylar — eleğe en az takılan 20 hisse</h3>
+        <p style="color:var(--t3);font-size:11px;margin-bottom:12px">Float cap'i bu hisseleri yakalamak üzere ayarlayabilirsin. URL'ye <code style="color:var(--cyn)">?cap_tl=500000000</code> ekleyerek deneyebilirsin (500M).</p>
+        <div class="card"><div class="card-b" style="overflow-x:auto"><table class="dtb"><thead><tr><th>#</th><th>Ticker</th><th>Float Mcap</th><th>Mcap</th><th>Free Float</th><th>20g Hacim</th><th>Sebep</th></tr></thead><tbody>`;
+      nearMisses.forEach((n,i)=>{
+        const fmc=n.float_market_cap?`${(n.float_market_cap/1e6).toFixed(0)}M TL`:'—';
+        const mc=n.market_cap?`${(n.market_cap/1e9).toFixed(1)}B TL`:'—';
+        const ff=n.free_float?`${(n.free_float*100).toFixed(0)}%`:'—';
+        const atv=n.avg_traded_value_20d?`${(n.avg_traded_value_20d/1e6).toFixed(1)}M TL`:'—';
+        h+=`<tr><td style="color:var(--t3)">${i+1}</td><td class="clk-t" onclick="loadTicker('${esc(n.symbol)}')">${esc(n.symbol)}</td><td style="color:var(--ylw);font-weight:700">${fmc}</td><td style="color:var(--t2)">${mc}</td><td style="color:var(--t2)">${ff}</td><td style="color:var(--t2)">${atv}</td><td style="color:var(--t4);font-size:10px">${esc(n.reject_reason||'')}</td></tr>`;
+      });
+      h+='</tbody></table></div></div></div>';
+    }
   }else{
     h+=`<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px">${filtered.map(_bwCard).join('')}</div>`;
   }
