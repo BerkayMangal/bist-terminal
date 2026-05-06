@@ -36,25 +36,40 @@ _CACHE: dict[str, Any] = {
 }
 _CACHE_TTL_SEC = 300  # 5 minutes
 _SCAN_DONE: Optional[asyncio.Event] = None  # set by the runner, awaited by waiters
-_SCAN_MAX_WAIT_SEC = 180  # hard ceiling — even slow scans should fit
+_SCAN_MAX_WAIT_SEC = 300  # hard ceiling — even slow scans should fit (yfinance can be flaky)
 
 
 def _resolve_universe() -> list[str]:
     """
-    BullWatch universe = main UNIVERSE + UNIVERSE_EXTENDED if defined.
-    The float-cap filter inside score_symbol will trim 90% of these
-    out — we only need a wide enough net to catch micro-caps.
+    BullWatch universe = UNIVERSE_EXTRA + UNIVERSE_EXTENDED only.
+
+    BIST30 (top 30 large-caps) is intentionally EXCLUDED — those names have
+    market caps in the tens of billions of TL, and even with 5% free float
+    their float-mcap is in the billions, hopelessly above any sensible cap.
+    Scanning them just wastes ~30 metrics-fetch calls per scan.
+
+    Power users can still inspect a BIST30 name via /api/bullwatch/{symbol}.
     """
+    out: list[str] = []
     try:
-        from config import UNIVERSE
+        from config import UNIVERSE_EXTRA
+        out.extend(UNIVERSE_EXTRA)
+    except ImportError:
+        pass
+    try:
+        from config import UNIVERSE_EXTENDED
+        out.extend(UNIVERSE_EXTENDED)
+    except ImportError:
+        pass
+    if not out:
+        # Fallback: use full UNIVERSE if neither EXTRA nor EXTENDED is exposed
         try:
-            from config import UNIVERSE_EXTENDED
-            combined = list(dict.fromkeys(list(UNIVERSE) + list(UNIVERSE_EXTENDED)))
+            from config import UNIVERSE
+            out.extend(UNIVERSE)
         except ImportError:
-            combined = list(UNIVERSE)
-        return combined
-    except Exception:
-        return []
+            return []
+    # Dedupe while preserving order
+    return list(dict.fromkeys(out))
 
 
 def _run_scan(min_score: float = 0.0,
@@ -71,8 +86,11 @@ def _run_scan(min_score: float = 0.0,
     universe = _resolve_universe()
     t0 = time.time()
     # When diagnostic, run with include_ineligible so we can surface "near misses"
+    # max_workers=16 — yfinance fetches are I/O-bound, GIL doesn't apply.
+    # 16 threads vs 8 typically halves wall-clock on a cold cache.
     results = scan(universe, min_score=min_score,
-                   include_ineligible=diagnostic, cap_tl=cap_tl)
+                   include_ineligible=diagnostic, cap_tl=cap_tl,
+                   max_workers=16)
     eligible = [r for r in results if r.eligible]
     if limit:
         eligible = eligible[:limit]
