@@ -3,7 +3,7 @@
 // ===== STATE =====
 const S={page:'home',scan:null,cross:null,macro:null,dash:null,takas:null,social:null,hero:null,quote:null,book:null,wl:JSON.parse(localStorage.getItem('bb_wl')||'[]'),seen:JSON.parse(localStorage.getItem('bb_seen')||'[]'),_alerts:[]};
 const QT=['ASELS','THYAO','BIMAS','KCHOL','TUPRS','AKBNK','GARAN','FROTO','TOASO','PGSUS'];
-const PAGES=[{id:'nasil',label:'Nasıl?'},{id:'home',label:'Ana Sayfa'},{id:'radar',label:'Radar'},{id:'cross',label:'Sinyaller'},{id:'makro',label:'Makro'},{id:'portfoy',label:'Portföy'}];
+const PAGES=[{id:'nasil',label:'Nasıl?'},{id:'home',label:'Ana Sayfa'},{id:'radar',label:'Radar'},{id:'bullwatch',label:'BullWatch'},{id:'cross',label:'Sinyaller'},{id:'makro',label:'Makro'},{id:'portfoy',label:'Portföy'}];
 const $=s=>document.getElementById(s);
 
 // ===== XSS SANITIZER =====
@@ -119,7 +119,7 @@ setInterval(()=>{$('clk').textContent=new Date().toLocaleTimeString('tr-TR',{hou
 
 // ===== NAVIGATION =====
 const nav=$('nav');PAGES.forEach(p=>{const b=document.createElement('button');b.className='nav-b'+(p.id==='home'?' on':'');b.textContent=p.label;b.dataset.p=p.id;b.onclick=()=>goPage(p.id);nav.appendChild(b);});
-function goPage(id){S.page=id;nav.querySelectorAll('.nav-b').forEach(b=>b.classList.toggle('on',b.dataset.p===id));document.querySelectorAll('.page').forEach(p=>p.classList.toggle('on',p.dataset.page===id));if(id==='home')renderHome();if(id==='radar')renderRadarPage();if(id==='cross')renderCrossPage();if(id==='makro')renderMakroPage();if(id==='nasil')renderNasilPage();if(id==='takas')renderTakasPage();if(id==='sosyal')renderSosyalPage();if(id==='portfoy')renderPortfoyPage();}
+function goPage(id){S.page=id;nav.querySelectorAll('.nav-b').forEach(b=>b.classList.toggle('on',b.dataset.p===id));document.querySelectorAll('.page').forEach(p=>p.classList.toggle('on',p.dataset.page===id));if(id==='home')renderHome();if(id==='radar')renderRadarPage();if(id==='cross')renderCrossPage();if(id==='bullwatch')renderBullwatchPage();if(id==='makro')renderMakroPage();if(id==='nasil')renderNasilPage();if(id==='takas')renderTakasPage();if(id==='sosyal')renderSosyalPage();if(id==='portfoy')renderPortfoyPage();}
 
 // ===== QUICK TICKERS =====
 // ===== QUICK TICKERS =====
@@ -634,6 +634,111 @@ const catFiltered=crossCat==='all'?sigs:sigs.filter(s=>s.category===crossCat);co
 h+=`<div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap"><button class="btn btn-sm ${minStar===1?'btn-orn':''}" style="${minStar!==1?'background:var(--bg3);color:var(--t2)':''}" onclick="S._crossMinStar=1;renderCrossPage()">Tümü (${catFiltered.length})</button><button class="btn btn-sm ${minStar===3?'btn-orn':''}" style="${minStar!==3?'background:var(--bg3);color:var(--t2)':''}" onclick="S._crossMinStar=3;renderCrossPage()">⭐3+ (${catFiltered.filter(s=>(s.stars||1)>=3).length})</button><button class="btn btn-sm ${minStar===4?'btn-orn':''}" style="${minStar!==4?'background:var(--bg3);color:var(--t2)':''}" onclick="S._crossMinStar=4;renderCrossPage()">⭐4+ (${catFiltered.filter(s=>(s.stars||1)>=4).length})</button></div>`;
 if(!filtered.length){h+='<div class="emp"><h3 style="color:var(--t2)">Bu filtre ile sinyal yok</h3></div>';}else{const grouped={};filtered.forEach(s=>{if(!grouped[s.ticker])grouped[s.ticker]={ticker:s.ticker,price:s.price,signals:[],totalStars:0,volConfirmed:s.vol_confirmed};grouped[s.ticker].signals.push(s);grouped[s.ticker].totalStars+=s.stars||1;});const tickers=Object.values(grouped).sort((a,b)=>b.totalStars-a.totalStars);h+=`<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px">`;tickers.forEach(g=>{const mainCls=g.signals[0].signal_type==='bullish'?'bull':g.signals[0].signal_type==='bearish'?'bear':'';h+=`<div class="sigc ${mainCls}" style="padding:14px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><span class="clk-t" style="font-size:16px;font-weight:700" onclick="loadTicker('${esc(g.ticker)}')">${esc(g.ticker)}</span><div style="display:flex;align-items:center;gap:8px"><span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--ylw)">⭐${g.totalStars}/${g.signals.length*5}</span>${g.volConfirmed?'<span style="font-size:10px;color:var(--grn)">✓hacim</span>':''}<span style="color:var(--t1);font-family:'JetBrains Mono',monospace;font-size:12px">${g.price?g.price.toFixed(2)+' TL':''}</span></div></div>`;g.signals.forEach(s=>{const starStr='⭐'.repeat(s.stars||1)+'☆'.repeat(5-(s.stars||1));const sigCol=s.signal_type==='bullish'?'var(--grn)':s.signal_type==='bearish'?'var(--red)':'var(--ylw)';const catIcon=s.category==='kirilim'?'🎯':'📊';const sq=s.signal_quality||'C';const sqCls=sq==='A'?'qb-a':sq==='B'?'qb-b':'qb-c';h+=`<div style="padding:6px 0;border-top:1px solid var(--bdr)"><div style="display:flex;justify-content:space-between;align-items:center"><div style="display:flex;align-items:center;gap:6px"><span class="qb ${sqCls}">${sq}</span><span style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:600;color:${sigCol}">${catIcon} ${esc(s.signal)}</span></div><span style="font-size:10px;color:var(--t3)">${starStr}</span></div>${s.reason&&s.reason.length?`<div style="font-size:10px;color:var(--grn);margin-top:4px;line-height:1.5">${s.reason.slice(0,2).map(r=>'✓ '+esc(r)).join(' · ')}</div>`:''}${s.risk_flags&&s.risk_flags.length?`<div style="font-size:10px;color:var(--red);margin-top:2px;line-height:1.5">${s.risk_flags.slice(0,2).map(r=>'✗ '+esc(r)).join(' · ')}</div>`:''}</div>`;});h+=`</div>`;});h+=`</div>`;}pg.innerHTML=h;}
 async function startCross(){$('pg-cross').innerHTML='<div class="ld"><div class="sp"></div><div class="ld-t">Sinyaller kontrol ediliyor…</div></div>';try{S.cross=await api('/api/cross');$('cnt-s').textContent=S.cross.summary?.total||0;renderCrossPage();}catch(e){$('pg-cross').innerHTML=`<div class="emp"><h3 style="color:var(--t2)">Hata: ${esc(e.message)}</h3></div>`;}}
+
+// ===== BULLWATCH PAGE =====
+// Low-float micro-cap accumulation footprints. Cards only — no buy/sell
+// language, no price targets. Pattern strings come straight from the
+// engine in descriptive form ("Float Squeeze + Absorption + Tight Closes").
+function _bwZoneStyle(zone){
+  if(zone==='CONVICTION') return {col:'var(--grn)',pill:'p-grn',label:'CONVICTION',icon:'🟢',desc:'Kırılım sürecinde'};
+  if(zone==='CONFIRMED')  return {col:'var(--ylw)',pill:'p-ylw',label:'CONFIRMED', icon:'🟡',desc:'Sahiplik + tape uyumlu'};
+  return                       {col:'var(--blu)',pill:'p-blu',label:'EARLY',     icon:'🔵',desc:'İlk ayak izi'};
+}
+function _bwDqBadge(dq){
+  if(dq==='high')   return '<span class="pill p-grn" style="font-size:9px;padding:2px 6px">HIGH DATA</span>';
+  if(dq==='medium') return '<span class="pill p-ylw" style="font-size:9px;padding:2px 6px">MED DATA</span>';
+  return                   '<span class="pill p-red" style="font-size:9px;padding:2px 6px">LOW DATA</span>';
+}
+function _bwCard(item){
+  const z = _bwZoneStyle(item.zone);
+  const score = (item.score||0).toFixed(0);
+  const reasons = (item.reasons||[]).slice(0,3);
+  const fmc = item.metrics?.float_market_cap;
+  const fmcStr = fmc ? `${(fmc/1e6).toFixed(0)}M TL float`:'';
+  const rvol = item.metrics?.rvol;
+  const rvolStr = rvol ? `RVOL ${rvol.toFixed(1)}×`:'';
+  const fp = item.metrics?.float_pressure;
+  const fpStr = fp ? `Float ${(fp*100).toFixed(1)}%`:'';
+  const meta = [fmcStr,rvolStr,fpStr].filter(Boolean).join(' · ');
+  return `<div class="pkc" style="border-left-color:${z.col};margin-bottom:0">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:8px">
+      <div>
+        <div class="clk-t" style="font-size:18px;font-weight:700" onclick="loadTicker('${esc(item.symbol)}')">${esc(item.symbol)}</div>
+        <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap">
+          <span class="pill ${z.pill}">${z.icon} ${z.label}</span>
+          ${_bwDqBadge(item.data_quality||'medium')}
+        </div>
+      </div>
+      <div style="text-align:right">
+        <div style="font-family:'JetBrains Mono',monospace;font-size:28px;font-weight:700;color:${z.col};line-height:1">${score}</div>
+        <div style="font-size:9px;color:var(--t4);text-transform:uppercase;letter-spacing:1px;margin-top:2px">SCORE</div>
+      </div>
+    </div>
+    <div style="font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--t1);margin-top:6px;line-height:1.5;font-weight:600">${esc(item.pattern||'—')}</div>
+    ${meta?`<div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--t3);margin-top:6px">${esc(meta)}</div>`:''}
+    ${reasons.length?`<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--bdr);font-size:11px;color:var(--t2);line-height:1.5">${reasons.map(r=>`<div>• ${esc(r)}</div>`).join('')}</div>`:''}
+  </div>`;
+}
+function renderBullwatchPage(){
+  const pg=$('pg-bullwatch');
+  // Initial load — auto-trigger on first visit
+  if(S.bullwatch===undefined){
+    pg.innerHTML=`<div class="ld"><div class="sp"></div><div class="ld-t">BullWatch taraması başlıyor — düşük float ayak izleri aranıyor…</div><div style="font-size:11px;color:var(--t4);margin-top:6px">İlk tarama 30-60 saniye sürebilir</div></div>`;
+    loadBullwatch();
+    return;
+  }
+  const bw=S.bullwatch;
+  if(bw&&bw.error){
+    pg.innerHTML=`<div class="emp"><h3 style="color:var(--t2)">BullWatch yüklenemedi: ${esc(bw.error)}</h3><button class="btn btn-grn" style="margin-top:14px" onclick="S.bullwatch=undefined;renderBullwatchPage()">Tekrar Dene</button></div>`;
+    return;
+  }
+  const items=bw?.items||[];
+  const filt=S._bwZone||'all';
+  const filtered=filt==='all'?items:items.filter(i=>i.zone===filt);
+  const counts={
+    all:items.length,
+    EARLY:items.filter(i=>i.zone==='EARLY').length,
+    CONFIRMED:items.filter(i=>i.zone==='CONFIRMED').length,
+    CONVICTION:items.filter(i=>i.zone==='CONVICTION').length,
+  };
+  const asof=bw?._meta?.as_of||bw?.asof;
+  const scanned=bw?.scanned||0;
+  const eligible=bw?.eligible_count||items.length;
+  let h=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px">
+    <div>
+      <h2 style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-lg);color:var(--acc)">🐂 BullWatch — Sessiz Birikim Radarı</h2>
+      <p style="font-size:var(--fs-sm);color:var(--t3);margin-top:2px">${asof?new Date(asof).toLocaleString('tr-TR'):''} · ${scanned} hisse tarandı · ${eligible} eleğe takıldı</p>
+    </div>
+    <button class="btn btn-grn" onclick="loadBullwatch(true)">🔄 YENİDEN TARA</button>
+  </div>
+  <div style="padding:12px 16px;background:var(--bg3);border-radius:var(--rad);margin-bottom:14px;font-size:var(--fs-base);color:var(--t2);line-height:1.6">
+    <b style="color:var(--acc)">BullWatch nasıl çalışır?</b> Düşük float (≤150M TL float piyasa değeri), likit (≥5M TL günlük hacim) BIST mikro-kaplarında <b>sessiz birikim ayak izlerini</b> tespit eder. 7 motor: Float Pressure, Revenue Mispricing, Silent Volume, Price Action (Shakeout / Absorption / Tight Closes / Walk-Up), Compression, Ownership Intelligence, Fundamental Quality. <span style="color:var(--t4);font-size:11px">Yatırım tavsiyesi değildir — yalnızca tape okuma.</span>
+  </div>
+  <div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap">
+    <button class="btn btn-sm ${filt==='all'?'btn-grn':''}" style="${filt!=='all'?'background:var(--bg3);color:var(--t2)':''}" onclick="S._bwZone='all';renderBullwatchPage()">Tümü (${counts.all})</button>
+    <button class="btn btn-sm ${filt==='CONVICTION'?'btn-grn':''}" style="${filt!=='CONVICTION'?'background:var(--bg3);color:var(--grn)':''}" onclick="S._bwZone='CONVICTION';renderBullwatchPage()">🟢 Conviction (${counts.CONVICTION})</button>
+    <button class="btn btn-sm ${filt==='CONFIRMED'?'btn-grn':''}" style="${filt!=='CONFIRMED'?'background:var(--bg3);color:var(--ylw)':''}" onclick="S._bwZone='CONFIRMED';renderBullwatchPage()">🟡 Confirmed (${counts.CONFIRMED})</button>
+    <button class="btn btn-sm ${filt==='EARLY'?'btn-grn':''}" style="${filt!=='EARLY'?'background:var(--bg3);color:var(--blu)':''}" onclick="S._bwZone='EARLY';renderBullwatchPage()">🔵 Early (${counts.EARLY})</button>
+  </div>`;
+  if(!filtered.length){
+    h+=`<div class="emp"><h3 style="color:var(--t2)">${items.length?'Bu zone için aday yok':'BullWatch evrenine uyan hisse bulunamadı'}</h3><p style="color:var(--t4);font-size:12px;margin-top:8px">${items.length?'Başka bir zone seç ya da yeniden tara':'Filtreler: float ≤150M TL · 20g hacim ≥5M TL'}</p></div>`;
+  }else{
+    h+=`<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px">${filtered.map(_bwCard).join('')}</div>`;
+  }
+  pg.innerHTML=h;
+}
+async function loadBullwatch(refresh){
+  if(refresh){
+    $('pg-bullwatch').innerHTML=`<div class="ld"><div class="sp"></div><div class="ld-t">BullWatch yeniden taranıyor — sessiz birikim aranıyor…</div></div>`;
+  }
+  try{
+    S.bullwatch=await api('/api/bullwatch'+(refresh?'?refresh=true':''));
+    renderBullwatchPage();
+  }catch(e){
+    S.bullwatch={items:[],error:e.message};
+    renderBullwatchPage();
+  }
+}
 
 // ===== TAKAS PAGE =====
 function renderTakasPage(){const pg=$('pg-takas');if(!S.takas){pg.innerHTML='<div class="ld"><div class="sp"></div><div class="ld-t">Takas verileri yükleniyor...</div></div>';loadTakas();return;}const items=S.takas.items||[];let h=`<div style="margin-bottom:14px;padding:14px 18px;background:linear-gradient(135deg,rgba(255,193,7,.08),rgba(255,152,0,.05));border:1px solid rgba(255,193,7,.25);border-radius:var(--rad2);display:flex;align-items:center;gap:12px"><span style="font-size:24px">🚧</span><div><div style="font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700;color:var(--ylw);text-transform:uppercase;letter-spacing:1px">Yapım Aşamasında</div><div style="font-size:12px;color:var(--t2);margin-top:3px">Takas verisi MKK lisansı veya aracı kurum entegrasyonu gerektiriyor. Şimdilik yfinance kurumsal veri gösteriliyor.</div></div></div>`;h+=`<div style="margin-bottom:16px"><h2 style="font-family:'JetBrains Mono',monospace;font-size:15px;color:var(--prp)">📊 Takas — Yabancı Oranları</h2><p style="font-size:11px;color:var(--t3);margin-top:2px">Kaynak: ${esc(S.takas.source||'—')} | ${items.length} hisse</p></div>`;if(S.takas.error){h+=`<div class="aib" style="border-color:var(--ylw);margin-bottom:14px"><div class="aib-tx" style="color:var(--ylw)">${esc(S.takas.error)}</div></div>`;}if(items.length){h+=`<div class="card"><div class="card-b" style="overflow-x:auto"><table class="dtb"><thead><tr><th>#</th><th>Ticker</th><th>Yabanci %</th><th>Fiyat</th></tr></thead><tbody>`;items.slice(0,40).forEach((it,i)=>{const pct=it.foreign_pct||0;h+=`<tr><td style="color:var(--t3)">${i+1}</td><td class="clk-t" onclick="loadTicker('${esc(it.ticker)}')">${esc(it.ticker)}</td><td style="color:var(--t1);font-weight:700">${pct.toFixed(1)}%</td><td style="color:var(--t1)">${it.price?fN(it.price):'—'}</td></tr>`;});h+='</tbody></table></div></div>';}pg.innerHTML=h;}

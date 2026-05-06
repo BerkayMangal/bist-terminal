@@ -32,6 +32,7 @@ from core.response_envelope import success, error, not_found, rate_limited, serv
 from core.auth import require_jwt_secret, verify_jwt
 from api.auth import router as auth_router
 from api.phase4_endpoints import router as phase4_router
+from api.bullwatch import router as bullwatch_router
 
 from config import (
     BOT_VERSION, APP_NAME, CONFIDENCE_MIN, UNIVERSE,
@@ -246,6 +247,7 @@ async def ses_mw(request:Request,call_next):
 # Phase 1: /api/auth/* endpoints (register/login/logout/me).
 app.include_router(auth_router)
 app.include_router(phase4_router)
+app.include_router(bullwatch_router)
 
 @app.exception_handler(RateLimitExceeded)
 async def _rate_limit_handler(request: Request, exc: RateLimitExceeded):
