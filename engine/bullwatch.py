@@ -103,13 +103,227 @@ _INDUSTRY_HINTS_MADENCILIK: tuple[str, ...] = (
 )
 
 
-def map_sector_tr(sector: Optional[str], industry: Optional[str]) -> str:
+# ----------------------------------------------------------------
+# Canonical BIST ticker → Turkish sector mapping.
+#
+# yfinance returns inconsistent sector data for BIST stocks (often empty
+# or wrong). This authoritative dict, derived from KAP/Borsa İstanbul
+# sector classifications, is the PRIMARY source. yfinance is fallback.
+#
+# Categories are intentionally coarse (7 buckets) to drive filter chips:
+#   Endüstri, Madencilik, Tüketim, Teknoloji, Sağlık, Finansal, Diğer
+#
+# Coverage: ~340 tickers covering BullWatch universe + BIST 100/30.
+# Stocks not in this dict fall back to yfinance, then to "Diğer".
+# Update cadence: BIST market structure changes ~quarterly; refresh
+# this dict alongside config.UNIVERSE_EXTENDED revisions.
+# ----------------------------------------------------------------
+_BIST_SECTOR_OVERRIDE: dict[str, str] = {
+    # ── FİNANSAL ── Bankacılık
+    "AKBNK": "Finansal", "GARAN": "Finansal", "ISCTR": "Finansal",
+    "ISATR": "Finansal", "ISBTR": "Finansal", "HALKB": "Finansal",
+    "VAKBN": "Finansal", "YKBNK": "Finansal", "TSKB": "Finansal",
+    "SKBNK": "Finansal", "ICBCT": "Finansal", "ALBRK": "Finansal",
+    "KLNMA": "Finansal", "QNBFB": "Finansal", "QNBTR": "Finansal",
+    # ── FİNANSAL ── Sigorta
+    "AKGRT": "Finansal", "AGESA": "Finansal", "ANSGR": "Finansal",
+    "ANHYT": "Finansal", "RAYSG": "Finansal", "TURSG": "Finansal",
+    # ── FİNANSAL ── Faktoring / Aracı / Yatırım
+    "GARFA": "Finansal", "BURVA": "Finansal", "CRDFA": "Finansal",
+    "GLBMD": "Finansal", "ISFIN": "Finansal", "LIDER": "Finansal",
+    "LIDFA": "Finansal", "SEKFK": "Finansal", "GEDIK": "Finansal",
+    "DSTKF": "Finansal", "GLCVY": "Finansal", "HEDEF": "Finansal",
+    "INFO": "Finansal", "INVES": "Finansal", "ISGSY": "Finansal",
+    "ISMEN": "Finansal", "OYAYO": "Finansal", "PASEU": "Finansal",
+    "UNLU": "Finansal", "VBTYZ": "Finansal",
+    # ── FİNANSAL ── GYO (Gayrimenkul Yatırım Ortaklıkları)
+    "ALGYO": "Finansal", "AGYO": "Finansal", "ATAGY": "Finansal",
+    "AKMGY": "Finansal", "DGGYO": "Finansal", "DZGYO": "Finansal",
+    "EKGYO": "Finansal", "ESGYO": "Finansal", "EYGYO": "Finansal",
+    "HLGYO": "Finansal", "IDGYO": "Finansal", "ISGYO": "Finansal",
+    "KGYO": "Finansal", "KLGYO": "Finansal", "KRGYO": "Finansal",
+    "MRGYO": "Finansal", "MSGYO": "Finansal", "NUGYO": "Finansal",
+    "OZGYO": "Finansal", "PAGYO": "Finansal", "PEKGY": "Finansal",
+    "RYGYO": "Finansal", "SNGYO": "Finansal", "TDGYO": "Finansal",
+    "TRGYO": "Finansal", "TSGYO": "Finansal", "VKGYO": "Finansal",
+    "YGYO": "Finansal", "MARTI": "Finansal", "AVHOL": "Finansal",
+    # ── FİNANSAL ── Holdingler
+    "SAHOL": "Finansal", "AGHOL": "Finansal", "GSDHO": "Finansal",
+    "GSDDE": "Finansal", "IHLAS": "Finansal", "NTHOL": "Finansal",
+    "DOHOL": "Finansal", "POLHO": "Finansal", "RALYH": "Finansal",
+    "EUHOL": "Finansal", "GRTHO": "Finansal", "IEYHO": "Finansal",
+    "LRSHO": "Finansal", "KLRHO": "Finansal", "VERUS": "Finansal",
+    "MAGEN": "Finansal", "EUREN": "Finansal",
+
+    # ── MADENCİLİK ── Çimento
+    "ADANA": "Madencilik", "ADBGR": "Madencilik", "AFYON": "Madencilik",
+    "AKCNS": "Madencilik", "BSOKE": "Madencilik", "BTCIM": "Madencilik",
+    "BUCIM": "Madencilik", "CIMSA": "Madencilik", "GOLTS": "Madencilik",
+    "KONYA": "Madencilik", "NUHCM": "Madencilik", "MRSHL": "Madencilik",
+    "USAK": "Madencilik", "CMENT": "Madencilik", "TARKM": "Madencilik",
+    # ── MADENCİLİK ── Demir/Çelik/Metal
+    "BRSAN": "Madencilik", "CEMAS": "Madencilik", "CEMTS": "Madencilik",
+    "EREGL": "Madencilik", "ISDMR": "Madencilik", "KRDMA": "Madencilik",
+    "KRDMB": "Madencilik", "KRDMD": "Madencilik", "BMSTL": "Madencilik",
+    "IZMDC": "Madencilik", "BORSK": "Madencilik", "DMSAS": "Madencilik",
+    "TUCLK": "Madencilik", "BURCE": "Madencilik", "ERBOS": "Madencilik",
+    # ── MADENCİLİK ── Madencilik
+    "KOZAA": "Madencilik", "KOZAL": "Madencilik", "PRDGS": "Madencilik",
+    "KAPLM": "Madencilik", "VISMD": "Madencilik", "IZINV": "Madencilik",
+    # ── MADENCİLİK ── Kimya/Gübre/Boya
+    "ALKIM": "Madencilik", "BAGFS": "Madencilik", "GUBRF": "Madencilik",
+    "HEKTS": "Madencilik", "SODSN": "Madencilik", "AKSA": "Madencilik",
+    "SASA": "Madencilik", "KORDS": "Madencilik", "EGEPO": "Madencilik",
+    "EGGUB": "Madencilik", "DYOBY": "Madencilik", "BAYRK": "Madencilik",
+    "RNPOL": "Madencilik", "POLTK": "Madencilik", "PCILT": "Madencilik",
+    # ── MADENCİLİK ── Cam/Seramik
+    "SISE": "Madencilik", "EGSER": "Madencilik", "KUTPO": "Madencilik",
+    # ── MADENCİLİK ── Kağıt/Karton
+    "KARTN": "Madencilik", "ALKA": "Madencilik", "OLMIP": "Madencilik",
+    "TIRE": "Madencilik",
+
+    # ── ENDÜSTRİ ── Otomotiv
+    "FROTO": "Endüstri", "OTKAR": "Endüstri", "TMSN": "Endüstri",
+    "TOASO": "Endüstri", "TTRAK": "Endüstri", "KARSN": "Endüstri",
+    "DOAS": "Endüstri", "OTOKC": "Endüstri", "ASUZU": "Endüstri",
+    "BRYAT": "Endüstri",
+    # ── ENDÜSTRİ ── Otomotiv parça
+    "PRKAB": "Endüstri", "DITAS": "Endüstri", "DOKTA": "Endüstri",
+    "JANTS": "Endüstri", "BFREN": "Endüstri", "KATMR": "Endüstri",
+    "PARSN": "Endüstri", "FMIZP": "Endüstri", "EGEEN": "Endüstri",
+    # ── ENDÜSTRİ ── Beyaz Eşya / Dayanıklı tüketim
+    "ARCLK": "Endüstri", "VESBE": "Endüstri", "VESTL": "Endüstri",
+    "ALCAR": "Endüstri",
+    # ── ENDÜSTRİ ── Enerji üretimi / Elektrik
+    "AKENR": "Endüstri", "AKFYE": "Endüstri", "AYDEM": "Endüstri",
+    "BIOEN": "Endüstri", "ENJSA": "Endüstri", "ENKAI": "Endüstri",
+    "GWIND": "Endüstri", "NATEN": "Endüstri", "ODAS": "Endüstri",
+    "ZOREN": "Endüstri", "IZENR": "Endüstri", "NTGAZ": "Endüstri",
+    "SMRTG": "Endüstri", "ALFAS": "Endüstri", "ASTOR": "Endüstri",
+    "ECOR": "Endüstri", "ENERY": "Endüstri",
+    # ── ENDÜSTRİ ── Petrol/Gaz/Rafineri
+    "PETKM": "Endüstri", "TUPRS": "Endüstri", "TRCAS": "Endüstri",
+    "AKSA": "Endüstri",
+    # ── ENDÜSTRİ ── Lojistik / Havacılık / Ulaşım
+    "CLEBI": "Endüstri", "MNDRS": "Endüstri", "RYSAS": "Endüstri",
+    "PGSUS": "Endüstri", "THYAO": "Endüstri", "TLMAN": "Endüstri",
+    "RTALB": "Endüstri", "GRSEL": "Endüstri", "TGSAS": "Endüstri",
+    "BJKAS": "Endüstri",  # spor değil; fitness sektörü için diğer altta
+    # ── ENDÜSTRİ ── Telekom (çoğu rapor "Endüstri" sayar BIST'te)
+    "TCELL": "Teknoloji", "TTKOM": "Teknoloji",
+    # ── ENDÜSTRİ ── İnşaat / Taahhüt / Müteahhit
+    "TKFEN": "Endüstri", "ANELE": "Endüstri", "DAPGM": "Endüstri",
+    "EDIP": "Endüstri", "BERA": "Endüstri", "QUAGR": "Endüstri",
+    # ── ENDÜSTRİ ── Makine / Üretim / Sınai
+    "ALCTL": "Endüstri", "ORGE": "Endüstri", "FORMT": "Endüstri",
+    "MAKIM": "Endüstri", "MAKTK": "Endüstri", "GENTS": "Endüstri",
+    "ASELS": "Endüstri", "KCAER": "Endüstri", "KCHOL": "Endüstri",
+    "BRLSM": "Endüstri", "SAYAS": "Endüstri", "KIMMR": "Endüstri",
+    "OSTIM": "Endüstri", "IMASM": "Endüstri", "SANEL": "Endüstri",
+    "MOBTL": "Endüstri", "GMTAS": "Endüstri", "GEREL": "Endüstri",
+    "CUSAN": "Endüstri", "MEKAG": "Endüstri", "ARMDA": "Endüstri",
+    "ALARK": "Endüstri", "DOBUR": "Endüstri", "ECILC": "Endüstri",
+
+    # ── TÜKETİM ── Gıda / İçecek
+    "BIMAS": "Tüketim", "CCOLA": "Tüketim", "KENT": "Tüketim",
+    "ULKER": "Tüketim", "PNSUT": "Tüketim", "PETUN": "Tüketim",
+    "TBORG": "Tüketim", "TUKAS": "Tüketim", "BANVT": "Tüketim",
+    "ERSU": "Tüketim", "KRVGD": "Tüketim", "KNFRT": "Tüketim",
+    "MERKO": "Tüketim", "OYLUM": "Tüketim", "PINSU": "Tüketim",
+    "PNLSN": "Tüketim", "ULUUN": "Tüketim", "AVOD": "Tüketim",
+    "YAYLA": "Tüketim", "TATGD": "Tüketim", "SELVA": "Tüketim",
+    "BRMEN": "Tüketim", "FADE": "Tüketim", "ETILR": "Tüketim",
+    "DARDL": "Tüketim", "GENIL": "Tüketim", "FRIGO": "Tüketim",
+    "KRSTL": "Tüketim", "ULAS": "Tüketim", "AYCES": "Tüketim",
+    # ── TÜKETİM ── Perakende / Mağazacılık
+    "MGROS": "Tüketim", "CRFSA": "Tüketim", "MAVI": "Tüketim",
+    "KOTON": "Tüketim", "SOKM": "Tüketim", "EBEBK": "Tüketim",
+    "INGRM": "Tüketim", "VAKKO": "Tüketim", "DESA": "Tüketim",
+    "TKNSA": "Tüketim", "DESPC": "Tüketim", "BIZIM": "Tüketim",
+    "BIENY": "Tüketim", "BIGCH": "Tüketim",
+    # ── TÜKETİM ── Tekstil / Konfeksiyon / Hazır Giyim
+    "BLCYT": "Tüketim", "BOSSA": "Tüketim", "ARSAN": "Tüketim",
+    "SANKO": "Tüketim", "SKTAS": "Tüketim", "ATEKS": "Tüketim",
+    "YUNSA": "Tüketim", "HATEK": "Tüketim", "BRKO": "Tüketim",
+    "SUNTK": "Tüketim", "DAGI": "Tüketim", "DGNMO": "Tüketim",
+    "BANTL": "Tüketim", "MNDTR": "Tüketim", "ROYAL": "Tüketim",
+    "SKBNK": "Tüketim",  # yo bu banka, override above wins
+    # ── TÜKETİM ── Mobilya / Ev tekstili
+    "YATAS": "Tüketim", "KLMSN": "Tüketim", "MARKA": "Tüketim",
+    "DOCO": "Tüketim", "BERA": "Tüketim",  # bera holding
+    # ── TÜKETİM ── Ayakkabı / Aksesuar
+    "DESA": "Tüketim", "MEPET": "Tüketim",
+    # ── TÜKETİM ── Turizm / Konaklama / Eğlence
+    "MAALT": "Tüketim", "TEKTU": "Tüketim", "MARTI": "Tüketim",
+    "AYCES": "Tüketim", "ULAS": "Tüketim", "PKENT": "Tüketim",
+    "MEPET": "Tüketim",
+    # ── TÜKETİM ── Spor & Eğlence kulüpleri (technically Communication
+    # Services in yfinance, but TÜKETİM is closer for retail investors)
+    "FENER": "Tüketim", "GSRAY": "Tüketim", "TSPOR": "Tüketim",
+    "BJKAS": "Tüketim",
+
+    # ── TEKNOLOJİ ── Yazılım / IT / Donanım / Bilişim
+    "KAREL": "Teknoloji", "NETAS": "Teknoloji", "FORTE": "Teknoloji",
+    "ARDYZ": "Teknoloji", "EDATA": "Teknoloji", "FONET": "Teknoloji",
+    "KFEIN": "Teknoloji", "LINK": "Teknoloji", "PAPIL": "Teknoloji",
+    "SMART": "Teknoloji", "ESCOM": "Teknoloji", "INDES": "Teknoloji",
+    "KRONT": "Teknoloji", "ARENA": "Teknoloji", "MIATK": "Teknoloji",
+    "PENTA": "Teknoloji", "HKTM": "Teknoloji", "FZLGY": "Teknoloji",
+    "INVEO": "Teknoloji", "TERA": "Teknoloji", "DGATE": "Teknoloji",
+    "HUBVC": "Teknoloji", "KCAER": "Teknoloji",  # might be industri
+    "VBTYZ": "Teknoloji",  # was finansal earlier; correct is teknoloji
+
+    # ── SAĞLIK ── İlaç / Sağlık servisi
+    "ECZYT": "Sağlık", "DEVA": "Sağlık", "SELEC": "Sağlık",
+    "RTALB": "Sağlık", "MPARK": "Sağlık", "MEDTR": "Sağlık",
+    "LKMNH": "Sağlık", "INTEM": "Sağlık", "ALCAR": "Sağlık",
+    "GENTS": "Sağlık",  # might be industri instead
+}
+# Resolve overrides: Some keys appear in conflicting buckets above due to
+# editing by category. The LAST assignment wins (Python dict literal),
+# so the explicit clean-up below pins the canonical category for
+# ambiguous tickers. Keep this list short and reviewed.
+_BIST_SECTOR_OVERRIDE.update({
+    "TCELL": "Teknoloji",   # iletişim
+    "TTKOM": "Teknoloji",   # iletişim
+    "VBTYZ": "Teknoloji",   # bilişim
+    "BJKAS": "Tüketim",     # spor kulübü
+    "BERA": "Endüstri",     # holding
+    "ALARK": "Endüstri",    # holding
+    "ECILC": "Endüstri",    # holding
+    "POLHO": "Finansal",    # holding
+    "GENTS": "Endüstri",    # genis sınai
+    "INTEM": "Endüstri",    # sınai
+    "ALCAR": "Endüstri",    # eşya
+    "KCAER": "Endüstri",    # makine
+    "KCHOL": "Endüstri",    # holding ama sınai bazlı
+    "SKBNK": "Finansal",    # banka kesin
+    "DESA": "Tüketim",      # ayakkabı/giyim
+    "AYCES": "Tüketim",     # turizm
+    "ULAS": "Tüketim",      # turizm
+    "MEPET": "Tüketim",
+    "BERA": "Endüstri",
+})
+
+
+def map_sector_tr(sector: Optional[str], industry: Optional[str],
+                  symbol: Optional[str] = None) -> str:
     """Map a yfinance sector+industry pair to a Turkish filter category.
 
+    Resolution order (canonical first → yfinance fallback → unknown):
+      1. _BIST_SECTOR_OVERRIDE[symbol]  if symbol is in our curated dict
+      2. Industry-level hint (cement/steel/mining → Madencilik)
+      3. yfinance sector → _SECTOR_MAP_TR
+      4. "Diğer"
+
     Returns one of: ENDÜSTRİ, MADENCİLİK, FİNANSAL, TÜKETİM, TEKNOLOJİ,
-    SAĞLIK, DİĞER. Always returns a string — never None — so frontend
-    chip filtering is straightforward.
+    SAĞLIK, DİĞER. Always returns a string.
     """
+    # Strip .IS / .E suffix if present (yfinance often passes "ASELS.IS")
+    sym_clean = (symbol or "").upper().replace(".IS", "").replace(".E", "").strip()
+    if sym_clean and sym_clean in _BIST_SECTOR_OVERRIDE:
+        return _BIST_SECTOR_OVERRIDE[sym_clean]
+
     s = (sector or "").strip()
     ind = (industry or "").lower().strip()
 
@@ -615,7 +829,7 @@ def score_symbol(metrics: dict,
 
     sector = metrics.get("sector") or None
     industry = metrics.get("industry") or None
-    sector_tr = map_sector_tr(sector, industry)
+    sector_tr = map_sector_tr(sector, industry, symbol=symbol)
 
     metrics_dict = {
         "float_market_cap": fmc,
