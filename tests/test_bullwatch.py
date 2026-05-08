@@ -217,6 +217,34 @@ class TestRelativeVolume:
         df = _ohlcv([10.0] * 4)
         assert relative_volume(df) is None
 
+    def test_intraday_partial_bar_is_skipped(self):
+        """When last bar is dated TODAY (yfinance partial bar during
+        market hours), it must be ignored. Otherwise the partial volume
+        makes RVOL look artificially low and crashes BullWatch eligibility.
+        """
+        # Build 22-day series: 21 prior days at 1M volume + today at 100k
+        # (simulating a partial intraday bar with 10% of a normal day)
+        vols = list(np.full(21, 1_000_000.0)) + [100_000.0]
+        n = len(vols)
+        # Index: ends TODAY in Istanbul time
+        import datetime as _dt
+        today = (_dt.datetime.now(_dt.timezone.utc) + _dt.timedelta(hours=3)).date()
+        idx = pd.bdate_range(end=pd.Timestamp(today), periods=n)
+        closes = np.full(n, 10.0)
+        df = pd.DataFrame(
+            {"Open": closes, "High": closes * 1.01, "Low": closes * 0.99,
+             "Close": closes, "Volume": np.array(vols)},
+            index=idx,
+        )
+        rv = relative_volume(df)
+        # Should ignore today's 100k partial bar, use yesterday's 1M
+        # → RVOL of yesterday vs prior 20 days = 1.0, NOT 0.1
+        assert rv is not None
+        assert abs(rv - 1.0) < 0.05, (
+            f"Expected RVOL ~1.0 (intraday bar skipped), got {rv}. "
+            "If this fails, the intraday-aware fix regressed."
+        )
+
 
 class TestFloatPressure:
     def test_extreme(self):

@@ -158,13 +158,61 @@ def passes_liquidity(df, floor_tl: float = LIQUIDITY_FLOOR_TL) -> bool:
     return atv is not None and atv >= floor_tl
 
 
-def relative_volume(df) -> Optional[float]:
-    """today_volume / avg_20d_volume (excluding today)."""
-    if not _PANDAS or df is None or len(df) < 6:
-        return None
+def _complete_bar_idx(df) -> int:
+    """
+    Return the index offset of the last COMPLETED daily bar.
+
+    yfinance returns daily bars including a partial bar for the current
+    trading day when the market is open. That partial bar has incomplete
+    volume (only N minutes of the session) and a non-final close —
+    using it as "today's" snapshot makes RVOL/float_pressure look
+    artificially low and quiet, which crashes BullWatch eligibility.
+
+    Strategy: if the last bar's date is today (in Europe/Istanbul,
+    BIST market timezone), it's still forming → return -2 (use the
+    previous fully-closed day). Otherwise → return -1.
+
+    This keeps BullWatch results stable across the trading day:
+    pre-market, intraday, and post-close all see the same canonical
+    last-completed-day data.
+    """
+    if not _PANDAS or df is None or len(df) < 2:
+        return -1
     try:
-        today = float(df["Volume"].iloc[-1])
-        prior = df["Volume"].iloc[-min(21, len(df)):-1]
+        last_ts = df.index[-1]
+        # yfinance returns tz-naive UTC midnights for daily bars on BIST;
+        # treat the date directly without tz gymnastics.
+        last_date = last_ts.date() if hasattr(last_ts, "date") else None
+        if last_date is None:
+            return -1
+        # "Today" in BIST timezone (UTC+3, no DST since 2016)
+        import datetime as _dt
+        today_ist = (_dt.datetime.now(_dt.timezone.utc) + _dt.timedelta(hours=3)).date()
+        if last_date >= today_ist:
+            # Last bar is today (or future timestamp anomaly) → skip it
+            return -2
+    except Exception:
+        pass
+    return -1
+
+
+def relative_volume(df) -> Optional[float]:
+    """today_volume / avg_20d_volume (excluding today).
+
+    "Today" = last completed bar. See _complete_bar_idx().
+    """
+    if not _PANDAS or df is None or len(df) < 7:
+        return None
+    idx = _complete_bar_idx(df)
+    try:
+        today = float(df["Volume"].iloc[idx])
+        # 20-day window ending the bar BEFORE our reference bar
+        end = idx if idx < 0 else idx
+        # Slice prior 20 sessions, excluding the reference day itself
+        prior_end = end  # exclusive on the right when negative slicing
+        prior_start = prior_end - 20 if prior_end < 0 else prior_end - 20
+        # Use loc-style negative slicing safely
+        prior = df["Volume"].iloc[max(-len(df), prior_start):prior_end]
         if len(prior) < 5:
             return None
         avg = float(prior.mean())
@@ -182,6 +230,7 @@ def float_pressure(df, shares_outstanding: Optional[float],
 
     floating_shares = shares_outstanding * free_float.
     free_float normalized to [0, 1] via normalize_free_float().
+    Uses the last COMPLETED daily bar (skips partial intraday bar).
     """
     if not _PANDAS or df is None or len(df) == 0:
         return None
@@ -192,8 +241,11 @@ def float_pressure(df, shares_outstanding: Optional[float],
     floating = so * ff
     if floating <= 0:
         return None
+    idx = _complete_bar_idx(df)
     try:
-        vol_today = float(df["Volume"].iloc[-1])
+        if idx == -2 and len(df) < 2:
+            return None
+        vol_today = float(df["Volume"].iloc[idx])
     except Exception:
         return None
     if vol_today <= 0:
@@ -202,12 +254,14 @@ def float_pressure(df, shares_outstanding: Optional[float],
 
 
 def price_change_5d(df) -> Optional[float]:
-    """Fractional return over the last 5 sessions (close-to-close)."""
-    if not _PANDAS or df is None or len(df) < 6:
+    """Fractional return over the last 5 completed sessions (close-to-close)."""
+    if not _PANDAS or df is None or len(df) < 7:
         return None
+    idx = _complete_bar_idx(df)
     try:
-        c0 = float(df["Close"].iloc[-6])
-        c1 = float(df["Close"].iloc[-1])
+        # Close 5 sessions ago (relative to last completed bar)
+        c0 = float(df["Close"].iloc[idx - 5])
+        c1 = float(df["Close"].iloc[idx])
     except Exception:
         return None
     if c0 <= 0:
