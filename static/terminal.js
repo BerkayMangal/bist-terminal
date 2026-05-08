@@ -662,6 +662,101 @@ function _bwSectorStyle(sec){
   };
   return m[sec]||m['Diğer'];
 }
+
+// ── Trend rozeti — günlük değişim göstergesi (yatırım tavsiyesi değil,
+// sadece "ne değişti" gözlemi). Renkler: yeni=mavi, zone yükseldi=sarı,
+// score yükseldi=yeşil, score düştü=kırmızı, soğudu=gri.
+function _bwTrendBadge(delta){
+  if(!delta||delta.type==='stable') return '';
+  const m={
+    'new':       {col:'var(--blu)', bg:'var(--blud)',  ico:'🆕', txt:'YENİ ELIGIBLE'},
+    'zone_up':   {col:'var(--ylw)', bg:'rgba(255,193,7,.15)', ico:'⚡', txt:delta.label_short||'ZONE YÜKSELDİ'},
+    'zone_down': {col:'var(--orn)', bg:'rgba(255,167,38,.15)', ico:'🔻', txt:delta.label_short||'ZONE DÜŞTÜ'},
+    'score_up':  {col:'var(--grn)', bg:'var(--grnd)',  ico:'📈', txt:`${delta.label_short||'+'} PUAN`},
+    'score_down':{col:'var(--red)', bg:'var(--redd)',  ico:'📉', txt:`${delta.label_short||'-'} PUAN`},
+  }[delta.type];
+  if(!m) return '';
+  return `<span style="display:inline-flex;align-items:center;gap:4px;background:${m.bg};color:${m.col};font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;padding:3px 8px;border-radius:4px;letter-spacing:.4px;text-transform:uppercase">${m.ico} ${esc(m.txt)}</span>`;
+}
+
+// ── 7-günlük skor sparkline (mini bar chart). Eksik günler boş bar.
+// Yatırım sinyali değil, sadece "skor zaman içinde nasıl gelişti" gözlemi.
+function _bwSparkline(history){
+  if(!history||!history.some(v=>v!=null)) return '';
+  const W=70, H=18, n=history.length, gap=1;
+  const bw=(W-gap*(n-1))/n;
+  const max=100; // skor 0-100 arası, sabit ölçek (relative değil)
+  const bars=history.map((v,i)=>{
+    if(v==null) return `<rect x="${i*(bw+gap)}" y="${H-2}" width="${bw}" height="2" fill="var(--bg3)" rx="1"/>`;
+    const h=Math.max(2,(v/max)*H);
+    return `<rect x="${i*(bw+gap)}" y="${H-h}" width="${bw}" height="${h}" fill="var(--t3)" rx="1"/>`;
+  }).join('');
+  return `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" style="display:block">${bars}</svg>`;
+}
+
+// ── Watchlist localStorage utility — kişisel cihaza özel takip listesi
+const _BW_WATCHLIST_KEY='bw_watchlist_v1';
+function bwGetWatchlist(){
+  try{ return JSON.parse(localStorage.getItem(_BW_WATCHLIST_KEY)||'[]'); }catch{ return []; }
+}
+function bwSetWatchlist(list){
+  try{ localStorage.setItem(_BW_WATCHLIST_KEY, JSON.stringify(list)); }catch{}
+  S._bwWatchlist=list;
+}
+function bwToggleWatchlist(symbol){
+  const list=bwGetWatchlist();
+  const i=list.indexOf(symbol);
+  if(i>=0) list.splice(i,1); else list.push(symbol);
+  bwSetWatchlist(list);
+  // re-render to update the star + watchlist section
+  if(typeof renderBullwatchPage==='function') renderBullwatchPage();
+}
+function _bwIsWatched(symbol){
+  return (S._bwWatchlist||bwGetWatchlist()).includes(symbol);
+}
+
+// ── Takip Listesi mini kartı — sparkline + kısa durum.
+// "AL/SAT" yerine "yükseldi/düştü/soğudu" gözlem dili.
+function _bwWatchCard(it){
+  const symbol=it.symbol;
+  const elig=it.eligible;
+  const cooled=it.cooled_off;
+  const score=it.score;
+  const zone=it.zone;
+  const delta=it.delta;
+  const history=it.score_history_7d||[];
+  const sparkSvg=_bwSparkline(history);
+  // Renk şeması: eligible+positive trend = yeşil-ish; cooled = sarı; ineligible & no history = gri
+  let borderCol='var(--bdr)';
+  let stateLine='';
+  if(elig){
+    const z=_bwZoneStyle(zone);
+    borderCol=z.col;
+    const dt=delta?.type;
+    if(dt==='zone_up') stateLine=`<span style="color:var(--ylw);font-size:10px;font-weight:700">⚡ ${esc(delta.label_short||'')}</span>`;
+    else if(dt==='new') stateLine=`<span style="color:var(--blu);font-size:10px;font-weight:700">🆕 yeni eligible</span>`;
+    else if(dt==='score_up') stateLine=`<span style="color:var(--grn);font-size:10px;font-weight:700">📈 ${esc(delta.label_short||'')}</span>`;
+    else if(dt==='score_down') stateLine=`<span style="color:var(--red);font-size:10px;font-weight:700">📉 ${esc(delta.label_short||'')}</span>`;
+    else stateLine=`<span style="color:var(--t3);font-size:10px">${esc(zone||'—')}</span>`;
+  }else if(cooled){
+    borderCol='var(--orn)';
+    stateLine=`<span style="color:var(--orn);font-size:10px;font-weight:700">📊 SOĞUDU · dün ${it.prev_score?.toFixed(0)||'?'} idi</span>`;
+  }else{
+    stateLine=`<span style="color:var(--t4);font-size:10px">eligible değil</span>`;
+  }
+  return `<div style="background:var(--bg2);border:1px solid ${borderCol};border-left-width:3px;border-radius:6px;padding:8px 10px;display:flex;flex-direction:column;gap:4px">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:6px">
+      <span class="clk-t" style="font-weight:700;font-size:13px" onclick="loadTicker('${esc(symbol)}')">${esc(symbol)}</span>
+      <button onclick="event.stopPropagation();bwToggleWatchlist('${esc(symbol)}')" title="Takipten çıkar" style="background:none;border:0;cursor:pointer;color:var(--ylw);font-size:14px;padding:0;line-height:1">★</button>
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:4px">
+      <span style="font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:700;color:${elig?'var(--t1)':'var(--t3)'}">${score!=null?score.toFixed(0):'—'}</span>
+      ${sparkSvg}
+    </div>
+    ${stateLine}
+  </div>`;
+}
+
 function _bwCard(item){
   const z = _bwZoneStyle(item.zone);
   const score = (item.score||0).toFixed(0);
@@ -675,14 +770,20 @@ function _bwCard(item){
   const sec = item.sector_tr || 'Diğer';
   const ss = _bwSectorStyle(sec);
   const narr = item.narrative || {};
+  const trendHtml = _bwTrendBadge(item.delta);
+  const watched = _bwIsWatched(item.symbol);
   return `<div class="pkc" style="border-left-color:${z.col};margin-bottom:0">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:8px">
       <div style="flex:1;min-width:0">
-        <div class="clk-t" style="font-size:18px;font-weight:700" onclick="loadTicker('${esc(item.symbol)}')">${esc(item.symbol)}</div>
-        <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <span class="clk-t" style="font-size:18px;font-weight:700" onclick="loadTicker('${esc(item.symbol)}')">${esc(item.symbol)}</span>
+          <button onclick="event.stopPropagation();bwToggleWatchlist('${esc(item.symbol)}')" title="${watched?'Takipten çıkar':'Takip et'}" style="background:none;border:0;cursor:pointer;font-size:16px;padding:2px;line-height:1;color:${watched?'var(--ylw)':'var(--t4)'}">${watched?'★':'☆'}</button>
+        </div>
+        <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;align-items:center">
           <span class="pill ${z.pill}">${z.icon} ${z.label}</span>
           <span style="display:inline-flex;align-items:center;gap:4px;background:${ss.bg};color:${ss.col};font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:600;padding:3px 8px;border-radius:4px;text-transform:uppercase;letter-spacing:.4px">${ss.ico} ${esc(sec)}</span>
           ${_bwDqBadge(item.data_quality||'medium')}
+          ${trendHtml}
         </div>
       </div>
       <div style="text-align:right;flex-shrink:0">
@@ -718,10 +819,20 @@ function renderBullwatchPage(){
     return;
   }
   const items=bw?.items||[];
+  // Trend rozeti taşıyanları başa sırala — kullanıcı "ne yeni, ne ısınıyor"
+  // sorusunu tek bakışta görsün. Sıralama BullWatch felsefesini bozmaz:
+  // skor hâlâ ana metrik, sadece görsel öncelik trend taşıyanlara verilir.
+  const _trendRank={'zone_up':1,'new':2,'score_up':3,'zone_down':4,'score_down':5,'stable':6};
+  const sortedItems=[...items].sort((a,b)=>{
+    const ra=_trendRank[a.delta?.type||'stable']||6;
+    const rb=_trendRank[b.delta?.type||'stable']||6;
+    if(ra!==rb) return ra-rb;
+    return (b.score||0)-(a.score||0); // tie-break by score
+  });
   const filt=S._bwZone||'all';
   const sectFilt=S._bwSector||'all';
   // Apply both filters: zone first, then sector
-  let filtered=filt==='all'?items:items.filter(i=>i.zone===filt);
+  let filtered=filt==='all'?sortedItems:sortedItems.filter(i=>i.zone===filt);
   if(sectFilt!=='all') filtered=filtered.filter(i=>(i.sector_tr||'Diğer')===sectFilt);
   const counts={
     all:items.length,
@@ -763,6 +874,51 @@ function renderBullwatchPage(){
     <button class="btn btn-sm ${sectFilt==='all'?'btn-grn':''}" style="${sectFilt!=='all'?'background:var(--bg3);color:var(--t2)':''};font-size:11px;padding:4px 10px;min-height:32px" onclick="S._bwSector='all';renderBullwatchPage()">Tümü (${zoneFiltered.length})</button>
     ${visibleSects.map(s=>{const ss=_bwSectorStyle(s);const on=sectFilt===s;return `<button class="btn btn-sm" style="background:${on?ss.bg:'var(--bg3)'};color:${ss.col};border:${on?'1px solid '+ss.col:'1px solid transparent'};font-size:11px;padding:4px 10px;min-height:32px" onclick="S._bwSector='${esc(s)}';renderBullwatchPage()">${ss.ico} ${esc(s)} (${sectCounts[s]})</button>`}).join('')}
   </div>`:''}`;
+
+  // ── Trend özeti — bugün vs dün, kaç YENİ / YÜKSELEN / DÜŞEN var
+  const trendCounts={new:0,zone_up:0,score_up:0,zone_down:0,score_down:0};
+  items.forEach(i=>{const t=i.delta?.type;if(t&&trendCounts[t]!==undefined)trendCounts[t]++;});
+  const totalTrendActivity=trendCounts.new+trendCounts.zone_up+trendCounts.score_up+trendCounts.zone_down+trendCounts.score_down;
+  if(totalTrendActivity>0){
+    h+=`<div style="margin-bottom:14px;padding:12px 14px;background:var(--bg3);border-radius:var(--rad);border:1px solid var(--bdr)">
+      <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--t4);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">📊 BUGÜN DÜNDEN FARKLI OLANLAR</div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;font-size:12px">
+        ${trendCounts.zone_up?`<span style="color:var(--ylw);font-weight:700">⚡ ${trendCounts.zone_up} zone yükseldi</span>`:''}
+        ${trendCounts.new?`<span style="color:var(--blu);font-weight:700">🆕 ${trendCounts.new} yeni eligible</span>`:''}
+        ${trendCounts.score_up?`<span style="color:var(--grn);font-weight:700">📈 ${trendCounts.score_up} skor yükseldi</span>`:''}
+        ${trendCounts.score_down?`<span style="color:var(--red)">📉 ${trendCounts.score_down} skor düştü</span>`:''}
+        ${trendCounts.zone_down?`<span style="color:var(--orn)">🔻 ${trendCounts.zone_down} zone düştü</span>`:''}
+      </div>
+    </div>`;
+  }
+
+  // ── Takip Listesi — kullanıcının localStorage'a eklediği semboller
+  // Backend'i stateless tutuyoruz: server zenginleştirme yapar, liste cihazda
+  const watchlist=bwGetWatchlist();
+  S._bwWatchlist=watchlist;
+  if(watchlist.length){
+    // Async fetch enriched state for watchlist
+    if(!S._bwWatchlistState||S._bwWatchlistFetchedFor!==JSON.stringify(watchlist)){
+      S._bwWatchlistFetchedFor=JSON.stringify(watchlist);
+      fetch('/api/bullwatch/watchlist/state',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({symbols:watchlist})
+      }).then(r=>r.json()).then(d=>{
+        S._bwWatchlistState=d.data?.items||d.items||[];
+        renderBullwatchPage();
+      }).catch(()=>{});
+    }
+    h+=`<div style="margin-bottom:14px;padding:14px;background:rgba(255,193,7,.06);border:1px solid rgba(255,193,7,.25);border-radius:var(--rad)">
+      <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--ylw);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center">
+        <span>🌟 TAKİP LİSTESİ (${watchlist.length})</span>
+        <span style="font-size:9px;color:var(--t4);text-transform:none;letter-spacing:0">cihazına özel · localStorage</span>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px">
+        ${(S._bwWatchlistState||watchlist.map(s=>({symbol:s,eligible:false,score_history_7d:[]}))).map(it=>_bwWatchCard(it)).join('')}
+      </div>
+    </div>`;
+  }
   if(!filtered.length){
     h+=`<div class="emp" style="padding:30px 20px"><h3 style="color:var(--t2)">${items.length?'Bu zone için aday yok':'BullWatch evrenine uyan hisse bulunamadı'}</h3>
       <p style="color:var(--t4);font-size:12px;margin-top:8px">Filtreler: float ≤${capStr} · 20g hacim ≥5M TL</p>
