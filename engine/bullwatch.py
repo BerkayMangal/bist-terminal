@@ -904,7 +904,10 @@ def scan(symbols: list[str],
     # Resolve default providers lazily so that tests don't need to
     # have borsapy installed.
     if metrics_fn is None:
-        from data.providers import compute_metrics_v9 as _m
+        # Use the BullWatch cache layer: Redis-backed + sanity-checked
+        # + manual-override-aware. Falls through to compute_metrics_v9
+        # on cache miss. Big win on warmup where most symbols are warm.
+        from data.bullwatch_cache import cached_compute_metrics as _m
         metrics_fn = _m  # type: ignore
     if history_fn is None:
         from engine.technical import batch_download_history as _h

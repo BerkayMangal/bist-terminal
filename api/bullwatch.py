@@ -17,7 +17,7 @@ import logging
 import time
 from typing import Any, Optional
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, Body
 from fastapi.responses import JSONResponse
 
 from core.response_envelope import success, error
@@ -130,8 +130,22 @@ def _run_scan(min_score: float = 0.0,
         for r in ineligible[:20]
     ]
 
+    items = [r.to_dict() for r in eligible]
+
+    # Annotate each item with a `delta` field (vs yesterday's snapshot).
+    # Fail-soft: if Redis is down or no history, items get a stable/no-op
+    # delta and the rest of the response is unaffected.
+    try:
+        from data.bullwatch_history import annotate_with_deltas, save_snapshot
+        annotate_with_deltas(items)
+        # Persist this scan's results so tomorrow's scan can compute delta.
+        # Save AFTER annotation so we don't compare today against itself.
+        save_snapshot(items)
+    except Exception as e:
+        log.warning("BullWatch history annotate/save failed: %r", e)
+
     return {
-        "items": [r.to_dict() for r in eligible],
+        "items": items,
         "scanned": len(universe),
         "eligible_count": sum(1 for r in results if r.eligible),
         "ineligible_count": sum(1 for r in results if not r.eligible),
@@ -379,6 +393,117 @@ async def api_bullwatch_health():
         "scan_total": total,
         "scan_progress_pct": round(progress / total * 100, 1) if total else None,
         "scan_elapsed_sec": round(elapsed_sec, 1) if elapsed_sec is not None else None,
+        "cache": _cache_stats_safe(),
+        "history": _history_stats_safe(),
+    })
+
+
+def _cache_stats_safe() -> dict:
+    """Safely fetch BullWatch metrics-cache stats — never raise from health check."""
+    try:
+        from data.bullwatch_cache import get_stats
+        return get_stats()
+    except Exception:
+        return {"error": "stats_unavailable"}
+
+
+def _history_stats_safe() -> dict:
+    """Safely fetch BullWatch snapshot history stats."""
+    try:
+        from data.bullwatch_history import get_history_stats
+        return get_history_stats()
+    except Exception:
+        return {"error": "stats_unavailable"}
+
+
+@router.post("/api/bullwatch/watchlist/state")
+async def api_bullwatch_watchlist_state(
+    payload: dict = Body(...),
+):
+    """
+    Stateless watchlist enrichment.
+
+    The watchlist itself lives in the user's browser (localStorage —
+    keeps it private to the device, no server-side personal data).
+    The frontend POSTs `{symbols: ["KAPLM", "KARTN", ...]}` and gets
+    back the latest known state of each: current eligibility, score,
+    zone, delta vs yesterday, plus a 7-day score history for the
+    sparkline.
+
+    Items the user is watching but that aren't currently eligible get
+    a `cooled_off` flag so the UI can mark them — important signal
+    for tape readers ("the absorption setup I was watching has
+    dissipated"). NOT a sell recommendation; just a state change.
+    """
+    symbols = payload.get("symbols") or []
+    if not isinstance(symbols, list):
+        return error("symbols must be a list")
+
+    # Cap the request size — defensive limit for a tool with no auth.
+    symbols = [str(s).upper().strip() for s in symbols if s][:100]
+
+    # Pull current scan results (cache hit if warmup ran recently)
+    items_index: dict[str, dict] = {}
+    if _CACHE.get("items"):
+        for it in _CACHE["items"].get("items", []):
+            items_index[it["symbol"]] = it
+
+    # Yesterday's snapshot for delta computation when symbol isn't in
+    # today's eligible set
+    try:
+        from data.bullwatch_history import (
+            get_yesterday_snapshot, get_score_history,
+            compute_delta_for_item,
+        )
+        yesterday = get_yesterday_snapshot()
+    except Exception:
+        yesterday = None
+        get_score_history = lambda *_a, **_kw: [None] * 7  # type: ignore
+
+    out = []
+    for sym in symbols:
+        current = items_index.get(sym)
+        if current:
+            # Eligible right now
+            try:
+                history = get_score_history(sym, days=7)
+            except Exception:
+                history = [None] * 7
+            out.append({
+                "symbol": sym,
+                "eligible": True,
+                "score": current.get("score"),
+                "zone": current.get("zone"),
+                "pattern": current.get("pattern"),
+                "sector_tr": current.get("sector_tr"),
+                "delta": current.get("delta"),
+                "score_history_7d": history,
+                "cooled_off": False,
+            })
+        else:
+            # Not in today's eligible set. Was it in yesterday's?
+            prior = (yesterday or {}).get(sym)
+            try:
+                history = get_score_history(sym, days=7)
+            except Exception:
+                history = [None] * 7
+            out.append({
+                "symbol": sym,
+                "eligible": False,
+                "score": None,
+                "zone": None,
+                "pattern": None,
+                "sector_tr": None,
+                "delta": None,
+                "prev_score": prior.get("score") if prior else None,
+                "prev_zone": prior.get("zone") if prior else None,
+                "score_history_7d": history,
+                "cooled_off": prior is not None,  # was eligible yesterday
+            })
+
+    return success({
+        "items": out,
+        "as_of": dt.datetime.now(dt.timezone.utc).isoformat(),
     })
 
 
