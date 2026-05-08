@@ -36,6 +36,7 @@ from features.bullwatch_features import (
     detect_shakeout_recovery, detect_absorption,
     detect_tight_closes, detect_walk_up_accumulation,
     detect_price_action_patterns, ownership_signal,
+    normalize_free_float,
     FLOAT_MARKET_CAP_CAP_TL, LIQUIDITY_FLOOR_TL,
 )
 from engine.bullwatch import (
@@ -112,21 +113,49 @@ class TestFloatMarketCap:
         assert float_market_cap(None, 0.3) is None
         assert float_market_cap(1e9, None) is None
 
+
+class TestNormalizeFreeFloat:
+    """Regression tests for the 710%/1890% display bug."""
+
+    def test_already_fraction(self):
+        assert normalize_free_float(0.35) == 0.35
+        assert normalize_free_float(0.001) == 0.001
+
+    def test_percentage_form(self):
+        assert normalize_free_float(35.0) == 0.35
+        assert normalize_free_float(7.1) == 0.071  # ICBCT case
+        assert normalize_free_float(18.9) == pytest.approx(0.189)  # GLCVY case
+
+    def test_boundary_one(self):
+        assert normalize_free_float(1.0) == 1.0   # exactly 100%
+        assert normalize_free_float(100.0) == 1.0  # 100% in percentage form
+
+    def test_nonsense_rejected(self):
+        # >100% is impossible, refuse to guess
+        assert normalize_free_float(150) is None
+        assert normalize_free_float(710) is None
+        assert normalize_free_float(0) is None
+        assert normalize_free_float(-5) is None
+        assert normalize_free_float(None) is None
+        assert normalize_free_float("bad") is None
+
     def test_invalid_freefloat(self):
         assert float_market_cap(1e9, 0) is None
-        assert float_market_cap(1e9, 1.5) is None  # above 100% but below 1.5 threshold? no, 1.5 is rejected
+        assert float_market_cap(1e9, 150) is None  # >100% nonsense
         # 0.5 should work
         assert float_market_cap(1e9, 0.5) == 500_000_000
+        # 50.0 (percentage form) → 0.5
+        assert float_market_cap(1e9, 50.0) == 500_000_000
 
     def test_passes_cap(self):
-        # 100M float mcap → passes 1B cap
+        # 100M float mcap → passes 3B cap
         assert passes_float_cap(500_000_000, 0.20) is True
-        # 200M float mcap → passes 1B cap
-        assert passes_float_cap(1_000_000_000, 0.20) is True
-        # 600M float mcap → still passes 1B cap
+        # 600M float mcap → passes 3B cap
         assert passes_float_cap(3_000_000_000, 0.20) is True
-        # 1.2B float mcap → fails 1B cap
-        assert passes_float_cap(6_000_000_000, 0.20) is False
+        # 2B float mcap → passes 3B cap
+        assert passes_float_cap(10_000_000_000, 0.20) is True
+        # 4B float mcap → fails 3B cap
+        assert passes_float_cap(20_000_000_000, 0.20) is False
         # Explicit cap_tl override still works
         assert passes_float_cap(1_000_000_000, 0.20, cap_tl=150_000_000) is False
 
@@ -512,10 +541,10 @@ class TestScoreSymbolE2E:
         assert r.score <= 100.0
 
     def test_runtime_cap_tl_override(self, healthy_metrics, quiet_df):
-        # healthy_metrics has 500M mcap × 0.25 = 125M float (passes default 1B)
+        # healthy_metrics has 500M mcap × 0.25 = 125M float (passes default 3B)
         df = quiet_df.copy()
         df["Volume"] = 1_000_000.0
-        # Default cap (1B): eligible
+        # Default cap (3B): eligible
         r1 = score_symbol(healthy_metrics, df)
         assert r1.eligible is True
         # Tight cap (50M): rejected, with reason mentioning the override

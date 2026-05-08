@@ -32,7 +32,7 @@ except Exception:  # pragma: no cover — exercised only if pandas missing
 # Tunable thresholds — kept here as module constants so the engine
 # layer stays focused on scoring logic.
 # ----------------------------------------------------------------
-FLOAT_MARKET_CAP_CAP_TL: float = 1_000_000_000.0     # universe filter (1B TL — BIST nominal values inflated)
+FLOAT_MARKET_CAP_CAP_TL: float = 3_000_000_000.0     # universe filter (3B TL — BIST sweet spot for low-float micro-caps)
 LIQUIDITY_FLOOR_TL: float = 5_000_000.0              # 20d avg traded value
 PRICE_CALM_PCT: float = 0.08                         # |5d return| < 8%
 
@@ -72,6 +72,29 @@ def _safe_div(a: Optional[float], b: Optional[float]) -> Optional[float]:
     return a_ / b_
 
 
+def normalize_free_float(ff: Any) -> Optional[float]:
+    """
+    yfinance returns free_float in inconsistent units:
+      - some stocks: fraction in [0, 1]   (e.g., 0.35)
+      - some stocks: percentage in [0, 100] (e.g., 35.0)
+      - some stocks: raw multiplier > 100 (data quality issue)
+
+    Always return a float in [0, 1] or None for nonsense values.
+    """
+    v = _safe_num(ff)
+    if v is None:
+        return None
+    if v <= 0:
+        return None
+    if v <= 1.0:
+        return v             # already a fraction
+    if v <= 100.0:
+        return v / 100.0     # percentage form
+    # > 100 is nonsense — could be a data error or a scaled-shares figure;
+    # we refuse to guess
+    return None
+
+
 # ================================================================
 # UNIVERSE FILTERS — the gate before scoring even begins.
 # ================================================================
@@ -80,17 +103,11 @@ def float_market_cap(market_cap: Optional[float],
     """
     Float market cap = market_cap * free_float.
 
-    free_float is expected as a fraction in [0, 1] (the borsapy
-    fast_info convention). If a percentage (e.g. 35.0) sneaks in
-    we normalize it.
+    free_float is normalized to [0, 1] — see normalize_free_float().
     """
     mc = _safe_num(market_cap)
-    ff = _safe_num(free_float)
+    ff = normalize_free_float(free_float)
     if mc is None or ff is None:
-        return None
-    if ff > 1.5:           # someone passed a percentage
-        ff = ff / 100.0
-    if ff <= 0 or ff > 1:  # nonsense → reject
         return None
     return mc * ff
 
@@ -164,17 +181,13 @@ def float_pressure(df, shares_outstanding: Optional[float],
     daily_volume / floating_shares.
 
     floating_shares = shares_outstanding * free_float.
-    Free-float is normalized the same way as float_market_cap().
+    free_float normalized to [0, 1] via normalize_free_float().
     """
     if not _PANDAS or df is None or len(df) == 0:
         return None
     so = _safe_num(shares_outstanding)
-    ff = _safe_num(free_float)
+    ff = normalize_free_float(free_float)
     if so is None or ff is None or so <= 0:
-        return None
-    if ff > 1.5:
-        ff = ff / 100.0
-    if ff <= 0 or ff > 1:
         return None
     floating = so * ff
     if floating <= 0:

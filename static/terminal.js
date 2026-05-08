@@ -734,10 +734,21 @@ function renderBullwatchPage(){
         <p style="color:var(--t3);font-size:11px;margin-bottom:12px">Float cap'i bu hisseleri yakalamak üzere ayarlayabilirsin. URL'ye <code style="color:var(--cyn)">?cap_tl=2000000000</code> ekleyerek deneyebilirsin (örn. 2 milyar).</p>`;
       // Desktop: tablo
       h+=`<div class="card bw-near-table"><div class="card-b" style="overflow-x:auto"><table class="dtb"><thead><tr><th>#</th><th>Ticker</th><th>Float Mcap</th><th>Mcap</th><th>Free Float</th><th>20g Hacim</th><th>Sebep</th></tr></thead><tbody>`;
+      // Defensive normalization — backend should already normalize, but
+      // raw weird values (>1) should never display as "1890%"
+      function _ffNorm(v){
+        if(v==null) return null;
+        const n=Number(v);
+        if(!isFinite(n)||n<=0) return null;
+        if(n<=1.0) return n;            // already a fraction
+        if(n<=100.0) return n/100.0;    // percentage form
+        return null;                    // nonsense > 100%
+      }
       nearMisses.forEach((n,i)=>{
         const fmc=n.float_market_cap?`${(n.float_market_cap/1e6).toFixed(0)}M TL`:'—';
         const mc=n.market_cap?`${(n.market_cap/1e9).toFixed(1)}B TL`:'—';
-        const ff=n.free_float?`${(n.free_float*100).toFixed(0)}%`:'—';
+        const ffN=_ffNorm(n.free_float);
+        const ff=ffN!=null?`${(ffN*100).toFixed(0)}%`:'—';
         const atv=n.avg_traded_value_20d?`${(n.avg_traded_value_20d/1e6).toFixed(1)}M TL`:'—';
         h+=`<tr><td style="color:var(--t3)">${i+1}</td><td class="clk-t" onclick="loadTicker('${esc(n.symbol)}')">${esc(n.symbol)}</td><td style="color:var(--ylw);font-weight:700">${fmc}</td><td style="color:var(--t2)">${mc}</td><td style="color:var(--t2)">${ff}</td><td style="color:var(--t2)">${atv}</td><td style="color:var(--t4);font-size:10px">${esc(n.reject_reason||'')}</td></tr>`;
       });
@@ -747,7 +758,8 @@ function renderBullwatchPage(){
       nearMisses.forEach((n,i)=>{
         const fmc=n.float_market_cap?`${(n.float_market_cap/1e6).toFixed(0)}M`:'—';
         const mc=n.market_cap?`${(n.market_cap/1e9).toFixed(1)}B`:'—';
-        const ff=n.free_float?`${(n.free_float*100).toFixed(0)}%`:'—';
+        const ffN=_ffNorm(n.free_float);
+        const ff=ffN!=null?`${(ffN*100).toFixed(0)}%`:'—';
         const atv=n.avg_traded_value_20d?`${(n.avg_traded_value_20d/1e6).toFixed(1)}M`:'—';
         h+=`<div style="background:var(--bg3);border:1px solid var(--bdr);border-radius:var(--rad);padding:12px;margin-bottom:8px">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
