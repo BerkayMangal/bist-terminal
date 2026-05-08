@@ -502,7 +502,9 @@ def scan(symbols: list[str],
          max_workers: int = 8,
          min_score: float = 0.0,
          include_ineligible: bool = False,
-         cap_tl: Optional[float] = None) -> list[BullWatchResult]:
+         cap_tl: Optional[float] = None,
+         progress_callback: Optional[Callable[[int, int], None]] = None,
+         ) -> list[BullWatchResult]:
     """
     Run BullWatch across a universe.
 
@@ -550,9 +552,17 @@ def scan(symbols: list[str],
             return None
 
     results: list[BullWatchResult] = []
+    total = len(symbols)
+    processed = 0
     with ThreadPoolExecutor(max_workers=max_workers) as pool:
         futures = {pool.submit(_score_one, s): s for s in symbols}
         for fut in as_completed(futures):
+            processed += 1
+            if progress_callback is not None:
+                try:
+                    progress_callback(processed, total)
+                except Exception:
+                    pass  # callback failure must never break the scan
             r = fut.result()
             if r is None:
                 continue
