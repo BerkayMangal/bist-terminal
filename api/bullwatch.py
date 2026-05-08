@@ -78,55 +78,56 @@ def _run_scan(min_score: float = 0.0,
               diagnostic: bool = False) -> dict[str, Any]:
     """Synchronous scan — called from a thread executor.
 
-    When `diagnostic=True`, the response also includes the top 20
-    ineligible-but-closest-to-passing symbols, sorted by float mcap
-    ascending. Useful for tuning the cap when nothing qualifies.
+    Always includes a `near_misses` array in the response: the 20
+    ineligible-but-closest-to-passing symbols sorted by float mcap
+    ascending. This guarantees the empty state is never empty —
+    user sees what JUST missed and why, no second request needed.
+    The `diagnostic` flag is kept for backward-compat but no longer
+    changes the response shape (always full).
     """
     from engine.bullwatch import scan
+    from features.bullwatch_features import FLOAT_MARKET_CAP_CAP_TL
     universe = _resolve_universe()
     t0 = time.time()
-    # When diagnostic, run with include_ineligible so we can surface "near misses"
+    # Always include_ineligible=True — it's just a filter on already-computed
+    # results, no extra fetches. Lets us surface near_misses for free.
     # max_workers=16 — yfinance fetches are I/O-bound, GIL doesn't apply.
-    # 16 threads vs 8 typically halves wall-clock on a cold cache.
     results = scan(universe, min_score=min_score,
-                   include_ineligible=diagnostic, cap_tl=cap_tl,
+                   include_ineligible=True, cap_tl=cap_tl,
                    max_workers=16)
     eligible = [r for r in results if r.eligible]
     if limit:
         eligible = eligible[:limit]
 
-    payload: dict[str, Any] = {
+    # Near-misses: ineligible with KNOWN float mcap, sorted ascending so
+    # the smallest (= closest to passing) come first.
+    ineligible = [
+        r for r in results
+        if not r.eligible and r.metrics.get("float_market_cap") is not None
+    ]
+    ineligible.sort(key=lambda r: r.metrics.get("float_market_cap") or 0)
+    near_misses = [
+        {
+            "symbol": r.symbol,
+            "float_market_cap": r.metrics.get("float_market_cap"),
+            "market_cap": r.metrics.get("market_cap"),
+            "free_float": r.metrics.get("free_float"),
+            "avg_traded_value_20d": r.metrics.get("avg_traded_value_20d"),
+            "reject_reason": r.reject_reason,
+        }
+        for r in ineligible[:20]
+    ]
+
+    return {
         "items": [r.to_dict() for r in eligible],
         "scanned": len(universe),
         "eligible_count": sum(1 for r in results if r.eligible),
         "ineligible_count": sum(1 for r in results if not r.eligible),
-        "cap_tl": cap_tl or 250_000_000.0,
+        "cap_tl": cap_tl or FLOAT_MARKET_CAP_CAP_TL,
+        "near_misses": near_misses,
         "as_of": dt.datetime.now(dt.timezone.utc).isoformat(),
         "duration_ms": round((time.time() - t0) * 1000, 0),
     }
-
-    if diagnostic:
-        # Find ineligible ones with KNOWN float mcaps (drop "no float data"),
-        # sort ascending — smallest float caps are the closest to passing if we
-        # were to bump the cap. Cap at 20 for response size.
-        ineligible = [
-            r for r in results
-            if not r.eligible and r.metrics.get("float_market_cap") is not None
-        ]
-        ineligible.sort(key=lambda r: r.metrics.get("float_market_cap") or 0)
-        payload["near_misses"] = [
-            {
-                "symbol": r.symbol,
-                "float_market_cap": r.metrics.get("float_market_cap"),
-                "market_cap": r.metrics.get("market_cap"),
-                "free_float": r.metrics.get("free_float"),
-                "avg_traded_value_20d": r.metrics.get("avg_traded_value_20d"),
-                "reject_reason": r.reject_reason,
-            }
-            for r in ineligible[:20]
-        ]
-
-    return payload
 
 
 # ================================================================

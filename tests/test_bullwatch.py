@@ -119,12 +119,14 @@ class TestFloatMarketCap:
         assert float_market_cap(1e9, 0.5) == 500_000_000
 
     def test_passes_cap(self):
-        # 100M float mcap → passes 250M cap
+        # 100M float mcap → passes 1B cap
         assert passes_float_cap(500_000_000, 0.20) is True
-        # 200M float mcap → also passes 250M cap (was failing under 150M)
+        # 200M float mcap → passes 1B cap
         assert passes_float_cap(1_000_000_000, 0.20) is True
-        # 300M float mcap → fails 250M cap
-        assert passes_float_cap(1_500_000_000, 0.20) is False
+        # 600M float mcap → still passes 1B cap
+        assert passes_float_cap(3_000_000_000, 0.20) is True
+        # 1.2B float mcap → fails 1B cap
+        assert passes_float_cap(6_000_000_000, 0.20) is False
         # Explicit cap_tl override still works
         assert passes_float_cap(1_000_000_000, 0.20, cap_tl=150_000_000) is False
 
@@ -510,18 +512,18 @@ class TestScoreSymbolE2E:
         assert r.score <= 100.0
 
     def test_runtime_cap_tl_override(self, healthy_metrics, quiet_df):
-        # healthy_metrics has 500M mcap × 0.25 = 125M float (passes default 250M)
+        # healthy_metrics has 500M mcap × 0.25 = 125M float (passes default 1B)
         df = quiet_df.copy()
         df["Volume"] = 1_000_000.0
-        # Default cap (250M): eligible
+        # Default cap (1B): eligible
         r1 = score_symbol(healthy_metrics, df)
         assert r1.eligible is True
         # Tight cap (50M): rejected, with reason mentioning the override
         r2 = score_symbol(healthy_metrics, df, cap_tl=50_000_000)
         assert r2.eligible is False
         assert "50M cap" in (r2.reject_reason or "")
-        # Loose cap (1B): definitely eligible
-        r3 = score_symbol(healthy_metrics, df, cap_tl=1_000_000_000)
+        # Loose cap (10B): definitely eligible
+        r3 = score_symbol(healthy_metrics, df, cap_tl=10_000_000_000)
         assert r3.eligible is True
 
 
