@@ -745,6 +745,7 @@ function renderBullwatchPage(){
     <div>
       <h2 style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-lg);color:var(--acc)">🐂 BullWatch — Sessiz Birikim Radarı</h2>
       <p style="font-size:var(--fs-sm);color:var(--t3);margin-top:2px">${asof?new Date(asof).toLocaleString('tr-TR'):''} · ${scanned} hisse tarandı · ${eligible} eleğe takıldı · float ≤${capStr}</p>
+      <p style="font-size:10px;color:var(--t4);margin-top:2px;font-family:'JetBrains Mono',monospace">📅 Veri: son tamamlanmış işlem günü (intraday partial bar dışlandı — gün içinde sonuçlar tutarlı)</p>
     </div>
     <button class="btn btn-grn" onclick="loadBullwatch(true)">🔄 YENİDEN TARA</button>
   </div>
