@@ -728,16 +728,28 @@ def scan(symbols: list[str],
     results: list[BullWatchResult] = []
     total = len(symbols)
     processed = 0
-    with ThreadPoolExecutor(max_workers=max_workers) as pool:
-        futures = {pool.submit(_score_one, s): s for s in symbols}
-        for fut in as_completed(futures):
+    # Per-symbol timeout: each future must complete within this budget.
+    # yfinance occasionally returns 0-byte responses that hang for ~90s.
+    # If 2-3 stragglers do this, the whole scan stalls forever via the
+    # default `with ThreadPoolExecutor` block (which waits on shutdown).
+    # We use as_completed(timeout=...) measured from start-of-loop, and
+    # whichever futures haven't returned by then are cancelled.
+    SCAN_TIMEOUT_SEC = 240  # 4 minutes total budget for the scan loop
+    pool = ThreadPoolExecutor(max_workers=max_workers)
+    futures = {pool.submit(_score_one, s): s for s in symbols}
+    try:
+        for fut in as_completed(futures, timeout=SCAN_TIMEOUT_SEC):
             processed += 1
             if progress_callback is not None:
                 try:
                     progress_callback(processed, total)
                 except Exception:
                     pass  # callback failure must never break the scan
-            r = fut.result()
+            try:
+                r = fut.result(timeout=1)  # already done — instant
+            except Exception as exc:
+                log.debug("BullWatch future failed: %r", exc)
+                continue
             if r is None:
                 continue
             if not r.eligible and not include_ineligible:
@@ -747,6 +759,20 @@ def scan(symbols: list[str],
                 if min_score > 0:
                     continue
             results.append(r)
+    except TimeoutError:
+        # Scan budget exceeded — yfinance has stragglers. Take what we got
+        # and cancel everything else. This is the critical guarantee:
+        # scan() ALWAYS returns within SCAN_TIMEOUT_SEC, never hangs.
+        unfinished = [f for f in futures if not f.done()]
+        log.warning(
+            "BullWatch scan: %d/%d futures done, %d cancelled after %ds budget",
+            processed, total, len(unfinished), SCAN_TIMEOUT_SEC,
+        )
+        for f in unfinished:
+            f.cancel()
+    finally:
+        # Don't wait for stragglers; cancel and move on.
+        pool.shutdown(wait=False, cancel_futures=True)
 
     # Sort: eligible by score desc, ineligible last
     results.sort(key=lambda r: (not r.eligible, -r.score))

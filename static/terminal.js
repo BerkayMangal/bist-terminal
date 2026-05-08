@@ -891,24 +891,28 @@ async function _bwPollUntilReady(fetchPromise){
       const total=h.scan_total||1;
       const pct=h.scan_progress_pct||0;
       const elapsed=h.scan_elapsed_sec||0;
-      const eta=done>0?Math.round((elapsed/done)*(total-done)):'?';
+      const eta=done>0&&pct<99?Math.round((elapsed/done)*(total-done)):null;
+      const isStragglers=pct>=98 && done<total;  // last few stuck on yfinance timeouts
+      const elapsedStr=elapsed>=120?`${(elapsed/60).toFixed(1)}dk`:`${elapsed.toFixed(0)}s`;
       pg.innerHTML=`<div class="ld" style="padding:40px 20px">
         <div class="sp"></div>
-        <div class="ld-t" style="margin-top:12px">🐂 BullWatch tarama devam ediyor</div>
+        <div class="ld-t" style="margin-top:12px">${isStragglers?'⏳ Son hisseler bekleniyor':'🐂 BullWatch tarama devam ediyor'}</div>
         <div style="margin-top:16px;max-width:360px;width:100%">
           <div style="display:flex;justify-content:space-between;font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--t2);margin-bottom:6px">
             <span>${done}/${total} hisse</span>
             <span>${pct.toFixed(0)}%</span>
           </div>
           <div style="height:6px;background:var(--bg3);border-radius:3px;overflow:hidden">
-            <div style="width:${pct}%;height:100%;background:var(--acc);transition:width .5s"></div>
+            <div style="width:${pct}%;height:100%;background:${isStragglers?'var(--ylw)':'var(--acc)'};transition:width .5s"></div>
           </div>
           <div style="font-size:10px;color:var(--t4);margin-top:8px;text-align:center">
-            ⏱️ ${elapsed.toFixed(0)}s geçti${typeof eta==='number'?` · ~${eta}s kaldı`:''}
+            ⏱️ ${elapsedStr} geçti${eta!=null?` · ~${eta}s kaldı`:''}
           </div>
         </div>
         <div style="font-size:11px;color:var(--t4);margin-top:14px;max-width:360px;text-align:center;line-height:1.5">
-          218 BIST mikro-kapı paralel taranıyor. yfinance bazen yavaş — sayfa kapatma, otomatik yenilenecek.
+          ${isStragglers
+            ? `${total-done} hisse yfinance'ten yanıt bekliyor. <b style="color:var(--t2)">Maksimum 4 dakikada</b> sonuç gelir veya parçalı liste gösterilir.`
+            : `${total} BIST mikro-kapı paralel taranıyor. yfinance bazen yavaş — sayfa kapatma, otomatik yenilenecek.`}
         </div>
       </div>`;
       await new Promise(r=>setTimeout(r,3000));
