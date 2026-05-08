@@ -650,10 +650,21 @@ function _bwDqBadge(dq){
   if(dq==='medium') return '<span class="pill p-ylw" style="font-size:9px;padding:2px 6px">MED DATA</span>';
   return                   '<span class="pill p-red" style="font-size:9px;padding:2px 6px">LOW DATA</span>';
 }
+function _bwSectorStyle(sec){
+  const m={
+    'Endüstri':{col:'var(--grn)',bg:'var(--grnd)',ico:'🏭'},
+    'Madencilik':{col:'var(--orn)',bg:'rgba(255,167,38,.15)',ico:'⛏️'},
+    'Finansal':{col:'var(--cyn)',bg:'var(--blud)',ico:'🏦'},
+    'Tüketim':{col:'var(--prp)',bg:'var(--prpd)',ico:'🛒'},
+    'Teknoloji':{col:'var(--blu)',bg:'var(--blud)',ico:'💻'},
+    'Sağlık':{col:'var(--red)',bg:'var(--redd)',ico:'⚕️'},
+    'Diğer':{col:'var(--t3)',bg:'var(--bg3)',ico:'•'}
+  };
+  return m[sec]||m['Diğer'];
+}
 function _bwCard(item){
   const z = _bwZoneStyle(item.zone);
   const score = (item.score||0).toFixed(0);
-  const reasons = (item.reasons||[]).slice(0,3);
   const fmc = item.metrics?.float_market_cap;
   const fmcStr = fmc ? `${(fmc/1e6).toFixed(0)}M TL float`:'';
   const rvol = item.metrics?.rvol;
@@ -661,24 +672,37 @@ function _bwCard(item){
   const fp = item.metrics?.float_pressure;
   const fpStr = fp ? `Float ${(fp*100).toFixed(1)}%`:'';
   const meta = [fmcStr,rvolStr,fpStr].filter(Boolean).join(' · ');
+  const sec = item.sector_tr || 'Diğer';
+  const ss = _bwSectorStyle(sec);
+  const narr = item.narrative || {};
   return `<div class="pkc" style="border-left-color:${z.col};margin-bottom:0">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:8px">
-      <div>
+      <div style="flex:1;min-width:0">
         <div class="clk-t" style="font-size:18px;font-weight:700" onclick="loadTicker('${esc(item.symbol)}')">${esc(item.symbol)}</div>
         <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap">
           <span class="pill ${z.pill}">${z.icon} ${z.label}</span>
+          <span style="display:inline-flex;align-items:center;gap:4px;background:${ss.bg};color:${ss.col};font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:600;padding:3px 8px;border-radius:4px;text-transform:uppercase;letter-spacing:.4px">${ss.ico} ${esc(sec)}</span>
           ${_bwDqBadge(item.data_quality||'medium')}
         </div>
       </div>
-      <div style="text-align:right">
+      <div style="text-align:right;flex-shrink:0">
         <div style="font-family:'JetBrains Mono',monospace;font-size:28px;font-weight:700;color:${z.col};line-height:1">${score}</div>
         <div style="font-size:9px;color:var(--t4);text-transform:uppercase;letter-spacing:1px;margin-top:2px">SCORE</div>
       </div>
     </div>
     <div style="font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--t1);margin-top:6px;line-height:1.5;font-weight:600">${esc(item.pattern||'—')}</div>
     ${meta?`<div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--t3);margin-top:6px">${esc(meta)}</div>`:''}
-    ${reasons.length?`<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--bdr);font-size:11px;color:var(--t2);line-height:1.5">${reasons.map(r=>`<div>• ${esc(r)}</div>`).join('')}</div>`:''}
+    ${narr.whats_happening?`<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--bdr);font-size:12px;line-height:1.55">
+      <div style="margin-bottom:8px"><span style="color:var(--cyn);font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;letter-spacing:.5px">🔍 NE OLUYOR</span><div style="color:var(--t1);margin-top:3px">${_bwMarkdown(narr.whats_happening)}</div></div>
+      ${narr.what_to_watch?`<div style="margin-bottom:8px"><span style="color:var(--ylw);font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;letter-spacing:.5px">⏰ NE BEKLE</span><div style="color:var(--t2);margin-top:3px">${_bwMarkdown(narr.what_to_watch)}</div></div>`:''}
+      ${narr.caveats?`<div><span style="color:var(--orn);font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;letter-spacing:.5px">⚠️ ŞÜPHE</span><div style="color:var(--t3);margin-top:3px;font-size:11px">${_bwMarkdown(narr.caveats)}</div></div>`:''}
+    </div>`:''}
   </div>`;
+}
+// Lightweight markdown — only **bold** support, no XSS surface beyond esc()
+function _bwMarkdown(s){
+  if(!s) return '';
+  return esc(s).replace(/\*\*([^*]+)\*\*/g,'<b>$1</b>');
 }
 function renderBullwatchPage(){
   const pg=$('pg-bullwatch');
@@ -695,13 +719,22 @@ function renderBullwatchPage(){
   }
   const items=bw?.items||[];
   const filt=S._bwZone||'all';
-  const filtered=filt==='all'?items:items.filter(i=>i.zone===filt);
+  const sectFilt=S._bwSector||'all';
+  // Apply both filters: zone first, then sector
+  let filtered=filt==='all'?items:items.filter(i=>i.zone===filt);
+  if(sectFilt!=='all') filtered=filtered.filter(i=>(i.sector_tr||'Diğer')===sectFilt);
   const counts={
     all:items.length,
     EARLY:items.filter(i=>i.zone==='EARLY').length,
     CONFIRMED:items.filter(i=>i.zone==='CONFIRMED').length,
     CONVICTION:items.filter(i=>i.zone==='CONVICTION').length,
   };
+  // Sector counts from items already filtered by zone (so chip counts respect zone selection)
+  const zoneFiltered=filt==='all'?items:items.filter(i=>i.zone===filt);
+  const sectCounts={};
+  zoneFiltered.forEach(i=>{const s=i.sector_tr||'Diğer';sectCounts[s]=(sectCounts[s]||0)+1});
+  const sectOrder=['Endüstri','Madencilik','Tüketim','Teknoloji','Sağlık','Finansal','Diğer'];
+  const visibleSects=sectOrder.filter(s=>sectCounts[s]>0);
   const asof=bw?._meta?.as_of||bw?.asof;
   const scanned=bw?.scanned||0;
   const eligible=bw?.eligible_count||items.length;
@@ -718,12 +751,17 @@ function renderBullwatchPage(){
   <div style="padding:12px 16px;background:var(--bg3);border-radius:var(--rad);margin-bottom:14px;font-size:var(--fs-base);color:var(--t2);line-height:1.6">
     <b style="color:var(--acc)">BullWatch nasıl çalışır?</b> Düşük float (≤${capStr} float piyasa değeri), likit (≥5M TL günlük hacim) BIST mikro-kaplarında <b>sessiz birikim ayak izlerini</b> tespit eder. 7 motor: Float Pressure, Revenue Mispricing, Silent Volume, Price Action (Shakeout / Absorption / Tight Closes / Walk-Up), Compression, Ownership Intelligence, Fundamental Quality. <span style="color:var(--t4);font-size:11px">Yatırım tavsiyesi değildir — yalnızca tape okuma.</span>
   </div>
-  <div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap">
+  <div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap">
     <button class="btn btn-sm ${filt==='all'?'btn-grn':''}" style="${filt!=='all'?'background:var(--bg3);color:var(--t2)':''}" onclick="S._bwZone='all';renderBullwatchPage()">Tümü (${counts.all})</button>
     <button class="btn btn-sm ${filt==='CONVICTION'?'btn-grn':''}" style="${filt!=='CONVICTION'?'background:var(--bg3);color:var(--grn)':''}" onclick="S._bwZone='CONVICTION';renderBullwatchPage()">🟢 Conviction (${counts.CONVICTION})</button>
     <button class="btn btn-sm ${filt==='CONFIRMED'?'btn-grn':''}" style="${filt!=='CONFIRMED'?'background:var(--bg3);color:var(--ylw)':''}" onclick="S._bwZone='CONFIRMED';renderBullwatchPage()">🟡 Confirmed (${counts.CONFIRMED})</button>
     <button class="btn btn-sm ${filt==='EARLY'?'btn-grn':''}" style="${filt!=='EARLY'?'background:var(--bg3);color:var(--blu)':''}" onclick="S._bwZone='EARLY';renderBullwatchPage()">🔵 Early (${counts.EARLY})</button>
-  </div>`;
+  </div>
+  ${visibleSects.length>1?`<div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap;align-items:center">
+    <span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--t4);text-transform:uppercase;letter-spacing:.5px;margin-right:4px">SEKTÖR</span>
+    <button class="btn btn-sm ${sectFilt==='all'?'btn-grn':''}" style="${sectFilt!=='all'?'background:var(--bg3);color:var(--t2)':''};font-size:11px;padding:4px 10px;min-height:32px" onclick="S._bwSector='all';renderBullwatchPage()">Tümü (${zoneFiltered.length})</button>
+    ${visibleSects.map(s=>{const ss=_bwSectorStyle(s);const on=sectFilt===s;return `<button class="btn btn-sm" style="background:${on?ss.bg:'var(--bg3)'};color:${ss.col};border:${on?'1px solid '+ss.col:'1px solid transparent'};font-size:11px;padding:4px 10px;min-height:32px" onclick="S._bwSector='${esc(s)}';renderBullwatchPage()">${ss.ico} ${esc(s)} (${sectCounts[s]})</button>`}).join('')}
+  </div>`:''}`;
   if(!filtered.length){
     h+=`<div class="emp" style="padding:30px 20px"><h3 style="color:var(--t2)">${items.length?'Bu zone için aday yok':'BullWatch evrenine uyan hisse bulunamadı'}</h3>
       <p style="color:var(--t4);font-size:12px;margin-top:8px">Filtreler: float ≤${capStr} · 20g hacim ≥5M TL</p>

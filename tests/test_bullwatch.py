@@ -44,6 +44,7 @@ from engine.bullwatch import (
     _classify_zone, _engine_float_pressure, _engine_silent_volume,
     _engine_revenue_mispricing, _engine_compression,
     _engine_fundamental_quality, _engine_price_action,
+    map_sector_tr, _build_narrative,
     WEIGHTS_WITH_OWNERSHIP, FLOAT_PRESSURE_STRONG,
     FLOAT_PRESSURE_VERY_STRONG, FLOAT_PRESSURE_EXTREME,
 )
@@ -625,6 +626,91 @@ class TestScanOrchestration:
 
 
 # ================================================================
+# SECTOR MAPPING — yfinance sectors → Turkish filter chips
+# ================================================================
+class TestSectorMapping:
+    def test_industrial_sectors_map_to_endustri(self):
+        assert map_sector_tr("Industrials", None) == "Endüstri"
+        assert map_sector_tr("Energy", None) == "Endüstri"
+        assert map_sector_tr("Utilities", None) == "Endüstri"
+
+    def test_basic_materials_default_to_madencilik(self):
+        # yfinance's "Basic Materials" maps to MADENCİLİK
+        assert map_sector_tr("Basic Materials", None) == "Madencilik"
+
+    def test_industry_override_for_cement_steel(self):
+        # Even if sector is something else, cement/steel industry → MADENCİLİK
+        assert map_sector_tr("Industrials", "Cement Manufacturing") == "Madencilik"
+        assert map_sector_tr("Industrials", "Steel Production") == "Madencilik"
+
+    def test_finance_collapses_real_estate(self):
+        assert map_sector_tr("Financial Services", None) == "Finansal"
+        assert map_sector_tr("Real Estate", None) == "Finansal"
+
+    def test_consumer_categories(self):
+        assert map_sector_tr("Consumer Cyclical", None) == "Tüketim"
+        assert map_sector_tr("Consumer Defensive", None) == "Tüketim"
+
+    def test_unknown_falls_to_diger(self):
+        assert map_sector_tr(None, None) == "Diğer"
+        assert map_sector_tr("", "") == "Diğer"
+        assert map_sector_tr("Unknown Mystery", None) == "Diğer"
+
+
+# ================================================================
+# NARRATIVE GENERATOR — Turkish "what to do" explanations
+# ================================================================
+class TestNarrative:
+    def test_returns_three_keys(self):
+        n = _build_narrative(
+            score=33, zone="EARLY", pattern="Float Squeeze",
+            sector_tr="Endüstri", components={}, metrics={},
+            data_quality="high",
+        )
+        assert set(n.keys()) == {"whats_happening", "what_to_watch", "caveats"}
+
+    def test_finance_caveat_appears(self):
+        # Spec emphasizes BullWatch is not for financial sector
+        n = _build_narrative(
+            score=50, zone="EARLY", pattern="Float Squeeze",
+            sector_tr="Finansal", components={}, metrics={},
+            data_quality="high",
+        )
+        assert "Sigorta" in n["caveats"] or "finansal" in n["caveats"].lower()
+
+    def test_low_score_caveat(self):
+        n = _build_narrative(
+            score=15, zone="EARLY", pattern="Quiet Watchlist",
+            sector_tr="Endüstri", components={}, metrics={},
+            data_quality="high",
+        )
+        assert "düşük" in n["caveats"].lower() or "zayıf" in n["caveats"].lower()
+
+    def test_strong_pressure_visible_in_whats_happening(self):
+        n = _build_narrative(
+            score=70, zone="CONFIRMED", pattern="Float Squeeze",
+            sector_tr="Endüstri", components={},
+            metrics={"float_pressure": 0.05, "rvol": 0.8, "atr_compression": 0.92},
+            data_quality="high",
+        )
+        # 5% float pressure should produce a sentence about it
+        assert "5.0" in n["whats_happening"] or "%5" in n["whats_happening"]
+
+    def test_no_buy_sell_directives(self):
+        # Same guarantee as patterns — narrative must not give trading orders
+        n = _build_narrative(
+            score=80, zone="CONVICTION", pattern="Walk-Up Accumulation",
+            sector_tr="Endüstri", components={},
+            metrics={"rvol": 2.5, "float_pressure": 0.06, "patterns": ["walk_up"]},
+            data_quality="high",
+        )
+        forbidden = ["al ", "sat ", "alın", "satın", "kâr al", "stop"]
+        all_text = " ".join(n.values()).lower()
+        for word in forbidden:
+            assert word not in all_text, f"forbidden directive '{word}' in narrative"
+
+
+# ================================================================
 # RESULT SERIALIZATION
 # ================================================================
 class TestResultSerialization:
@@ -634,10 +720,14 @@ class TestResultSerialization:
         r = score_symbol(healthy_metrics, df)
         d = r.to_dict()
         for key in ("symbol", "score", "zone", "pattern", "data_quality",
-                    "components", "metrics", "reasons", "eligible"):
+                    "components", "metrics", "reasons", "eligible",
+                    "sector", "industry", "sector_tr", "narrative"):
             assert key in d
         assert isinstance(d["score"], float)
         assert d["zone"] in ("EARLY", "CONFIRMED", "CONVICTION")
+        # narrative is dict with 3 keys
+        assert isinstance(d["narrative"], dict)
+        assert "whats_happening" in d["narrative"]
 
     def test_pattern_never_says_buy_or_sell(self, healthy_metrics, quiet_df):
         # Strict guarantee: the engine never speaks in trading directives.

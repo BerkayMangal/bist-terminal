@@ -167,6 +167,7 @@ UNIVERSE_EXTRA: list[str] = [
 ]
 
 UNIVERSE_EXTENDED: list[str] = [
+    # Existing 150
     "AKENR", "AKFYE", "AKGRT", "ALCTL", "ALGYO", "ALKIM", "ARDYZ", "ARENA", "ASUZU",
     "ATAGY", "ATATP", "AVOD", "AVTUR", "BANVT", "BEYAZ", "BFREN", "BIENY", "BINHO", "BIOEN",
     "BMSTL", "BORSK", "BRMEN", "BURVA", "CEMAS", "CMENT", "CONSE", "CRFSA", "DAGI", "DESA",
@@ -183,6 +184,46 @@ UNIVERSE_EXTENDED: list[str] = [
     "TRILC", "TUCLK", "TUKAS", "TUREX", "UFUK", "ULUUN", "USAK", "VAKKO",
     "VERTU", "VISMD", "VKGYO", "VKING", "YAPRK", "YEOTK", "YKSLN", "YONGA", "YUNSA", "YYAPI",
     "ZEDUR", "ZELOT",
+
+    # PHASE 9 — BIST tüm pay expansion (industrial/mining/consumer focus)
+    # These are real tickers traded on Yıldız + Ana + Alt pazar.
+    # Sources: BIST-listed companies tracked on KAP, anapara.com,
+    # gcmyatirim, investing.com (cross-referenced).
+    "ACSEL", "ADANA", "ADBGR", "ADEL", "ADESE", "AFYON", "AGHOL", "AKCNS",
+    "AKMGY", "AKSA", "ALCAR", "ALFAS", "ALKA", "ANELE", "ARASE", "ARCLK",
+    "ARMDA", "ARSAN", "ATEKS", "AVHOL", "AYCES", "AYDEM",
+    "BAGFS", "BAKAB", "BANTL", "BARMA", "BASCM", "BASGZ", "BAYRK", "BERA",
+    "BIGCH", "BIMAS", "BJKAS", "BLCYT", "BNTAS", "BOSSA", "BRISA", "BRKO",
+    "BRKVY", "BRLSM", "BRSAN", "BRYAT", "BSOKE", "BTCIM", "BUCIM", "BURCE",
+    "CANTE", "CCOLA", "CELHA", "CEMTS", "CIMSA", "CLEBI", "CRDFA", "CUSAN",
+    "DAPGM", "DARDL", "DENGE", "DERHL", "DEVA", "DGGYO", "DGNMO", "DITAS",
+    "DMSAS", "DOAS", "DOBUR", "DOCO", "DURDO", "DZGYO",
+    "EBEBK", "ECILC", "ECZYT", "EDIP", "EGEEN", "EGEPO", "EGSER", "EKGYO",
+    "EKIZ", "ENJSA", "ENKAI", "ERBOS", "EREGL", "ERSU", "ESGYO", "EUREN", "EYGYO",
+    "FENER", "FLAP", "FORMT", "FORTE", "FROTO",
+    "GARFA", "GENTS", "GEREL", "GLBMD", "GMTAS", "GOLTS", "GOZDE",
+    "GRSEL", "GRTHO", "GSDDE", "GSDHO", "GSRAY", "GUBRF",
+    "HEKTS", "HKTM", "HLGYO", "IDGYO", "IEYHO", "IHEVA", "IHGZT", "IHLAS", "IHLGM",
+    "IMASM", "INFO", "INVES", "ISDMR", "ISGSY", "ISGYO", "ISKPL", "ISMEN",
+    "JANTS", "KARTN", "KARYE", "KCAER", "KCHOL", "KIMMR", "KLGYO", "KLKIM",
+    "KLRHO", "KMPUR", "KNFRT", "KONKA", "KONTR", "KOPOL", "KORDS", "KOTON",
+    "KOZAA", "KOZAL", "KRDMA", "KRDMB", "KRDMD", "KRGYO", "KRONT",
+    "KRSTL", "KRTEK", "KUTPO", "KZBGY", "LIDFA", "LIDER", "LILAK", "LKMNH",
+    "LRSHO", "MAKIM", "MAKTK", "MARKA", "MAVI", "MEDTR", "MEGMT", "MEKAG",
+    "MEPET", "MERKO", "METRO", "METUR", "MIATK", "MIPAZ", "MNDRS", "MNDTR",
+    "MOGAN", "MPARK", "MUTLU", "NETAS", "NTGAZ", "NUHCM", "ODAS",
+    "OFSYM", "OLMIP", "ONCSM", "ORGE", "ORMA", "OSTIM", "OTKAR", "OTOKC", "OYAYO",
+    "PAMEL", "PANEL", "PAPIL", "PASEU", "PATEK", "PEKGY", "PENTA", "PETKM",
+    "PETUN", "PGSUS", "PKENT", "PNLSN", "PNSUT", "POLHO", "POLTK", "PRDGS",
+    "PSDTC", "QUAGR", "RALYH", "RNPOL", "RTALB", "RUBNS", "RYGYO", "RYSAS",
+    "SAMAT", "SANEL", "SANFM", "SANKO", "SARKY", "SASA", "SAYAS", "SDTTR",
+    "SEKFK", "SELGD", "SELVA", "SERVE", "SEYKM", "SISE", "SKBNK", "SKTAS",
+    "SMRTG", "SNICA", "SODSN", "SOKE", "SOKM", "SONME",
+    "TARKM", "TATEN", "TCELL", "TCKRC", "TDGYO", "TERA", "TGSAS", "THYAO",
+    "TKFEN", "TLMAN", "TMSN", "TOASO", "TRCAS", "TSGYO", "TSPOR", "TTKOM",
+    "TTRAK", "TUPRS", "TURGG", "TURSG", "ULAS", "ULKER", "UNLU", "VAKBN",
+    "VANGD", "VBTYZ", "VERUS", "VESBE", "VESTL", "VOLTS",
+    "YATAS", "YAYLA", "YBTAS", "YESIL", "YGYO", "YKBNK", "ZOREN",
 ]
 
 UNIVERSE: list[str] = UNIVERSE_BIST30 + UNIVERSE_EXTRA

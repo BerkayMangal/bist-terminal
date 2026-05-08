@@ -73,6 +73,154 @@ FQ_NET_DEBT_EBITDA_MAX: float = 2.0
 
 
 # ----------------------------------------------------------------
+# Sector mapping — yfinance returns English sector strings; we group
+# them into 5 broad Turkish categories that drive the filter chips.
+# yfinance "Industrials" / "Basic Materials" / "Energy" / "Utilities"
+# all map to ENDÜSTRİ since they share the BullWatch "real economy"
+# character. Banks/insurance/REITs collapse into FİNANSAL because the
+# original BullWatch spec specifically targets non-financial micro-caps
+# (Kaplamin, Kartonsan etc.).
+# ----------------------------------------------------------------
+_SECTOR_MAP_TR: dict[str, str] = {
+    "Industrials": "Endüstri",
+    "Basic Materials": "Madencilik",
+    "Energy": "Endüstri",
+    "Utilities": "Endüstri",
+    "Technology": "Teknoloji",
+    "Communication Services": "Teknoloji",
+    "Healthcare": "Sağlık",
+    "Consumer Cyclical": "Tüketim",
+    "Consumer Defensive": "Tüketim",
+    "Financial Services": "Finansal",
+    "Real Estate": "Finansal",
+}
+
+# Industries that override the sector mapping — yfinance often labels
+# Turkish mining/cement companies as "Basic Materials" but the more
+# specific industry tells us they're really MADENCİLİK.
+_INDUSTRY_HINTS_MADENCILIK: tuple[str, ...] = (
+    "mining", "cement", "steel", "metals", "coal", "iron",
+)
+
+
+def map_sector_tr(sector: Optional[str], industry: Optional[str]) -> str:
+    """Map a yfinance sector+industry pair to a Turkish filter category.
+
+    Returns one of: ENDÜSTRİ, MADENCİLİK, FİNANSAL, TÜKETİM, TEKNOLOJİ,
+    SAĞLIK, DİĞER. Always returns a string — never None — so frontend
+    chip filtering is straightforward.
+    """
+    s = (sector or "").strip()
+    ind = (industry or "").lower().strip()
+
+    # Industry-level override: cement/mining/steel always go to MADENCİLİK
+    # regardless of yfinance's broader sector tag.
+    if any(h in ind for h in _INDUSTRY_HINTS_MADENCILIK):
+        return "Madencilik"
+
+    return _SECTOR_MAP_TR.get(s, "Diğer")
+
+
+# ----------------------------------------------------------------
+# Narrative generator — turns score+pattern+sector into 3 plain-Turkish
+# sentences a non-quant retail investor can act on. Deterministic
+# (template-based, no LLM): same inputs → same output every time.
+# ----------------------------------------------------------------
+def _build_narrative(
+    score: float,
+    zone: str,
+    pattern: str,
+    sector_tr: str,
+    components: dict[str, float],
+    metrics: dict[str, Any],
+    data_quality: str,
+) -> dict[str, str]:
+    """Three short Turkish paragraphs explaining the signal in human terms.
+
+    - whats_happening: current state, what the engines see right now
+    - what_to_watch: leading indicators that confirm/invalidate the setup
+    - caveats: data quality / sector mismatch / score-too-low warnings
+    """
+    fp = metrics.get("float_pressure")          # daily volume / floating shares
+    rvol = metrics.get("rvol")                  # vs 20-day median
+    atr_r = metrics.get("atr_compression")      # 1.0 = at median, <1 = compressed
+    bb_r = metrics.get("bb_compression")
+    pc5 = metrics.get("price_change_5d")
+    patterns = metrics.get("patterns", []) or []
+
+    # ── NE OLUYOR — describe the present state in plain Turkish ──
+    parts: list[str] = []
+    if pattern and pattern != "—":
+        parts.append(f"Şu an **{pattern.lower()}** profili veriyor.")
+
+    if fp is not None:
+        if fp >= 0.04:
+            parts.append(f"Float'ın {fp*100:.1f}%'i bugün el değiştirdi — sıkı bir alım baskısı.")
+        elif fp >= 0.02:
+            parts.append(f"Float'ın {fp*100:.1f}%'i el değiştirdi — orta düzey birikim.")
+
+    if atr_r is not None and atr_r < 0.95:
+        parts.append(f"Volatilite son 60 günün %{atr_r*100:.0f}'inde — sıkışma var, bir şeye hazırlanıyor olabilir.")
+
+    if rvol is not None:
+        if rvol < 0.7:
+            parts.append(f"Hacim normalin {rvol:.1f}x'i — sessizce, dikkat çekmeden.")
+        elif rvol > 1.5:
+            parts.append(f"Hacim normalin {rvol:.1f}x'i — fark edilmeye başladı.")
+
+    if not parts:
+        parts.append("Mekanik olarak eligible ama net bir hikaye yok henüz.")
+
+    whats_happening = " ".join(parts)
+
+    # ── NE BEKLE — leading indicators ──
+    watch_parts: list[str] = []
+    if zone == "EARLY":
+        watch_parts.append("Hacim patlaması (RVOL > 2x) → birikim bitti, yükseliş tetiklendi demek olur.")
+        if pc5 is not None and abs(pc5) < 0.03:
+            watch_parts.append("Son 5 günde fiyat %3 üzerinde kırılırsa → CONFIRMED zone'a geçer.")
+    elif zone == "CONFIRMED":
+        watch_parts.append("Hacim 3x'i geçer + fiyat 10 günlük yüksekten kırarsa → CONVICTION.")
+    elif zone == "CONVICTION":
+        watch_parts.append("Trend kırılım modunda — momentum sürerse pozisyon büyütme zamanı.")
+
+    if "shakeout_recovery" in patterns:
+        watch_parts.append("Shakeout candle yapıldı — 5 gün içinde toparlanma + hacim teyidi anahtar.")
+    if "absorption" in patterns:
+        watch_parts.append("Absorption pattern var — satıcı tükendiğinde fiyat yukarı sıçrayabilir.")
+    if "walk_up" in patterns:
+        watch_parts.append("Walk-up devam ediyor — günlük yüksekleri tutması lazım.")
+
+    if not watch_parts:
+        watch_parts.append("Şu an net bir tetik yok — hacim ve fiyat gelişimini izle.")
+
+    what_to_watch = " ".join(watch_parts)
+
+    # ── NEDEN ŞÜPHELİ — caveats ──
+    caveat_parts: list[str] = []
+    if score < 30:
+        caveat_parts.append(f"Skor düşük ({score:.0f}/100) — sinyaller henüz zayıf.")
+    if sector_tr == "Finansal":
+        caveat_parts.append("Sigorta/finansal şirket — BullWatch'ın orjinal hedefi (endüstriyel mikro-kap) değil.")
+    if data_quality == "low":
+        caveat_parts.append("Veri kalitesi düşük — temel rakamlar eksik veya tutarsız.")
+    elif data_quality == "medium":
+        caveat_parts.append("Veri orta — bazı bilanço alanları eksik (sigorta şirketleri için yaygın).")
+    if rvol is not None and rvol < 0.3:
+        caveat_parts.append("Hacim çok ince — likidite sorunu olabilir, çıkış zorlaşır.")
+
+    if not caveat_parts:
+        caveat_parts.append("Açık bir kırmızı bayrak yok ama yine de pozisyon büyüklüğünü kontrollü tut.")
+
+    caveats = " ".join(caveat_parts)
+
+    return {
+        "whats_happening": whats_happening,
+        "what_to_watch": what_to_watch,
+        "caveats": caveats,
+    }
+
+
 @dataclass
 class BullWatchResult:
     symbol: str
@@ -85,6 +233,10 @@ class BullWatchResult:
     data_quality: str = "high"       # high | medium | low
     eligible: bool = True            # did it pass universe filters?
     reject_reason: Optional[str] = None
+    sector: Optional[str] = None     # yfinance sector (English)
+    industry: Optional[str] = None   # yfinance industry (English)
+    sector_tr: Optional[str] = None  # mapped Turkish category for filter chips
+    narrative: dict[str, str] = field(default_factory=dict)  # {whats_happening, what_to_watch, caveats}
 
     def to_dict(self) -> dict[str, Any]:
         d = asdict(self)
@@ -461,28 +613,50 @@ def score_symbol(metrics: dict,
     else:
         dq = "medium"
 
+    sector = metrics.get("sector") or None
+    industry = metrics.get("industry") or None
+    sector_tr = map_sector_tr(sector, industry)
+
+    metrics_dict = {
+        "float_market_cap": fmc,
+        "market_cap": market_cap,
+        "free_float": free_float,
+        "revenue_to_marketcap": rev_mc,
+        "rvol": rvol,
+        "float_pressure": fp,
+        "price_change_5d": pc5,
+        "atr_compression": atr_r,
+        "bb_compression": bb_r,
+        "patterns": patterns.get("labels", []),
+        "ownership_coverage": ow_coverage,
+    }
+
+    score_final = round(max(0.0, min(100.0, score)), 1)
+
+    narrative = _build_narrative(
+        score=score_final,
+        zone=zone,
+        pattern=pattern,
+        sector_tr=sector_tr,
+        components={k: float(v) for k, v in sub_scores.items() if v is not None},
+        metrics=metrics_dict,
+        data_quality=dq,
+    )
+
     return BullWatchResult(
         symbol=symbol,
-        score=round(max(0.0, min(100.0, score)), 1),
+        score=score_final,
         zone=zone,
         pattern=pattern,
         components={k: float(v) for k, v in sub_scores.items() if v is not None},
-        metrics={
-            "float_market_cap": fmc,
-            "market_cap": market_cap,
-            "free_float": free_float,
-            "revenue_to_marketcap": rev_mc,
-            "rvol": rvol,
-            "float_pressure": fp,
-            "price_change_5d": pc5,
-            "atr_compression": atr_r,
-            "bb_compression": bb_r,
-            "patterns": patterns.get("labels", []),
-            "ownership_coverage": ow_coverage,
-        },
+        metrics=metrics_dict,
         reasons=reasons,
         data_quality=dq,
         eligible=True,
+        sector=sector,
+        industry=industry,
+        sector_tr=sector_tr,
+        narrative=narrative,
     )
 
 
