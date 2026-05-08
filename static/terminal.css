@@ -198,11 +198,13 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg0);color:var(
 /* Tap targets — every interactive element ≥44px on mobile */
 .btn,.btn-sm,.btn-orn,.btn-blu,.btn-dim,button,.nav-b,.qtk,.disc-chip{min-height:44px;min-width:44px}
 
-/* Sticky bottom nav (mobile) — 5 tabs */
-.mob-bnav{position:fixed;bottom:0;left:0;right:0;height:calc(56px + var(--safe-b));padding-bottom:var(--safe-b);background:var(--bg1);border-top:1px solid var(--bdr);display:flex;justify-content:space-around;align-items:stretch;z-index:90}
-.mob-bnav-item{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;color:var(--t3);font-family:'JetBrains Mono',monospace;font-size:9px;text-transform:uppercase;letter-spacing:0.5px;cursor:pointer;border:0;background:0;padding:6px 4px;min-height:56px}
-.mob-bnav-item .ico{font-size:18px;line-height:1}
+/* Sticky bottom nav (mobile) — fits 7 tabs via horizontal scroll */
+.mob-bnav{position:fixed;bottom:0;left:0;right:0;height:calc(56px + var(--safe-b));padding-bottom:var(--safe-b);background:var(--bg1);border-top:1px solid var(--bdr);display:flex;justify-content:flex-start;align-items:stretch;z-index:90;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;-ms-overflow-style:none}
+.mob-bnav::-webkit-scrollbar{display:none}
+.mob-bnav-item{flex:0 0 auto;min-width:72px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;color:var(--t3);font-family:'JetBrains Mono',monospace;font-size:9px;text-transform:uppercase;letter-spacing:0.5px;cursor:pointer;border:0;background:0;padding:6px 8px;min-height:56px;white-space:nowrap}
+.mob-bnav-item .ico{font-size:20px;line-height:1}
 .mob-bnav-item.on{color:var(--acc)}
+.mob-bnav-item.on .ico{transform:scale(1.1)}
 .mob-bnav-item:hover{color:var(--t1)}
 
 /* Heatmap mobile list-view alternative */
@@ -216,13 +218,26 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg0);color:var(
 @media(max-width:480px){
   .heat-grid-mobile-hide{display:none!important}
   .heat-list-mobile{display:block}
-  body{padding-bottom:calc(56px + var(--safe-b))}
-  .mob-bnav{display:flex}
-  .hdr-nav{display:none}
+  /* Top nav stays visible on mobile (already overflow-x:auto from ≤900px rules)
+     — we tried a bottom nav but top scroll-tabs are familiar and use less chrome */
+  .hdr{padding:8px 12px;gap:8px}
+  .nav-b{padding:6px 10px;font-size:11px;letter-spacing:0;min-height:40px}
+  .logo{font-size:12px}
+  .logo svg{width:24px;height:24px}
+  .logo small{display:none}
+  /* BullWatch cards: single column on small phones */
+  .bw-grid{grid-template-columns:1fr!important;gap:10px!important}
+  /* BullWatch near-misses: hide table view, JS will render card view */
+  .bw-near-table{display:none}
+  .bw-near-cards{display:block!important}
 }
 @media(min-width:481px){
-  .mob-bnav{display:none}
+  .bw-near-cards{display:none}
 }
+
+/* Bottom mobile nav was prototyped but not adopted — top nav with horizontal
+   scroll is the chosen pattern. Keep .mob-bnav hidden everywhere. */
+.mob-bnav{display:none!important}
 
 /* Tablet (768px+) tweaks */
 @media(min-width:768px){

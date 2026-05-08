@@ -3,7 +3,7 @@
 // ===== STATE =====
 const S={page:'home',scan:null,cross:null,macro:null,dash:null,takas:null,social:null,hero:null,quote:null,book:null,wl:JSON.parse(localStorage.getItem('bb_wl')||'[]'),seen:JSON.parse(localStorage.getItem('bb_seen')||'[]'),_alerts:[]};
 const QT=['ASELS','THYAO','BIMAS','KCHOL','TUPRS','AKBNK','GARAN','FROTO','TOASO','PGSUS'];
-const PAGES=[{id:'nasil',label:'Nasıl?'},{id:'home',label:'Ana Sayfa'},{id:'radar',label:'Radar'},{id:'bullwatch',label:'BullWatch'},{id:'cross',label:'Sinyaller'},{id:'makro',label:'Makro'},{id:'portfoy',label:'Portföy'}];
+const PAGES=[{id:'nasil',label:'Nasıl?',icon:'❓'},{id:'home',label:'Ana Sayfa',icon:'🏠'},{id:'radar',label:'Radar',icon:'📡'},{id:'bullwatch',label:'BullWatch',icon:'🐂'},{id:'cross',label:'Sinyaller',icon:'⚡'},{id:'makro',label:'Makro',icon:'🌍'},{id:'portfoy',label:'Portföy',icon:'💼'}];
 const $=s=>document.getElementById(s);
 
 // ===== XSS SANITIZER =====
@@ -119,8 +119,8 @@ async function cachedApi(path) {
 setInterval(()=>{$('clk').textContent=new Date().toLocaleTimeString('tr-TR',{hour:'2-digit',minute:'2-digit',second:'2-digit'})+' IST';},1000);
 
 // ===== NAVIGATION =====
-const nav=$('nav');PAGES.forEach(p=>{const b=document.createElement('button');b.className='nav-b'+(p.id==='home'?' on':'');b.textContent=p.label;b.dataset.p=p.id;b.onclick=()=>goPage(p.id);nav.appendChild(b);});
-function goPage(id){S.page=id;nav.querySelectorAll('.nav-b').forEach(b=>b.classList.toggle('on',b.dataset.p===id));document.querySelectorAll('.page').forEach(p=>p.classList.toggle('on',p.dataset.page===id));if(id==='home')renderHome();if(id==='radar')renderRadarPage();if(id==='cross')renderCrossPage();if(id==='bullwatch')renderBullwatchPage();if(id==='makro')renderMakroPage();if(id==='nasil')renderNasilPage();if(id==='takas')renderTakasPage();if(id==='sosyal')renderSosyalPage();if(id==='portfoy')renderPortfoyPage();}
+const nav=$('nav');const mobNav=$('mobNav');PAGES.forEach(p=>{const b=document.createElement('button');b.className='nav-b'+(p.id==='home'?' on':'');b.textContent=p.label;b.dataset.p=p.id;b.onclick=()=>goPage(p.id);nav.appendChild(b);if(mobNav){const mb=document.createElement('button');mb.className='mob-bnav-item'+(p.id==='home'?' on':'');mb.dataset.p=p.id;mb.onclick=()=>goPage(p.id);mb.innerHTML=`<span class="ico" aria-hidden="true">${p.icon||'•'}</span><span>${esc(p.label)}</span>`;mobNav.appendChild(mb);}});
+function goPage(id){S.page=id;nav.querySelectorAll('.nav-b').forEach(b=>b.classList.toggle('on',b.dataset.p===id));if(mobNav)mobNav.querySelectorAll('.mob-bnav-item').forEach(b=>b.classList.toggle('on',b.dataset.p===id));document.querySelectorAll('.page').forEach(p=>p.classList.toggle('on',p.dataset.page===id));if(id==='home')renderHome();if(id==='radar')renderRadarPage();if(id==='cross')renderCrossPage();if(id==='bullwatch')renderBullwatchPage();if(id==='makro')renderMakroPage();if(id==='nasil')renderNasilPage();if(id==='takas')renderTakasPage();if(id==='sosyal')renderSosyalPage();if(id==='portfoy')renderPortfoyPage();}
 
 // ===== QUICK TICKERS =====
 // ===== QUICK TICKERS =====
@@ -729,18 +729,11 @@ function renderBullwatchPage(){
       <p style="color:var(--t4);font-size:12px;margin-top:8px">Filtreler: float ≤${capStr} · 20g hacim ≥5M TL</p>
       ${items.length?'<p style="color:var(--t4);font-size:12px">Başka bir zone seç ya da yeniden tara</p>':''}
     </div>`;
-    // Boşsa otomatik "yakın adaylar"ı yükle
-    if(!items.length && !nearMisses.length && !S._bwLoadingDiag){
-      S._bwLoadingDiag=true;
-      api('/api/bullwatch?diagnostic=true').then(d=>{
-        S.bullwatch={...bw,near_misses:d.near_misses||[]};
-        S._bwLoadingDiag=false;renderBullwatchPage();
-      }).catch(()=>{S._bwLoadingDiag=false;});
-    }
     if(nearMisses.length){
-      h+=`<div style="margin-top:20px"><h3 style="color:var(--ylw);font-family:'JetBrains Mono',monospace;font-size:14px;margin-bottom:8px">📊 Yakın Adaylar — eleğe en az takılan 20 hisse</h3>
-        <p style="color:var(--t3);font-size:11px;margin-bottom:12px">Float cap'i bu hisseleri yakalamak üzere ayarlayabilirsin. URL'ye <code style="color:var(--cyn)">?cap_tl=500000000</code> ekleyerek deneyebilirsin (500M).</p>
-        <div class="card"><div class="card-b" style="overflow-x:auto"><table class="dtb"><thead><tr><th>#</th><th>Ticker</th><th>Float Mcap</th><th>Mcap</th><th>Free Float</th><th>20g Hacim</th><th>Sebep</th></tr></thead><tbody>`;
+      h+=`<div style="margin-top:20px"><h3 style="color:var(--ylw);font-family:'JetBrains Mono',monospace;font-size:14px;margin-bottom:8px">📊 Yakın Adaylar — eleğe en az takılan ${nearMisses.length} hisse</h3>
+        <p style="color:var(--t3);font-size:11px;margin-bottom:12px">Float cap'i bu hisseleri yakalamak üzere ayarlayabilirsin. URL'ye <code style="color:var(--cyn)">?cap_tl=2000000000</code> ekleyerek deneyebilirsin (örn. 2 milyar).</p>`;
+      // Desktop: tablo
+      h+=`<div class="card bw-near-table"><div class="card-b" style="overflow-x:auto"><table class="dtb"><thead><tr><th>#</th><th>Ticker</th><th>Float Mcap</th><th>Mcap</th><th>Free Float</th><th>20g Hacim</th><th>Sebep</th></tr></thead><tbody>`;
       nearMisses.forEach((n,i)=>{
         const fmc=n.float_market_cap?`${(n.float_market_cap/1e6).toFixed(0)}M TL`:'—';
         const mc=n.market_cap?`${(n.market_cap/1e9).toFixed(1)}B TL`:'—';
@@ -748,10 +741,32 @@ function renderBullwatchPage(){
         const atv=n.avg_traded_value_20d?`${(n.avg_traded_value_20d/1e6).toFixed(1)}M TL`:'—';
         h+=`<tr><td style="color:var(--t3)">${i+1}</td><td class="clk-t" onclick="loadTicker('${esc(n.symbol)}')">${esc(n.symbol)}</td><td style="color:var(--ylw);font-weight:700">${fmc}</td><td style="color:var(--t2)">${mc}</td><td style="color:var(--t2)">${ff}</td><td style="color:var(--t2)">${atv}</td><td style="color:var(--t4);font-size:10px">${esc(n.reject_reason||'')}</td></tr>`;
       });
-      h+='</tbody></table></div></div></div>';
+      h+='</tbody></table></div></div>';
+      // Mobile: kart listesi
+      h+='<div class="bw-near-cards" style="display:none;margin-top:8px">';
+      nearMisses.forEach((n,i)=>{
+        const fmc=n.float_market_cap?`${(n.float_market_cap/1e6).toFixed(0)}M`:'—';
+        const mc=n.market_cap?`${(n.market_cap/1e9).toFixed(1)}B`:'—';
+        const ff=n.free_float?`${(n.free_float*100).toFixed(0)}%`:'—';
+        const atv=n.avg_traded_value_20d?`${(n.avg_traded_value_20d/1e6).toFixed(1)}M`:'—';
+        h+=`<div style="background:var(--bg3);border:1px solid var(--bdr);border-radius:var(--rad);padding:12px;margin-bottom:8px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+            <div style="display:flex;align-items:center;gap:8px"><span style="color:var(--t4);font-size:11px">#${i+1}</span><span class="clk-t" style="font-weight:700;font-size:15px" onclick="loadTicker('${esc(n.symbol)}')">${esc(n.symbol)}</span></div>
+            <span style="color:var(--ylw);font-weight:700;font-size:13px">${fmc} TL float</span>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;font-size:11px;color:var(--t3)">
+            <div>Mcap<br><span style="color:var(--t1);font-weight:600">${mc} TL</span></div>
+            <div>Free Float<br><span style="color:var(--t1);font-weight:600">${ff}</span></div>
+            <div>20g Hacim<br><span style="color:var(--t1);font-weight:600">${atv} TL</span></div>
+          </div>
+          <div style="color:var(--t4);font-size:10px;margin-top:6px">${esc(n.reject_reason||'')}</div>
+        </div>`;
+      });
+      h+='</div>';
+      h+='</div>';
     }
   }else{
-    h+=`<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px">${filtered.map(_bwCard).join('')}</div>`;
+    h+=`<div class="bw-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px">${filtered.map(_bwCard).join('')}</div>`;
   }
   pg.innerHTML=h;
 }
