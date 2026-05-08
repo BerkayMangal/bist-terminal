@@ -684,7 +684,7 @@ function renderBullwatchPage(){
   const pg=$('pg-bullwatch');
   // Initial load — auto-trigger on first visit
   if(S.bullwatch===undefined){
-    pg.innerHTML=`<div class="ld"><div class="sp"></div><div class="ld-t">BullWatch taraması başlıyor — düşük float ayak izleri aranıyor…</div><div style="font-size:11px;color:var(--t4);margin-top:6px">İlk tarama 1-3 dakika sürebilir (yfinance soğuk cache) — sayfa kapatma</div></div>`;
+    pg.innerHTML=`<div class="ld"><div class="sp"></div><div class="ld-t">BullWatch hazırlanıyor…</div><div style="font-size:11px;color:var(--t4);margin-top:6px">Cache durumu kontrol ediliyor</div></div>`;
     loadBullwatch();
     return;
   }
@@ -782,30 +782,114 @@ function renderBullwatchPage(){
   }
   pg.innerHTML=h;
 }
+// BullWatch: akıllı yükleme — health-poll ile progress göster.
+// Cache hazırsa anında, scan running ise X/Y göstergesi, yoksa scan tetikle.
 async function loadBullwatch(refresh){
+  const pg=$('pg-bullwatch');
   if(refresh){
-    $('pg-bullwatch').innerHTML=`<div class="ld"><div class="sp"></div><div class="ld-t">BullWatch yeniden taranıyor — sessiz birikim aranıyor…</div><div style="font-size:11px;color:var(--t4);margin-top:6px">İlk tarama 1-3 dakika sürebilir, sayfa kapatma</div></div>`;
+    pg.innerHTML=`<div class="ld"><div class="sp"></div><div class="ld-t">BullWatch yeniden taranıyor…</div><div style="font-size:11px;color:var(--t4);margin-top:6px">Hazırlık başlıyor</div></div>`;
   }
+  // 1) Health check — cache hazır mı? scan devam mı ediyor?
+  let health=null;
+  try{ health=await api('/api/bullwatch/health'); }catch(e){}
+  const cacheReady=health&&health.cache_populated;
+  const scanRunning=health&&health.scan_running;
+
+  // 2) Cache hazır + refresh istenmemişse → direkt fetch
+  if(cacheReady && !refresh){
+    try{
+      S.bullwatch=await api('/api/bullwatch');
+      renderBullwatchPage();
+    }catch(e){
+      S.bullwatch={items:[],error:e.message};
+      renderBullwatchPage();
+    }
+    return;
+  }
+  // 3) Scan devam ediyor → polling göstergesi
+  if(scanRunning){
+    return _bwPollUntilReady();
+  }
+  // 4) Cache yok, scan da yok → fetch et (server otomatik scan başlatır), bu sırada polling göster
   try{
-    S.bullwatch=await api('/api/bullwatch'+(refresh?'?refresh=true':''));
-    renderBullwatchPage();
+    // Fetch'i fire-and-forget olarak başlat, biz polling ile takip edelim
+    const fetchPromise=api('/api/bullwatch'+(refresh?'?refresh=true':''));
+    // Server tarama başlatması için 1 saniye ver, sonra polling'e geç
+    await new Promise(r=>setTimeout(r,1000));
+    _bwPollUntilReady(fetchPromise);
   }catch(e){
-    if(e.message==='timeout'){
-      // Server scan'i devam ediyor olabilir — 30s bekle, cache'den dene
-      $('pg-bullwatch').innerHTML=`<div class="ld"><div class="sp"></div><div class="ld-t">Tarama uzun sürüyor — sonucu beklemek için 30 sn daha sabırlı ol…</div><div style="font-size:11px;color:var(--t4);margin-top:6px">Server arka planda tarıyor, otomatik tekrar denenecek</div></div>`;
-      await new Promise(r=>setTimeout(r,30000));
+    S.bullwatch={items:[],error:e.message};
+    renderBullwatchPage();
+  }
+}
+
+async function _bwPollUntilReady(fetchPromise){
+  const pg=$('pg-bullwatch');
+  const startTime=Date.now();
+  const MAX_POLL_SEC=420;  // 7 dakika hard cap
+  while(Date.now()-startTime<MAX_POLL_SEC*1000){
+    let h;
+    try{ h=await api('/api/bullwatch/health'); }catch(e){ h=null; }
+    if(!h){
+      pg.innerHTML=`<div class="ld"><div class="sp"></div><div class="ld-t">Bağlantı kontrol ediliyor…</div></div>`;
+      await new Promise(r=>setTimeout(r,3000));
+      continue;
+    }
+    // Cache hazır → fetch edip render
+    if(h.cache_populated && !h.scan_running){
       try{
         S.bullwatch=await api('/api/bullwatch');
         renderBullwatchPage();
         return;
-      }catch(e2){
-        S.bullwatch={items:[],error:'Tarama 5 dakika+ sürdü — yfinance yavaş olabilir. Birkaç dakika sonra tekrar dene.'};
+      }catch(e){
+        S.bullwatch={items:[],error:e.message};
+        renderBullwatchPage();
+        return;
       }
-    }else{
-      S.bullwatch={items:[],error:e.message};
     }
-    renderBullwatchPage();
+    // Hala devam ediyor → progress göster
+    if(h.scan_running){
+      const done=h.scan_progress||0;
+      const total=h.scan_total||1;
+      const pct=h.scan_progress_pct||0;
+      const elapsed=h.scan_elapsed_sec||0;
+      const eta=done>0?Math.round((elapsed/done)*(total-done)):'?';
+      pg.innerHTML=`<div class="ld" style="padding:40px 20px">
+        <div class="sp"></div>
+        <div class="ld-t" style="margin-top:12px">🐂 BullWatch tarama devam ediyor</div>
+        <div style="margin-top:16px;max-width:360px;width:100%">
+          <div style="display:flex;justify-content:space-between;font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--t2);margin-bottom:6px">
+            <span>${done}/${total} hisse</span>
+            <span>${pct.toFixed(0)}%</span>
+          </div>
+          <div style="height:6px;background:var(--bg3);border-radius:3px;overflow:hidden">
+            <div style="width:${pct}%;height:100%;background:var(--acc);transition:width .5s"></div>
+          </div>
+          <div style="font-size:10px;color:var(--t4);margin-top:8px;text-align:center">
+            ⏱️ ${elapsed.toFixed(0)}s geçti${typeof eta==='number'?` · ~${eta}s kaldı`:''}
+          </div>
+        </div>
+        <div style="font-size:11px;color:var(--t4);margin-top:14px;max-width:360px;text-align:center;line-height:1.5">
+          218 BIST mikro-kapı paralel taranıyor. yfinance bazen yavaş — sayfa kapatma, otomatik yenilenecek.
+        </div>
+      </div>`;
+      await new Promise(r=>setTimeout(r,3000));
+      continue;
+    }
+    // Scan durdu, cache de yok → bir kez daha fetch'e dene
+    try{
+      S.bullwatch=await api('/api/bullwatch');
+      renderBullwatchPage();
+      return;
+    }catch(e){
+      S.bullwatch={items:[],error:'Tarama tamamlanamadı: '+e.message};
+      renderBullwatchPage();
+      return;
+    }
   }
+  // 7 dakikayı aştık
+  S.bullwatch={items:[],error:'Tarama 7 dakikayı aştı — yfinance yavaş. Birkaç dakika sonra tekrar dene.'};
+  renderBullwatchPage();
 }
 
 // ===== TAKAS PAGE =====

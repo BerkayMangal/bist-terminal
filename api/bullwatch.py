@@ -33,6 +33,9 @@ _CACHE: dict[str, Any] = {
     "as_of": None,
     "stale_after": 0.0,
     "running": False,
+    "progress": 0,        # symbols processed so far (during in-flight scan)
+    "total": 0,           # total symbols in the in-flight scan
+    "scan_started_at": 0.0,
 }
 _CACHE_TTL_SEC = 300  # 5 minutes
 _SCAN_DONE: Optional[asyncio.Event] = None  # set by the runner, awaited by waiters
@@ -89,12 +92,20 @@ def _run_scan(min_score: float = 0.0,
     from features.bullwatch_features import FLOAT_MARKET_CAP_CAP_TL
     universe = _resolve_universe()
     t0 = time.time()
+    _CACHE["scan_started_at"] = t0
+    _CACHE["progress"] = 0
+    _CACHE["total"] = len(universe)
+
+    def _on_progress(done: int, total: int) -> None:
+        _CACHE["progress"] = done
+        _CACHE["total"] = total
+
     # Always include_ineligible=True — it's just a filter on already-computed
     # results, no extra fetches. Lets us surface near_misses for free.
     # max_workers=16 — yfinance fetches are I/O-bound, GIL doesn't apply.
     results = scan(universe, min_score=min_score,
                    include_ineligible=True, cap_tl=cap_tl,
-                   max_workers=16)
+                   max_workers=16, progress_callback=_on_progress)
     eligible = [r for r in results if r.eligible]
     if limit:
         eligible = eligible[:limit]
@@ -344,8 +355,18 @@ async def api_bullwatch(
 
 @router.get("/api/bullwatch/health")
 async def api_bullwatch_health():
-    """Lightweight health check — does NOT trigger a scan."""
+    """Lightweight health check — does NOT trigger a scan.
+
+    Frontend polls this every few seconds while a scan is in flight to
+    show real-time progress instead of a blank spinner.
+    """
     cached = _CACHE["items"] is not None
+    running = _CACHE["running"]
+    progress = _CACHE.get("progress", 0)
+    total = _CACHE.get("total", 0)
+    scan_started = _CACHE.get("scan_started_at", 0)
+    elapsed_sec = (time.time() - scan_started) if (running and scan_started) else None
+
     return success({
         "ok": True,
         "engine": "bullwatch_v1",
@@ -353,7 +374,11 @@ async def api_bullwatch_health():
         "cache_as_of": _CACHE.get("as_of"),
         "cache_age_sec": (time.time() - (_CACHE["stale_after"] - _CACHE_TTL_SEC))
                          if cached else None,
-        "scan_running": _CACHE["running"],
+        "scan_running": running,
+        "scan_progress": progress,
+        "scan_total": total,
+        "scan_progress_pct": round(progress / total * 100, 1) if total else None,
+        "scan_elapsed_sec": round(elapsed_sec, 1) if elapsed_sec is not None else None,
     })
 
 
