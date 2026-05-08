@@ -101,6 +101,7 @@ def _run_scan(min_score: float = 0.0,
 
     # Near-misses: ineligible with KNOWN float mcap, sorted ascending so
     # the smallest (= closest to passing) come first.
+    from features.bullwatch_features import normalize_free_float
     ineligible = [
         r for r in results
         if not r.eligible and r.metrics.get("float_market_cap") is not None
@@ -111,7 +112,7 @@ def _run_scan(min_score: float = 0.0,
             "symbol": r.symbol,
             "float_market_cap": r.metrics.get("float_market_cap"),
             "market_cap": r.metrics.get("market_cap"),
-            "free_float": r.metrics.get("free_float"),
+            "free_float": normalize_free_float(r.metrics.get("free_float")),
             "avg_traded_value_20d": r.metrics.get("avg_traded_value_20d"),
             "reject_reason": r.reject_reason,
         }
