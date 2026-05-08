@@ -656,6 +656,33 @@ class TestSectorMapping:
         assert map_sector_tr("", "") == "Diğer"
         assert map_sector_tr("Unknown Mystery", None) == "Diğer"
 
+    def test_bist_override_takes_precedence(self):
+        # KAPLM is a BullWatch target — must be Madencilik regardless of yfinance
+        assert map_sector_tr(None, None, symbol="KAPLM") == "Madencilik"
+        # Even if yfinance says something different, override wins
+        assert map_sector_tr("Industrials", None, symbol="KAPLM") == "Madencilik"
+        # GYO → Finansal (not Real Estate's "Finansal" via yfinance — direct)
+        assert map_sector_tr(None, None, symbol="EKGYO") == "Finansal"
+        # Bank
+        assert map_sector_tr(None, None, symbol="GARAN") == "Finansal"
+        # Cement / Madencilik
+        assert map_sector_tr(None, None, symbol="ADANA") == "Madencilik"
+        # Retail
+        assert map_sector_tr(None, None, symbol="KOTON") == "Tüketim"
+        # Tech
+        assert map_sector_tr(None, None, symbol="KAREL") == "Teknoloji"
+
+    def test_bist_override_handles_is_suffix(self):
+        # yfinance passes tickers as "ASELS.IS" — strip suffix before lookup
+        assert map_sector_tr(None, None, symbol="ASELS.IS") == "Endüstri"
+        assert map_sector_tr(None, None, symbol="kaplm.IS") == "Madencilik"
+
+    def test_unknown_ticker_falls_through_to_yfinance(self):
+        # If symbol not in our override, fallback to yfinance sector
+        assert map_sector_tr("Industrials", None, symbol="UNKNOWN") == "Endüstri"
+        # Both empty → Diğer
+        assert map_sector_tr("", "", symbol="UNKNOWN") == "Diğer"
+
 
 # ================================================================
 # NARRATIVE GENERATOR — Turkish "what to do" explanations
