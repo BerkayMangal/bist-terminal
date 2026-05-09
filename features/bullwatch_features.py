@@ -32,7 +32,10 @@ except Exception:  # pragma: no cover — exercised only if pandas missing
 # Tunable thresholds — kept here as module constants so the engine
 # layer stays focused on scoring logic.
 # ----------------------------------------------------------------
-FLOAT_MARKET_CAP_CAP_TL: float = 3_000_000_000.0     # universe filter (3B TL — BIST sweet spot for low-float micro-caps)
+FLOAT_MARKET_CAP_CAP_TL: float = 3_000_000_000.0     # Core Watch: float < 3B TL (low-float pump candidates)
+EXTENDED_WATCH_CAP_TL: float = 15_000_000_000.0      # Extended Watch: 3-15B TL (mid-cap with possible group activity)
+# >15B TL → Institutional/Excluded — not BullWatch's hunting ground
+
 LIQUIDITY_FLOOR_TL: float = 5_000_000.0              # 20d avg traded value
 PRICE_CALM_PCT: float = 0.08                         # |5d return| < 8%
 
@@ -115,8 +118,42 @@ def float_market_cap(market_cap: Optional[float],
 def passes_float_cap(market_cap: Optional[float],
                      free_float: Optional[float],
                      cap_tl: float = FLOAT_MARKET_CAP_CAP_TL) -> bool:
+    """
+    Backward-compatible binary filter: True if float_mcap <= cap_tl.
+
+    NOTE (Phase A.6): Prefer `classify_universe_tier()` for new code.
+    This binary view is kept for tests/clients that haven't migrated
+    to the tiered model.
+    """
     fmc = float_market_cap(market_cap, free_float)
     return fmc is not None and fmc <= cap_tl
+
+
+def classify_universe_tier(market_cap: Optional[float],
+                           free_float: Optional[float],
+                           core_cap: float = FLOAT_MARKET_CAP_CAP_TL,
+                           extended_cap: float = EXTENDED_WATCH_CAP_TL) -> str:
+    """
+    Tiered universe classifier (Phase A.6 hygiene patch).
+
+    Returns one of:
+      - "core"          float_mcap <= 3B TL — primary BullWatch hunting ground
+      - "extended"      3B < float_mcap <= 15B TL — mid-cap, may show group activity
+      - "institutional" float_mcap > 15B TL — large-cap, generally outside scope
+      - "no_data"       cannot compute (missing market_cap or free_float)
+
+    Both `core` and `extended` are eligible for full Phase A scoring; only
+    `institutional` and `no_data` are rejected. The tier is surfaced in
+    the result so the UI can render Core / Extended badges separately.
+    """
+    fmc = float_market_cap(market_cap, free_float)
+    if fmc is None:
+        return "no_data"
+    if fmc <= core_cap:
+        return "core"
+    if fmc <= extended_cap:
+        return "extended"
+    return "institutional"
 
 
 def revenue_to_marketcap(revenue: Optional[float],

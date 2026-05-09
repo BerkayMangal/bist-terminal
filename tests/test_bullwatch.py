@@ -226,10 +226,14 @@ class TestRelativeVolume:
         # (simulating a partial intraday bar with 10% of a normal day)
         vols = list(np.full(21, 1_000_000.0)) + [100_000.0]
         n = len(vols)
-        # Index: ends TODAY in Istanbul time
+        # Index ends TODAY in Istanbul time. Build manually so the test
+        # is stable regardless of weekend/business-day calendar quirks
+        # (bdate_range skips weekends; we want today to be the last bar).
         import datetime as _dt
         today = (_dt.datetime.now(_dt.timezone.utc) + _dt.timedelta(hours=3)).date()
-        idx = pd.bdate_range(end=pd.Timestamp(today), periods=n)
+        idx = pd.DatetimeIndex(
+            [pd.Timestamp(today) - pd.Timedelta(days=k) for k in range(n - 1, -1, -1)]
+        )
         closes = np.full(n, 10.0)
         df = pd.DataFrame(
             {"Open": closes, "High": closes * 1.01, "Low": closes * 0.99,
@@ -510,12 +514,42 @@ class TestZoneClassification:
 # ================================================================
 class TestScoreSymbolE2E:
     def test_oversize_market_cap_rejected(self, healthy_metrics):
-        m = dict(healthy_metrics, market_cap=10_000_000_000, free_float=0.5)
-        # 10B * 0.5 = 5B float mcap → way above 150M cap
+        # Phase A.6: 15B is the institutional threshold. Use 20B × 0.5 = 10B
+        # FALSE — that's still extended. Need >15B float to land in institutional.
+        # 40B × 0.5 = 20B float → institutional → rejected.
+        m = dict(healthy_metrics, market_cap=40_000_000_000, free_float=0.5)
         df = _ohlcv([10.0] * 100, volumes=np.full(100, 1_000_000.0))
         r = score_symbol(m, df)
         assert r.eligible is False
-        assert "float mcap" in r.reject_reason
+        assert "institutional" in (r.reject_reason or "").lower() \
+            or "float mcap" in (r.reject_reason or "")
+        assert r.universe_tier == "institutional"
+
+    def test_extended_tier_eligible(self, healthy_metrics):
+        """Phase A.6: 3-15B float mcap is now Extended Watch (eligible)."""
+        # 12B × 0.5 = 6B float → extended tier
+        m = dict(healthy_metrics, market_cap=12_000_000_000, free_float=0.5)
+        df = _ohlcv([10.0] * 100, volumes=np.full(100, 1_000_000.0))
+        r = score_symbol(m, df)
+        assert r.eligible is True
+        assert r.universe_tier == "extended"
+
+    def test_core_tier_eligible(self, healthy_metrics):
+        """Phase A.6: <3B float mcap is Core Watch (eligible)."""
+        # 1B × 0.4 = 400M float → core tier
+        m = dict(healthy_metrics, market_cap=1_000_000_000, free_float=0.4)
+        df = _ohlcv([10.0] * 100, volumes=np.full(100, 1_000_000.0))
+        r = score_symbol(m, df)
+        assert r.eligible is True
+        assert r.universe_tier == "core"
+
+    def test_no_data_tier(self, healthy_metrics):
+        """Phase A.6: missing free_float → no_data tier, rejected."""
+        m = dict(healthy_metrics, market_cap=1_000_000_000, free_float=None)
+        df = _ohlcv([10.0] * 100, volumes=np.full(100, 1_000_000.0))
+        r = score_symbol(m, df)
+        assert r.eligible is False
+        assert r.universe_tier == "no_data"
 
     def test_dead_board_rejected(self, healthy_metrics):
         df = _ohlcv([10.0] * 100, volumes=np.full(100, 50_000.0))
@@ -570,17 +604,21 @@ class TestScoreSymbolE2E:
         assert r.score <= 100.0
 
     def test_runtime_cap_tl_override(self, healthy_metrics, quiet_df):
-        # healthy_metrics has 500M mcap × 0.25 = 125M float (passes default 3B)
+        """
+        Phase A.6: cap_tl param is preserved for backward compat but
+        eligibility now uses tiered classification. healthy_metrics has
+        500M × 0.25 = 125M float → core tier → always eligible regardless
+        of cap_tl param.
+        """
         df = quiet_df.copy()
         df["Volume"] = 1_000_000.0
-        # Default cap (3B): eligible
         r1 = score_symbol(healthy_metrics, df)
         assert r1.eligible is True
-        # Tight cap (50M): rejected, with reason mentioning the override
+        assert r1.universe_tier == "core"
+        # cap_tl param no longer drives binary eligibility, but is still
+        # accepted for API compatibility
         r2 = score_symbol(healthy_metrics, df, cap_tl=50_000_000)
-        assert r2.eligible is False
-        assert "50M cap" in (r2.reject_reason or "")
-        # Loose cap (10B): definitely eligible
+        assert r2.universe_tier == "core"  # tier still computed
         r3 = score_symbol(healthy_metrics, df, cap_tl=10_000_000_000)
         assert r3.eligible is True
 

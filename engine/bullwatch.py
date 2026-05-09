@@ -37,11 +37,12 @@ from typing import Any, Callable, Optional
 
 from features.bullwatch_features import (
     FLOAT_MARKET_CAP_CAP_TL,
+    EXTENDED_WATCH_CAP_TL,
     LIQUIDITY_FLOOR_TL,
     PRICE_CALM_PCT,
     FLOAT_PRESSURE_STRONG, FLOAT_PRESSURE_VERY_STRONG, FLOAT_PRESSURE_EXTREME,
     RVOL_EARLY, RVOL_STRONG,
-    float_market_cap, passes_float_cap,
+    float_market_cap, passes_float_cap, classify_universe_tier,
     revenue_to_marketcap, revenue_mispricing_tier,
     avg_traded_value_20d, passes_liquidity,
     relative_volume, float_pressure,
@@ -361,6 +362,12 @@ def _build_narrative(
     bb_r = metrics.get("bb_compression")
     pc5 = metrics.get("price_change_5d")
     patterns = metrics.get("patterns", []) or []
+    # A.8: pattern labels are title-case ("Absorption", "Walk-Up Accumulation").
+    # Normalize once so every downstream check is robust.
+    patterns_lc = [str(p).lower() for p in patterns]
+    has_absorption = any("absorption" in p for p in patterns_lc)
+    has_walk_up = any("walk" in p and "up" in p for p in patterns_lc)
+    has_shakeout = any("shakeout" in p for p in patterns_lc)
 
     # ── NE OLUYOR — describe the present state in plain Turkish ──
     parts: list[str] = []
@@ -398,11 +405,11 @@ def _build_narrative(
     elif zone == "CONVICTION":
         watch_parts.append("Trend kırılım modunda — momentum sürerse pozisyon büyütme zamanı.")
 
-    if "shakeout_recovery" in patterns:
+    if has_shakeout:
         watch_parts.append("Shakeout candle yapıldı — 5 gün içinde toparlanma + hacim teyidi anahtar.")
-    if "absorption" in patterns:
+    if has_absorption:
         watch_parts.append("Absorption pattern var — satıcı tükendiğinde fiyat yukarı sıçrayabilir.")
-    if "walk_up" in patterns:
+    if has_walk_up:
         watch_parts.append("Walk-up devam ediyor — günlük yüksekleri tutması lazım.")
 
     if not watch_parts:
@@ -451,6 +458,17 @@ class BullWatchResult:
     industry: Optional[str] = None   # yfinance industry (English)
     sector_tr: Optional[str] = None  # mapped Turkish category for filter chips
     narrative: dict[str, str] = field(default_factory=dict)  # {whats_happening, what_to_watch, caveats}
+    # ── Phase A.6 hygiene ──
+    universe_tier: Optional[str] = None  # "core" | "extended" | "institutional" | "no_data"
+    # ── BullWatch v2 Addendum Phase A (optional, may be None) ──
+    # All fields are dicts (or None) — backwards compatible with v1 clients
+    # that don't know about them. Final narrative authority is shifted from
+    # `narrative` (v1, kept for compatibility) to these structured outputs.
+    playbook_sequence: Optional[dict] = None        # Module 1
+    price_pinning: Optional[dict] = None            # Module 2
+    move_maturity: Optional[dict] = None            # Module 6
+    engine_conflict_matrix: Optional[dict] = None   # Module 9
+    evidence_layer: Optional[dict] = None           # Module 10
 
     def to_dict(self) -> dict[str, Any]:
         d = asdict(self)
@@ -707,20 +725,27 @@ def score_symbol(metrics: dict,
             shares_outstanding = None
 
     fmc = float_market_cap(market_cap, free_float)
+    universe_tier = classify_universe_tier(market_cap, free_float)
 
     # ---- Universe filters ----
-    if not passes_float_cap(market_cap, free_float, cap_tl=effective_cap):
+    # Phase A.6: tiered visibility. Core (<3B) and Extended (3-15B) both
+    # proceed to scoring; Institutional (>15B) and no_data are rejected
+    # with a tier-aware reject_reason.
+    if universe_tier in ("institutional", "no_data"):
+        if universe_tier == "no_data":
+            reject = "no float data"
+        else:
+            reject = (f"institutional tier — float mcap "
+                      f"{fmc/1e6:.0f}M TL > {EXTENDED_WATCH_CAP_TL/1e6:.0f}M extended cap")
         return BullWatchResult(
             symbol=symbol, score=0.0, zone="EARLY",
             pattern="Outside BullWatch universe",
             eligible=False,
-            reject_reason=(
-                "no float data" if fmc is None
-                else f"float mcap {fmc/1e6:.0f}M TL > {effective_cap/1e6:.0f}M cap"
-            ),
+            reject_reason=reject,
             metrics={"float_market_cap": fmc, "market_cap": market_cap,
                      "free_float": free_float},
             data_quality="low",
+            universe_tier=universe_tier,
         )
 
     if not passes_liquidity(df):
@@ -735,6 +760,7 @@ def score_symbol(metrics: dict,
             ),
             metrics={"float_market_cap": fmc, "avg_traded_value_20d": atv},
             data_quality="low",
+            universe_tier=universe_tier,
         )
 
     # ---- Feature extraction ----
@@ -784,6 +810,7 @@ def score_symbol(metrics: dict,
             reject_reason="no engines fired",
             metrics={"float_market_cap": fmc},
             data_quality="low",
+            universe_tier=universe_tier,
         )
 
     weights = {k: WEIGHTS_WITH_OWNERSHIP[k] for k in available}
@@ -857,6 +884,120 @@ def score_symbol(metrics: dict,
         data_quality=dq,
     )
 
+    # ────────────────────────────────────────────────────────────────
+    # BullWatch v2 Addendum — Phase A modules
+    #
+    # Run after v1 scoring is complete. Each module is independent and
+    # fail-safe: any exception is swallowed, that module's output is
+    # left as None. The v1 fields (score/zone/pattern/narrative) are
+    # NEVER modified — Phase A only ADDS new structured outputs.
+    # ────────────────────────────────────────────────────────────────
+    pinning_dict = None
+    maturity_dict = None
+    playbook_dict = None
+    conflict_dict = None
+    evidence_dict = None
+
+    try:
+        from engine.bullwatch_pinning import compute_price_pinning_score
+        pinning = compute_price_pinning_score(df)
+        pinning_dict = pinning.to_dict()
+    except Exception as _e:
+        log.debug("Phase A pinning failed for %s: %r", symbol, _e)
+
+    try:
+        from engine.bullwatch_maturity import compute_move_maturity_score
+        # Phase A: ceiling/retail/gap motors don't exist yet — pass None
+        maturity = compute_move_maturity_score(
+            df,
+            retail_heat_score=None,
+            gap_trap_score=None,
+            ceiling_break_result=None,
+        )
+        maturity_dict = maturity.to_dict()
+    except Exception as _e:
+        log.debug("Phase A maturity failed for %s: %r", symbol, _e)
+
+    try:
+        from engine.bullwatch_playbook import detect_playbook, SymbolState
+        state = SymbolState(
+            df=df,
+            sub_scores={k: float(v) for k, v in sub_scores.items() if v is not None},
+            metrics=metrics_dict,
+            pinning=pinning_dict,
+        )
+        playbook = detect_playbook(state)
+        playbook_dict = playbook.to_dict()
+    except Exception as _e:
+        log.debug("Phase A playbook failed for %s: %r", symbol, _e)
+
+    try:
+        from engine.bullwatch_conflict import resolve_conflict_matrix
+        # Build the conflict matrix state from all available signals.
+        # Convert sub_scores [0..1] → 0..100 scale for the rules.
+        ind = (maturity_dict or {}).get("indicators") or {}
+
+        # Phase A.7/A.8 fix: pattern labels in metrics_dict are title-case
+        # (e.g. "Absorption", "Walk-Up Accumulation"). Normalize once and
+        # use substring match consistent with playbook + narrative checks.
+        patterns_lc = [str(p).lower()
+                       for p in (metrics_dict.get("patterns") or [])]
+        has_absorption = any("absorption" in p for p in patterns_lc)
+
+        # Phase A.6: compute float_turnover_20d as a real signal (not just
+        # diagnostic). cumulative 20d volume / floating shares.
+        float_turnover_20d = None
+        try:
+            if shares_outstanding and free_float and df is not None and len(df) >= 20:
+                from features.bullwatch_features import normalize_free_float
+                ff_norm = normalize_free_float(free_float)
+                if ff_norm:
+                    floating = float(shares_outstanding) * ff_norm
+                    if floating > 0:
+                        cum_vol = float(df["Volume"].iloc[-20:].sum())
+                        float_turnover_20d = cum_vol / floating
+        except Exception:
+            float_turnover_20d = None
+
+        conflict_state = {
+            "float_pressure_score": (sub_scores.get("float_pressure") or 0) * 100,
+            "absorption_score": 100.0 if has_absorption
+                                else (sub_scores.get("price_action") or 0) * 100,
+            "price_action_score": (sub_scores.get("price_action") or 0) * 100,
+            # Phase A: retail_heat/gap_trap motors don't exist yet. Pass None
+            # (not 0) so conflict matrix rules requiring these signals
+            # don't false-fire on default-zero values.
+            "retail_heat": None,
+            "gap_trap": None,
+            "position_in_range": ind.get("position_in_range", 0.5),
+            "move_maturity": (maturity_dict or {}).get("maturity", "UNCLEAR"),
+            "price_pinning_score": (pinning_dict or {}).get("price_pinning_score") or 0,
+            "playbook": (playbook_dict or {}).get("playbook", "UNCLEAR"),
+            "playbook_confidence": (playbook_dict or {}).get("confidence", 0),
+            # Phase A.6: turnover-based rules
+            "float_turnover_20d": float_turnover_20d,
+            "ret_20d": ind.get("ret_20d", 0.0),
+        }
+        conflict = resolve_conflict_matrix(conflict_state)
+        conflict_dict = conflict.to_dict()
+        # Also expose float_turnover_20d at the top of metrics for the runner
+        metrics_dict["float_turnover_20d"] = float_turnover_20d
+    except Exception as _e:
+        log.debug("Phase A conflict matrix failed for %s: %r", symbol, _e)
+
+    try:
+        from engine.bullwatch_evidence import build_evidence_card
+        evidence_dict = build_evidence_card(
+            metrics=metrics_dict,
+            sub_scores={k: float(v) for k, v in sub_scores.items() if v is not None},
+            pinning_result=pinning_dict,
+            maturity_result=maturity_dict,
+            playbook_result=playbook_dict,
+            conflict_result=conflict_dict,
+        )
+    except Exception as _e:
+        log.debug("Phase A evidence failed for %s: %r", symbol, _e)
+
     return BullWatchResult(
         symbol=symbol,
         score=score_final,
@@ -871,6 +1012,13 @@ def score_symbol(metrics: dict,
         industry=industry,
         sector_tr=sector_tr,
         narrative=narrative,
+        universe_tier=universe_tier,
+        # Phase A additions (any may be None on failure)
+        playbook_sequence=playbook_dict,
+        price_pinning=pinning_dict,
+        move_maturity=maturity_dict,
+        engine_conflict_matrix=conflict_dict,
+        evidence_layer=evidence_dict,
     )
 
 

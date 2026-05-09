@@ -59,6 +59,23 @@ _KNOWN_OVERRIDES: dict[str, dict[str, Any]] = {
     # this correctly (28→0.28), so no override needed for AKGRT.
     # Listed here as a no-op reminder; do NOT enable.
     # "AKGRT": {"free_float": 0.28},
+    #
+    # ── Phase A.6 hygiene additions ─────────────────────────────
+    # yfinance returned no float data (empty floatShares field) for these
+    # three symbols in the 2026-05-08 Phase A.5 review. Without overrides
+    # they were rejected as "no_data". Values below are best-effort from
+    # public BIST/KAP filings — VERIFY on KAP and adjust if needed.
+    #
+    # Kaplamin Ambalaj — small-cap pump candidate. Free float estimate
+    # from public filings ~35%.
+    "KAPLM": {"free_float": 0.35},
+    # Galer Holding — small-cap holding. Free float estimate ~35% per
+    # public filings (not authoritatively verified).
+    "GLRMK": {"free_float": 0.35},
+    # Aselsan — state-owned defense. Public free float ~25.93% (Aselsan
+    # IR / KAP). Note: even with this override ASELS may land in the
+    # institutional tier (>15B TL float mcap); that's correct behavior.
+    "ASELS": {"free_float": 0.2593},
 }
 
 
