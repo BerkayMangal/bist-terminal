@@ -650,6 +650,87 @@ function _bwDqBadge(dq){
   if(dq==='medium') return '<span class="pill p-ylw" style="font-size:9px;padding:2px 6px">MED DATA</span>';
   return                   '<span class="pill p-red" style="font-size:9px;padding:2px 6px">LOW DATA</span>';
 }
+
+// Phase A.10 Step 2-A.2 — UI helpers (display-only, no scoring impact)
+
+// Cycle state badge — maps engine output to user-facing label.
+function _bwCycleBadge(item){
+  const cs = item.cycle_state || '';
+  const map = {
+    'TOPLANIYOR':    {bg:'rgba(106,167,255,.18)', col:'var(--cyn)', ico:'🌀'},
+    'ATEŞLENİYOR':   {bg:'rgba(0,229,160,.18)',   col:'var(--grn)', ico:'⚡'},
+    'DAĞITIM RİSKİ': {bg:'rgba(255,167,38,.18)',  col:'var(--orn)', ico:'⚠'},
+    'BOŞALTIYOR':    {bg:'rgba(239,83,80,.18)',   col:'var(--red)', ico:'🔻'},
+    'BELİRSİZ':      {bg:'var(--bg3)',            col:'var(--t3)',  ico:'•'},
+  };
+  const m = map[cs];
+  if(!m) return '';
+  return `<span title="Engine cycle state — bu hisse döngünün neresinde?" style="display:inline-flex;align-items:center;gap:4px;background:${m.bg};color:${m.col};font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;padding:3px 8px;border-radius:4px;letter-spacing:.4px">${m.ico} ${esc(cs)}</span>`;
+}
+
+// Data trust badge — uses data_status (Step 2-A) when available, otherwise
+// falls back to v1 data_quality. Hover tooltip exposes provider + missing
+// fields + override info. Never hides cards based on partial data.
+function _bwDataBadge(item){
+  const ds = item.data_status;            // "live"|"partial"|"stale"|"missing"
+  const dq = item.data_quality;           // legacy fallback
+  const provider = item.provider_used;
+  const missing = item.missing_fields || [];
+  const ovr = item.override_applied;
+  const ovrFields = item.override_fields || [];
+
+  // Compose tooltip — short multi-line text
+  const tip = [];
+  if(provider) tip.push('Source: ' + provider);
+  if(ds)       tip.push('Status: ' + ds);
+  if(missing.length) tip.push('Missing: ' + missing.slice(0,4).join(', '));
+  if(ovr && ovrFields.length) tip.push('Override: ' + ovrFields.join(', '));
+  const tipText = tip.length ? tip.join('\n') : '';
+
+  // Pick color/label based on data_status (Step 2-A) primarily
+  let label, cls;
+  if(ds === 'live'){     label = 'DATA: LIVE';    cls = 'p-grn'; }
+  else if(ds === 'partial'){ label = 'DATA: PARTIAL'; cls = 'p-ylw'; }
+  else if(ds === 'stale'){   label = 'DATA: STALE';   cls = 'p-orn'; }
+  else if(ds === 'missing'){ label = 'DATA: MISSING'; cls = 'p-red'; }
+  else if(dq === 'high'){    label = 'DATA: HIGH';    cls = 'p-grn'; }
+  else if(dq === 'medium'){  label = 'DATA: MED';     cls = 'p-ylw'; }
+  else {                     label = 'DATA: LOW';     cls = 'p-red'; }
+
+  return `<span class="pill ${cls}" title="${esc(tipText)}" style="font-size:9px;padding:2px 6px;cursor:help">${label}</span>`;
+}
+
+// Evidence chips — 2-4 strongest facts in compact monochrome chips.
+// Display order: prioritize the most discriminating signals first.
+function _bwEvidenceChips(item){
+  const chips = [];
+  const m = item.metrics || {};
+  const fp = m.float_pressure;
+  const rvol = m.rvol;
+  const ft = m.float_turnover_20d;
+  const pin = item.price_pinning?.price_pinning_score;
+  const pos = item.move_maturity?.indicators?.position_in_range;
+  const ct = item.engine_conflict_matrix?.confidence_tier;
+  const depth = item.engine_conflict_matrix?.evidence_depth_count;
+
+  // Strongest facts first — at most 5 chips to keep visual budget
+  if(fp != null && fp >= 0.04) chips.push({k:'Float', v:`${(fp*100).toFixed(1)}%`, c:'var(--grn)'});
+  else if(fp != null && fp >= 0.02) chips.push({k:'Float', v:`${(fp*100).toFixed(1)}%`});
+  if(rvol != null && rvol >= 1.5) chips.push({k:'RVOL', v:`${rvol.toFixed(1)}×`, c: rvol >= 3 ? 'var(--grn)' : null});
+  if(ft != null && ft >= 1.5) chips.push({k:'Turnover', v:`${ft.toFixed(1)}×`});
+  if(pin != null && pin >= 60) chips.push({k:'Pinning', v:`${pin.toFixed(0)}`});
+  if(pos != null) chips.push({k:'Range', v:`${(pos*100).toFixed(0)}%`, c: pos>0.85?'var(--orn)':(pos<0.30?'var(--cyn)':null)});
+  if(ct && depth!=null) chips.push({k:'Conf', v:`${ct}·${depth}`});
+  if(item.data_status === 'partial') chips.push({k:'Veri', v:'partial', c:'var(--ylw)'});
+  if(item.override_applied) chips.push({k:'Manual', v:(item.override_fields||[]).join('+')||'override', c:'var(--cyn)'});
+
+  if(!chips.length) return '';
+  const items = chips.slice(0, 5).map(ch => {
+    const col = ch.c || 'var(--t3)';
+    return `<span style="display:inline-flex;align-items:center;gap:3px;background:var(--bg3);color:${col};font-family:'JetBrains Mono',monospace;font-size:9.5px;padding:2px 6px;border-radius:3px;letter-spacing:.2px"><span style="opacity:.65">${esc(ch.k)}</span><b style="font-weight:600">${esc(ch.v)}</b></span>`;
+  }).join('');
+  return `<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:6px">${items}</div>`;
+}
 function _bwSectorStyle(sec){
   const m={
     'Endüstri':{col:'var(--grn)',bg:'var(--grnd)',ico:'🏭'},
@@ -781,8 +862,9 @@ function _bwCard(item){
         </div>
         <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;align-items:center">
           <span class="pill ${z.pill}">${z.icon} ${z.label}</span>
+          ${_bwCycleBadge(item)}
           <span style="display:inline-flex;align-items:center;gap:4px;background:${ss.bg};color:${ss.col};font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:600;padding:3px 8px;border-radius:4px;text-transform:uppercase;letter-spacing:.4px">${ss.ico} ${esc(sec)}</span>
-          ${_bwDqBadge(item.data_quality||'medium')}
+          ${_bwDataBadge(item)}
           ${trendHtml}
         </div>
       </div>
@@ -793,6 +875,7 @@ function _bwCard(item){
     </div>
     <div style="font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--t1);margin-top:6px;line-height:1.5;font-weight:600">${esc(item.pattern||'—')}</div>
     ${meta?`<div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--t3);margin-top:6px">${esc(meta)}</div>`:''}
+    ${_bwEvidenceChips(item)}
     ${narr.whats_happening?`<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--bdr);font-size:12px;line-height:1.55">
       <div style="margin-bottom:8px"><span style="color:var(--cyn);font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;letter-spacing:.5px">🔍 NE OLUYOR</span><div style="color:var(--t1);margin-top:3px">${_bwMarkdown(narr.whats_happening)}</div></div>
       ${narr.what_to_watch?`<div style="margin-bottom:8px"><span style="color:var(--ylw);font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;letter-spacing:.5px">⏰ NE BEKLE</span><div style="color:var(--t2);margin-top:3px">${_bwMarkdown(narr.what_to_watch)}</div></div>`:''}
@@ -805,16 +888,232 @@ function _bwMarkdown(s){
   if(!s) return '';
   return esc(s).replace(/\*\*([^*]+)\*\*/g,'<b>$1</b>');
 }
+
+// ─── Phase A.10 Step 2-A.2 — UX safety state machine ───
+// Goals: pressing "Yeniden tara" must NEVER blank the current results.
+// New scan runs in background, cached separately as S.bwPending until
+// the user explicitly accepts. State fields:
+//   S.bwRefreshRunning  — boolean, scan in progress
+//   S.bwScanProgress    — latest /health response while polling
+//   S.bwPending         — fetched new BullWatch result, not yet swapped in
+//   S.bwPendingDiff     — diff stats vs. current S.bullwatch
+//   S.bwRefreshError    — last refresh failure message
+//   S.bwSnapshotSavedAt — confirmation toast timestamp
+
+function bwComputeDiff(oldBw, newBw){
+  const oldMap = {}, newMap = {};
+  (oldBw && oldBw.items || []).forEach(i => oldMap[i.symbol] = i);
+  (newBw && newBw.items || []).forEach(i => newMap[i.symbol] = i);
+  const zoneRank = {EARLY:1, CONFIRMED:2, CONVICTION:3};
+  const newSymbols = [], removedSymbols = [];
+  let scoreChanged = 0, upgraded = 0, downgraded = 0;
+  Object.keys(newMap).forEach(sym => {
+    if(!oldMap[sym]){ newSymbols.push(sym); return; }
+    const o = oldMap[sym], n = newMap[sym];
+    if(Math.abs((n.score||0) - (o.score||0)) >= 5) scoreChanged++;
+    const oR = zoneRank[o.zone]||0, nR = zoneRank[n.zone]||0;
+    if(nR > oR) upgraded++;
+    else if(nR > 0 && oR > 0 && nR < oR) downgraded++;
+  });
+  Object.keys(oldMap).forEach(sym => {
+    if(!newMap[sym]) removedSymbols.push(sym);
+  });
+  return {
+    new_count: newSymbols.length,
+    removed_count: removedSymbols.length,
+    score_changed_count: scoreChanged,
+    upgraded_count: upgraded,
+    downgraded_count: downgraded,
+    new_symbols: newSymbols,
+    removed_symbols: removedSymbols,
+  };
+}
+
+function bwAcceptPending(){
+  if(!S.bwPending) return;
+  S.bullwatch = S.bwPending;
+  S.bwPending = null;
+  S.bwPendingDiff = null;
+  S.bwRefreshError = null;
+  renderBullwatchPage();
+}
+
+function bwDiscardPending(){
+  S.bwPending = null;
+  S.bwPendingDiff = null;
+  S.bwRefreshError = null;
+  renderBullwatchPage();
+}
+
+function bwRetryRefresh(){
+  S.bwRefreshError = null;
+  loadBullwatch(true);
+}
+
+function bwSnapshotSave(){
+  if(!S.bullwatch || !S.bullwatch.items || !S.bullwatch.items.length) return;
+  try{
+    localStorage.setItem('bw_snapshot_last_successful', JSON.stringify({
+      saved_at: new Date().toISOString(),
+      item_count: S.bullwatch.items.length,
+      data: S.bullwatch,
+    }));
+    S.bwSnapshotSavedAt = Date.now();
+    renderBullwatchPage();
+    setTimeout(() => {
+      // auto-clear toast after 3s
+      if(S.bwSnapshotSavedAt && Date.now() - S.bwSnapshotSavedAt >= 3000){
+        S.bwSnapshotSavedAt = null;
+        renderBullwatchPage();
+      }
+    }, 3100);
+  }catch(e){ console.warn('snapshot save failed:', e); }
+}
+
+function bwSnapshotRestore(){
+  try{
+    const raw = localStorage.getItem('bw_snapshot_last_successful');
+    if(!raw) return null;
+    return JSON.parse(raw);
+  }catch(e){ return null; }
+}
+
+// Background refresh: like _bwPollUntilReady but writes to S.bwPending
+// (never overwrites S.bullwatch, never blanks the page).
+async function _bwBackgroundRefresh(){
+  S.bwRefreshRunning = true;
+  S.bwRefreshError = null;
+  S.bwScanProgress = null;
+  renderBullwatchPage();
+
+  // Kick off the actual refresh on the server. We don't await this directly
+  // — we poll /health and only fetch when ready. The fetchPromise is mostly
+  // used to ensure refresh=true reaches the server.
+  const fetchPromise = api('/api/bullwatch?refresh=true').catch(() => null);
+  await new Promise(r => setTimeout(r, 1000));
+
+  const startTime = Date.now();
+  const MAX_POLL_SEC = 420;  // 7 dakika hard cap
+  while(Date.now() - startTime < MAX_POLL_SEC * 1000){
+    let h;
+    try{ h = await api('/api/bullwatch/health'); }catch(e){ h = null; }
+    if(h){
+      S.bwScanProgress = h;
+      // Cache hazır + scan bitti → fetch et
+      if(h.cache_populated && !h.scan_running){
+        try{
+          const newBw = await fetchPromise || await api('/api/bullwatch');
+          if(newBw && newBw.items){
+            S.bwPending = newBw;
+            S.bwPendingDiff = bwComputeDiff(S.bullwatch, newBw);
+          }else{
+            S.bwRefreshError = 'Yeni sonuçlar boş döndü.';
+          }
+        }catch(e){
+          S.bwRefreshError = e.message || 'Sonuç alınamadı';
+        }
+        S.bwRefreshRunning = false;
+        S.bwScanProgress = null;
+        renderBullwatchPage();
+        return;
+      }
+      // Hâlâ devam ediyor — re-render (banner progress'i güncellenir)
+      renderBullwatchPage();
+    }
+    await new Promise(r => setTimeout(r, 3000));
+  }
+
+  // Timeout
+  S.bwRefreshRunning = false;
+  S.bwScanProgress = null;
+  S.bwRefreshError = 'Tarama 7 dakikayı aştı — birkaç dakika sonra tekrar dene.';
+  renderBullwatchPage();
+}
+
+// Inline banners rendered above the existing BullWatch header. Each is
+// optional and additive — none of them remove or alter the cards below.
+function _bwBannerRefreshRunning(){
+  const sp = S.bwScanProgress || {};
+  const done = sp.scan_progress || 0;
+  const total = sp.scan_total || 0;
+  const pct = sp.scan_progress_pct || 0;
+  const elapsed = sp.scan_elapsed_sec || 0;
+  const eta = done > 0 && pct < 99 && total > 0
+    ? Math.round((elapsed/done) * (total-done)) : null;
+  const elapsedStr = elapsed >= 120 ? `${(elapsed/60).toFixed(1)}dk` : `${elapsed.toFixed(0)}s`;
+  const progressLine = total > 0
+    ? `${done}/${total} hisse · ${pct.toFixed(0)}%${eta!=null?` · ~${eta}s kaldı`:''} · ${elapsedStr} geçti`
+    : `Hazırlık başlıyor…`;
+  return `<div style="background:linear-gradient(90deg,rgba(106,167,255,.15),rgba(106,167,255,.05));border:1px solid rgba(106,167,255,.4);border-radius:var(--rad);padding:12px 14px;margin-bottom:14px">
+    <div style="display:flex;align-items:center;gap:10px;font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--cyn);font-weight:600">
+      <div class="sp" style="width:14px;height:14px;border-width:2px;flex-shrink:0"></div>
+      <span>🔄 Yeni tarama hazırlanıyor — mevcut sonuçlar korunuyor.</span>
+    </div>
+    ${total > 0 ? `<div style="height:5px;background:var(--bg3);border-radius:3px;overflow:hidden;margin-top:10px">
+      <div style="width:${pct}%;height:100%;background:var(--cyn);transition:width .5s"></div>
+    </div>` : ''}
+    <div style="font-family:'JetBrains Mono',monospace;font-size:10.5px;color:var(--t3);margin-top:6px">${esc(progressLine)}</div>
+  </div>`;
+}
+
+function _bwBannerPending(){
+  const d = S.bwPendingDiff || {};
+  const parts = [];
+  if(d.new_count) parts.push(`<b style="color:var(--grn)">+${d.new_count} yeni</b>`);
+  if(d.removed_count) parts.push(`<b style="color:var(--red)">-${d.removed_count} çıktı</b>`);
+  if(d.score_changed_count) parts.push(`${d.score_changed_count} skor değişti`);
+  if(d.upgraded_count) parts.push(`<b style="color:var(--grn)">${d.upgraded_count} zone yükseldi</b>`);
+  if(d.downgraded_count) parts.push(`<b style="color:var(--orn)">${d.downgraded_count} zone düştü</b>`);
+  const summaryLine = parts.length ? parts.join(' · ') : 'Liste değişmedi.';
+  return `<div style="background:linear-gradient(90deg,rgba(0,229,160,.15),rgba(0,229,160,.05));border:1px solid rgba(0,229,160,.45);border-radius:var(--rad);padding:14px 16px;margin-bottom:14px">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+      <div style="flex:1;min-width:200px">
+        <div style="font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--grn);font-weight:700;margin-bottom:4px">✅ Yeni tarama hazır</div>
+        <div style="font-size:12px;color:var(--t2);font-family:'JetBrains Mono',monospace">${summaryLine}</div>
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <button class="btn btn-sm btn-grn" onclick="bwAcceptPending()">Yeni sonuçları göster</button>
+        <button class="btn btn-sm" style="background:var(--bg3);color:var(--t2)" onclick="bwDiscardPending()">Mevcut listeyi koru</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function _bwBannerError(){
+  return `<div style="background:linear-gradient(90deg,rgba(255,167,38,.15),rgba(255,167,38,.05));border:1px solid rgba(255,167,38,.45);border-radius:var(--rad);padding:12px 14px;margin-bottom:14px">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+      <div style="flex:1;min-width:200px">
+        <div style="font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--orn);font-weight:600">⚠ Yeni tarama başarısız oldu, son başarılı sonuçlar gösteriliyor.</div>
+        <div style="font-size:11px;color:var(--t3);margin-top:3px">${esc(S.bwRefreshError||'')}</div>
+      </div>
+      <button class="btn btn-sm" style="background:var(--bg3);color:var(--t2)" onclick="bwRetryRefresh()">Tekrar dene</button>
+    </div>
+  </div>`;
+}
+
+function _bwBannerSnapshotToast(){
+  return `<div style="position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--bg3);border:1px solid var(--grn);color:var(--grn);padding:10px 18px;border-radius:var(--rad);font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:600;z-index:9999;box-shadow:0 4px 16px rgba(0,0,0,.3)">✓ Snapshot kaydedildi</div>`;
+}
+
+function _bwBannerSnapshotFallback(){
+  return `<div style="background:linear-gradient(90deg,rgba(255,167,38,.12),rgba(255,167,38,.04));border:1px solid rgba(255,167,38,.35);border-radius:var(--rad);padding:10px 14px;margin-bottom:14px;font-size:12px;color:var(--orn);font-family:'JetBrains Mono',monospace">📦 Canlı veri alınamadı — son kayıtlı snapshot gösteriliyor.</div>`;
+}
+
 function renderBullwatchPage(){
   const pg=$('pg-bullwatch');
-  // Initial load — auto-trigger on first visit
+  // Initial load — auto-trigger on first visit. Snapshot fallback handled
+  // inside loadBullwatch() if API fails AND localStorage snapshot exists.
   if(S.bullwatch===undefined){
     pg.innerHTML=`<div class="ld"><div class="sp"></div><div class="ld-t">BullWatch hazırlanıyor…</div><div style="font-size:11px;color:var(--t4);margin-top:6px">Cache durumu kontrol ediliyor</div></div>`;
     loadBullwatch();
     return;
   }
   const bw=S.bullwatch;
-  if(bw&&bw.error){
+  // Empty / error state — but ONLY if we have NO usable cards at all.
+  // (If we have current results AND a refresh error, we keep the cards
+  //  visible and just show an error banner above them.)
+  const hasUsableCards = bw && bw.items && bw.items.length > 0;
+  if(bw&&bw.error && !hasUsableCards){
     pg.innerHTML=`<div class="emp"><h3 style="color:var(--t2)">BullWatch yüklenemedi: ${esc(bw.error)}</h3><button class="btn btn-grn" style="margin-top:14px" onclick="S.bullwatch=undefined;renderBullwatchPage()">Tekrar Dene</button></div>`;
     return;
   }
@@ -852,13 +1151,24 @@ function renderBullwatchPage(){
   const capTl=bw?.cap_tl||250e6;
   const capStr=`${(capTl/1e6).toFixed(0)}M TL`;
   const nearMisses=bw?.near_misses||[];
-  let h=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px">
+  // Phase A.10 Step 2-A.2 — UX safety banners (additive, above header)
+  let bannersHtml = '';
+  if(S.bwIsSnapshotFallback) bannersHtml += _bwBannerSnapshotFallback();
+  if(S.bwRefreshRunning) bannersHtml += _bwBannerRefreshRunning();
+  if(S.bwPending) bannersHtml += _bwBannerPending();
+  if(S.bwRefreshError && !S.bwRefreshRunning && !S.bwPending) bannersHtml += _bwBannerError();
+
+  let h=bannersHtml+`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px">
     <div>
       <h2 style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-lg);color:var(--acc)">🐂 BullWatch — Sessiz Birikim Radarı</h2>
-      <p style="font-size:var(--fs-sm);color:var(--t3);margin-top:2px">${asof?new Date(asof).toLocaleString('tr-TR'):''} · ${scanned} hisse tarandı · ${eligible} eleğe takıldı · float ≤${capStr}</p>
+      <p style="font-size:var(--fs-sm);color:var(--t3);margin-top:2px">Son başarılı tarama: ${asof?new Date(asof).toLocaleString('tr-TR'):'<i style="color:var(--t4)">veri hazırlanıyor</i>'} · ${scanned} hisse tarandı · ${eligible} eleğe takıldı · float ≤${capStr}</p>
+      <p style="font-size:11px;color:var(--t3);margin-top:4px;font-family:'JetBrains Mono',monospace">📊 Aktif sinyal: <b style="color:var(--grn)">${counts.CONVICTION||0} conviction</b> · <b style="color:var(--ylw)">${counts.CONFIRMED||0} confirmed</b> · <b style="color:var(--blu)">${counts.EARLY||0} early</b></p>
       <p style="font-size:10px;color:var(--t4);margin-top:2px;font-family:'JetBrains Mono',monospace">📅 Veri: son tamamlanmış işlem günü (intraday partial bar dışlandı — gün içinde sonuçlar tutarlı)</p>
     </div>
-    <button class="btn btn-grn" onclick="loadBullwatch(true)">🔄 YENİDEN TARA</button>
+    <div style="display:flex;gap:6px;flex-wrap:wrap">
+      <button class="btn btn-sm" style="background:var(--bg3);color:var(--t2)" onclick="bwSnapshotSave()" title="Mevcut listeyi tarayıcıda yedekle (sonraki API hatasında geri yüklenir)">📦 Snapshot al</button>
+      <button class="btn btn-grn" onclick="loadBullwatch(true)" ${S.bwRefreshRunning?'disabled style="opacity:.5;cursor:not-allowed"':''}>🔄 ${S.bwRefreshRunning?'Tarama çalışıyor…':'YENİDEN TARA'}</button>
+    </div>
   </div>
   <div style="padding:12px 16px;background:var(--bg3);border-radius:var(--rad);margin-bottom:14px;font-size:var(--fs-base);color:var(--t2);line-height:1.6">
     <b style="color:var(--acc)">BullWatch nasıl çalışır?</b> Düşük float (≤${capStr} float piyasa değeri), likit (≥5M TL günlük hacim) BIST mikro-kaplarında <b>sessiz birikim ayak izlerini</b> tespit eder. 7 motor: Float Pressure, Revenue Mispricing, Silent Volume, Price Action (Shakeout / Absorption / Tight Closes / Walk-Up), Compression, Ownership Intelligence, Fundamental Quality. <span style="color:var(--t4);font-size:11px">Yatırım tavsiyesi değildir — yalnızca tape okuma.</span>
@@ -975,12 +1285,27 @@ function renderBullwatchPage(){
   }else{
     h+=`<div class="bw-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px">${filtered.map(_bwCard).join('')}</div>`;
   }
+  // Snapshot save toast (auto-dismisses)
+  if(S.bwSnapshotSavedAt && Date.now() - S.bwSnapshotSavedAt < 3000){
+    h += _bwBannerSnapshotToast();
+  }
   pg.innerHTML=h;
 }
 // BullWatch: akıllı yükleme — health-poll ile progress göster.
 // Cache hazırsa anında, scan running ise X/Y göstergesi, yoksa scan tetikle.
+//
+// Phase A.10 Step 2-A.2: snapshot-safe refresh. When refresh=true AND we
+// already have a successful list, run in background (S.bwPending) — never
+// blank the page while the new scan runs.
 async function loadBullwatch(refresh){
   const pg=$('pg-bullwatch');
+  const hasCurrentResults = S.bullwatch && S.bullwatch.items && S.bullwatch.items.length > 0;
+
+  // Snapshot-safe path: refresh requested AND we have current cards
+  if(refresh && hasCurrentResults){
+    return _bwBackgroundRefresh();
+  }
+
   if(refresh){
     pg.innerHTML=`<div class="ld"><div class="sp"></div><div class="ld-t">BullWatch yeniden taranıyor…</div><div style="font-size:11px;color:var(--t4);margin-top:6px">Hazırlık başlıyor</div></div>`;
   }
@@ -994,9 +1319,19 @@ async function loadBullwatch(refresh){
   if(cacheReady && !refresh){
     try{
       S.bullwatch=await api('/api/bullwatch');
+      S.bwIsSnapshotFallback = false;
       renderBullwatchPage();
     }catch(e){
-      S.bullwatch={items:[],error:e.message};
+      // Phase A.10 Step 2-A.2: snapshot fallback — first load failed,
+      // try to restore last successful snapshot from localStorage so
+      // user sees something useful instead of an empty error state.
+      const snap = bwSnapshotRestore();
+      if(snap && snap.data && snap.data.items && snap.data.items.length){
+        S.bullwatch = snap.data;
+        S.bwIsSnapshotFallback = true;
+      } else {
+        S.bullwatch={items:[],error:e.message};
+      }
       renderBullwatchPage();
     }
     return;
@@ -1068,8 +1403,8 @@ async function _bwPollUntilReady(fetchPromise){
         </div>
         <div style="font-size:11px;color:var(--t4);margin-top:14px;max-width:360px;text-align:center;line-height:1.5">
           ${isStragglers
-            ? `${total-done} hisse yfinance'ten yanıt bekliyor. <b style="color:var(--t2)">Maksimum 4 dakikada</b> sonuç gelir veya parçalı liste gösterilir.`
-            : `${total} BIST mikro-kapı paralel taranıyor. yfinance bazen yavaş — sayfa kapatma, otomatik yenilenecek.`}
+            ? `${total-done} hisse veri sağlayıcıdan yanıt bekliyor. <b style="color:var(--t2)">Maksimum 4 dakikada</b> sonuç gelir veya parçalı liste gösterilir.`
+            : `${total} BIST mikro-kapı paralel taranıyor. Bazı semboller yavaş yanıtlıyor — sayfa kapatma, otomatik yenilenecek.`}
         </div>
       </div>`;
       await new Promise(r=>setTimeout(r,3000));
@@ -1087,7 +1422,7 @@ async function _bwPollUntilReady(fetchPromise){
     }
   }
   // 7 dakikayı aştık
-  S.bullwatch={items:[],error:'Tarama 7 dakikayı aştı — yfinance yavaş. Birkaç dakika sonra tekrar dene.'};
+  S.bullwatch={items:[],error:'Tarama 7 dakikayı aştı — veri sağlayıcı yavaş yanıtlıyor. Birkaç dakika sonra tekrar dene.'};
   renderBullwatchPage();
 }
 

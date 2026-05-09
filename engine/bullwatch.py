@@ -341,6 +341,60 @@ def map_sector_tr(sector: Optional[str], industry: Optional[str],
 # sentences a non-quant retail investor can act on. Deterministic
 # (template-based, no LLM): same inputs → same output every time.
 # ----------------------------------------------------------------
+def _compute_cycle_state(
+    metrics: dict[str, Any],
+    conflict_dict: Optional[dict] = None,
+    maturity_dict: Optional[dict] = None,
+    playbook_dict: Optional[dict] = None,
+) -> str:
+    """Phase A.10 Step 2-A.2: map existing engine outputs to a high-level
+    cycle state for the UI.
+
+    PURE DISPLAY MAPPING — no new scoring logic, no new thresholds. Reads
+    only fields already produced by Hotfix16-Step 2-A.1 engines.
+
+    Returns one of:
+      - TOPLANIYOR     (accumulation, early/mid)
+      - ATEŞLENİYOR    (markup transition: walk-up active OR markup playbook)
+      - DAĞITIM RİSKİ  (distribution dominant)
+      - BOŞALTIYOR     (markdown sequence OR distribution + late maturity)
+      - BELİRSİZ       (unclear / insufficient evidence)
+    """
+    cm = conflict_dict or {}
+    mat = maturity_dict or {}
+    pb = playbook_dict or {}
+
+    dom = (cm.get("dominant_read") or "").upper()
+    maturity = (mat.get("maturity") or "").upper()
+    pb_name = (pb.get("playbook") or "").upper()
+
+    patterns_lc = [str(p).lower() for p in (metrics.get("patterns") or [])]
+    has_walk_up = any("walk" in p and "up" in p for p in patterns_lc)
+
+    # Most extreme first: markdown / late distribution → BOŞALTIYOR
+    if "MARKDOWN" in pb_name:
+        return "BOŞALTIYOR"
+    if dom == "DISTRIBUTION" and maturity == "LATE":
+        return "BOŞALTIYOR"
+
+    # Distribution dominant → DAĞITIM RİSKİ
+    if dom == "DISTRIBUTION":
+        return "DAĞITIM RİSKİ"
+
+    # Markup transition → ATEŞLENİYOR
+    if "MARKUP" in pb_name:
+        return "ATEŞLENİYOR"
+    if dom == "ACCUMULATION" and has_walk_up:
+        return "ATEŞLENİYOR"
+
+    # General accumulation → TOPLANIYOR
+    if dom == "ACCUMULATION":
+        return "TOPLANIYOR"
+
+    # Default
+    return "BELİRSİZ"
+
+
 def _build_narrative(
     score: float,
     zone: str,
@@ -349,12 +403,20 @@ def _build_narrative(
     components: dict[str, float],
     metrics: dict[str, Any],
     data_quality: str,
+    conflict_dict: Optional[dict] = None,
+    maturity_dict: Optional[dict] = None,
+    playbook_dict: Optional[dict] = None,
+    pinning_dict: Optional[dict] = None,
 ) -> dict[str, str]:
     """Three short Turkish paragraphs explaining the signal in human terms.
 
     - whats_happening: current state, what the engines see right now
-    - what_to_watch: leading indicators that confirm/invalidate the setup
+    - what_to_watch: trigger-style observations for confirmation/invalidation
     - caveats: data quality / sector mismatch / score-too-low warnings
+
+    Phase A.10 Step 2-A.2: optional dicts (conflict/maturity/playbook/pinning)
+    feed varied, data-specific copy. When None (legacy callers, partial-data
+    paths), falls back to the v1 pattern-only narrative.
     """
     fp = metrics.get("float_pressure")          # daily volume / floating shares
     rvol = metrics.get("rvol")                  # vs 20-day median
@@ -369,42 +431,115 @@ def _build_narrative(
     has_walk_up = any("walk" in p and "up" in p for p in patterns_lc)
     has_shakeout = any("shakeout" in p for p in patterns_lc)
 
+    # Phase A.10 Step 2-A.2: extract optional diagnostic context
+    cm = conflict_dict or {}
+    mat = maturity_dict or {}
+    pb = playbook_dict or {}
+    pin = pinning_dict or {}
+    ind = mat.get("indicators") or {}
+
+    dom = (cm.get("dominant_read") or "").upper()
+    ct = (cm.get("confidence_tier") or "").upper()
+    depth = cm.get("evidence_depth_count") or 0
+    conf_pct = cm.get("confidence") or 0
+    maturity = (mat.get("maturity") or "").upper()
+    pb_name = (pb.get("playbook") or "").upper()
+    pb_conf = pb.get("confidence") or 0
+    pb_missing = pb.get("missing_next_confirmation")
+    position = ind.get("position_in_range")
+    ret_20d = ind.get("ret_20d")
+    pinning_score = pin.get("price_pinning_score")
+    band_pct = pin.get("band_width_pct")
+    inside_pct = pin.get("closes_inside_band_pct")
+    turnover_20d = ind.get("float_turnover_20d") or metrics.get("float_turnover_20d")
+    data_status = metrics.get("_data_status")
+    missing_fields = metrics.get("_missing_fields") or []
+    override_applied = metrics.get("override_applied", False)
+
     # ── NE OLUYOR — describe the present state in plain Turkish ──
     parts: list[str] = []
     if pattern and pattern != "—":
         parts.append(f"Şu an **{pattern.lower()}** profili veriyor.")
 
-    if fp is not None:
-        if fp >= 0.04:
-            parts.append(f"Float'ın {fp*100:.1f}%'i bugün el değiştirdi — sıkı bir alım baskısı.")
-        elif fp >= 0.02:
-            parts.append(f"Float'ın {fp*100:.1f}%'i el değiştirdi — orta düzey birikim.")
+    # Float turnover (Hotfix16 signal) is more discriminating than fp alone
+    if turnover_20d is not None and turnover_20d >= 1.5:
+        parts.append(f"20 günde float'ın {turnover_20d:.1f}x'i el değiştirdi — yoğun transfer.")
+    elif fp is not None and fp >= 0.04:
+        parts.append(f"Float'ın {fp*100:.1f}%'i bugün el değiştirdi — sıkı bir alım baskısı.")
+    elif fp is not None and fp >= 0.02:
+        parts.append(f"Float'ın {fp*100:.1f}%'i el değiştirdi — orta düzey birikim.")
 
+    # Position in range — concrete fact instead of generic "compressed"
+    if position is not None:
+        if position < 0.30:
+            parts.append(f"Fiyat 12 aylık aralığın alt %{position*100:.0f}'inde — taban bölgesi.")
+        elif position > 0.85:
+            parts.append(f"Fiyat 12 aylık aralığın üst %{position*100:.0f}'inde — tepe bölgesi.")
+        elif 0.40 <= position <= 0.60:
+            parts.append(f"Fiyat aralığın orta bandında (%{position*100:.0f}) — geçiş zonu.")
+
+    # Pinning — control-band signal
+    if pinning_score is not None and pinning_score >= 60:
+        parts.append(
+            f"Pinning skoru {pinning_score:.0f} — fiyat dar bantta kontrollü tutuluyor."
+        )
+
+    # Compression
     if atr_r is not None and atr_r < 0.95:
-        parts.append(f"Volatilite son 60 günün %{atr_r*100:.0f}'inde — sıkışma var, bir şeye hazırlanıyor olabilir.")
+        parts.append(f"Volatilite son 60 günün %{atr_r*100:.0f}'inde — sıkışma var.")
 
+    # Volume context
     if rvol is not None:
         if rvol < 0.7:
             parts.append(f"Hacim normalin {rvol:.1f}x'i — sessizce, dikkat çekmeden.")
-        elif rvol > 1.5:
+        elif rvol > 2.0:
             parts.append(f"Hacim normalin {rvol:.1f}x'i — fark edilmeye başladı.")
+        elif rvol > 1.5:
+            parts.append(f"Hacim normalin {rvol:.1f}x'i — orta hacimle aktif.")
+
+    # Conflict matrix verdict (high-confidence override)
+    if dom and dom != "UNCLEAR" and conf_pct >= 60:
+        if dom == "ACCUMULATION":
+            parts.append(f"Çelişki matrisi: %{conf_pct:.0f} güvenle toplama lehine.")
+        elif dom == "DISTRIBUTION":
+            parts.append(f"Çelişki matrisi: %{conf_pct:.0f} güvenle dağıtım lehine.")
 
     if not parts:
         parts.append("Mekanik olarak eligible ama net bir hikaye yok henüz.")
 
     whats_happening = " ".join(parts)
 
-    # ── NE BEKLE — leading indicators ──
+    # ── NE BEKLE — trigger-style observations (not advice) ──
     watch_parts: list[str] = []
-    if zone == "EARLY":
-        watch_parts.append("Hacim patlaması (RVOL > 2x) → birikim bitti, yükseliş tetiklendi demek olur.")
-        if pc5 is not None and abs(pc5) < 0.03:
-            watch_parts.append("Son 5 günde fiyat %3 üzerinde kırılırsa → CONFIRMED zone'a geçer.")
-    elif zone == "CONFIRMED":
-        watch_parts.append("Hacim 3x'i geçer + fiyat 10 günlük yüksekten kırarsa → CONVICTION.")
-    elif zone == "CONVICTION":
-        watch_parts.append("Trend kırılım modunda — momentum sürerse pozisyon büyütme zamanı.")
 
+    # Cycle-aware triggers (when conflict matrix has a verdict)
+    if dom == "ACCUMULATION":
+        if maturity in ("EARLY", "MID"):
+            watch_parts.append(
+                "Trigger: Hacim > 2x + 10 günlük yüksek kırılımı → CONFIRMED'a geçiş."
+            )
+    elif dom == "DISTRIBUTION":
+        watch_parts.append(
+            "Takip: Yüksek hacme rağmen fiyat ilerlemiyorsa dağıtım derinleşir."
+        )
+        if maturity == "LATE":
+            watch_parts.append("Takip: Üst fitiller ve kapanış zayıflığı sinyaldir.")
+    else:
+        # UNCLEAR or no conflict context — fall back to zone-based hints
+        if zone == "EARLY":
+            watch_parts.append(
+                "Trigger: Hacim patlaması (RVOL > 2x) → birikim aktive oldu sinyali."
+            )
+            if pc5 is not None and abs(pc5) < 0.03:
+                watch_parts.append("Trigger: 5 günde fiyatın %3 üzerinde kırılması.")
+        elif zone == "CONFIRMED":
+            watch_parts.append("Trigger: Hacim > 3x + 10g yüksek kırılımı → CONVICTION.")
+        elif zone == "CONVICTION":
+            watch_parts.append("Beklenen teyit: Momentum sürerse breakout yapısı.")
+
+    # Pattern-specific observations — surface when pattern is present
+    # regardless of conflict-matrix verdict (preserves Hotfix18 case-fix
+    # test signal: pattern label → narrative line).
     if has_shakeout:
         watch_parts.append("Shakeout candle yapıldı — 5 gün içinde toparlanma + hacim teyidi anahtar.")
     if has_absorption:
@@ -412,23 +547,76 @@ def _build_narrative(
     if has_walk_up:
         watch_parts.append("Walk-up devam ediyor — günlük yüksekleri tutması lazım.")
 
+    # Playbook missing-step hint (additive)
+    if pb_missing and pb_conf < 75:
+        if isinstance(pb_missing, (list, tuple)):
+            pb_missing_str = ", ".join(str(x) for x in pb_missing[:2])
+        else:
+            pb_missing_str = str(pb_missing)
+        if pb_missing_str:
+            watch_parts.append(f"Beklenen teyit (playbook): {pb_missing_str}.")
+
     if not watch_parts:
         watch_parts.append("Şu an net bir tetik yok — hacim ve fiyat gelişimini izle.")
 
     what_to_watch = " ".join(watch_parts)
 
-    # ── NEDEN ŞÜPHELİ — caveats ──
+    # ── NEDEN ŞÜPHELİ — data-driven caveats ──
     caveat_parts: list[str] = []
+
     if score < 30:
         caveat_parts.append(f"Skor düşük ({score:.0f}/100) — sinyaller henüz zayıf.")
+
     if sector_tr == "Finansal":
-        caveat_parts.append("Sigorta/finansal şirket — BullWatch'ın orjinal hedefi (endüstriyel mikro-kap) değil.")
-    if data_quality == "low":
+        caveat_parts.append(
+            "Finansal/sigorta şirket — BullWatch'ın orijinal mikro-kap endüstriyel hedefi değil."
+        )
+
+    # Phase A.10 Step 2-A.2: data-driven caveats from diagnostics
+    if data_status == "partial":
+        if missing_fields:
+            mf_str = ", ".join(missing_fields[:3])
+            caveat_parts.append(f"Veri partial — eksik: {mf_str}. Veri güveni orta.")
+        else:
+            caveat_parts.append("Veri partial — bazı alanlar eksik. Veri güveni orta.")
+    elif data_status == "missing":
+        caveat_parts.append("Veri büyük ölçüde eksik — okuma sınırlı.")
+    elif data_quality == "low":
         caveat_parts.append("Veri kalitesi düşük — temel rakamlar eksik veya tutarsız.")
     elif data_quality == "medium":
-        caveat_parts.append("Veri orta — bazı bilanço alanları eksik (sigorta şirketleri için yaygın).")
+        caveat_parts.append(
+            "Veri orta — bazı bilanço alanları eksik (sigorta/finansal şirketler için yaygın)."
+        )
+
+    if override_applied:
+        ov_fields = metrics.get("override_fields") or []
+        if ov_fields:
+            caveat_parts.append(
+                f"{', '.join(ov_fields)} manual override ile geldi — "
+                "yfinance/borsapy değeri eksikti."
+            )
+
+    # Confidence/depth diagnostic caveats
+    if ct == "LOW" and depth == 1:
+        caveat_parts.append("Tek rule fired — corroboration bekleniyor (ek teyit lazım).")
+    elif ct == "LOW" and depth == 0:
+        caveat_parts.append("Hiçbir conflict rule fire etmedi — okuma muğlak.")
+
+    # High-position + DIST → human review needed
+    if position is not None and position > 0.85 and dom == "DISTRIBUTION":
+        caveat_parts.append(
+            "Yüksek konum + dağıtım sinyali — insan gözüyle kontrol edilmesi önerilir."
+        )
+
+    # Playbook started but not completed
+    if pb_name and pb_name != "UNCLEAR" and pb_conf and pb_conf < 50:
+        caveat_parts.append(
+            f"{pb_name.title()} pattern başladı ama playbook tamamlanmadı (%{pb_conf:.0f})."
+        )
+
+    # Liquidity caveat preserved
     if rvol is not None and rvol < 0.3:
-        caveat_parts.append("Hacim çok ince — likidite sorunu olabilir, çıkış zorlaşır.")
+        caveat_parts.append("Hacim çok ince — likidite sorunu olabilir.")
 
     if not caveat_parts:
         caveat_parts.append("Açık bir kırmızı bayrak yok ama yine de pozisyon büyüklüğünü kontrollü tut.")
@@ -479,6 +667,8 @@ class BullWatchResult:
     override_applied: Optional[bool] = None
     override_source: Optional[str] = None
     override_fields: Optional[list] = None
+    # ── Phase A.10 Step 2-A.2: UI cycle state (display-only mapping) ──
+    cycle_state: Optional[str] = None        # "TOPLANIYOR"|"ATEŞLENİYOR"|"DAĞITIM RİSKİ"|"BOŞALTIYOR"|"BELİRSİZ"
 
     def to_dict(self) -> dict[str, Any]:
         d = asdict(self)
@@ -904,19 +1094,23 @@ def score_symbol(metrics: dict,
         "bb_compression": bb_r,
         "patterns": patterns.get("labels", []),
         "ownership_coverage": ow_coverage,
+        # Phase A.10 Step 2-A.2: propagate diagnostic fields so narrative
+        # builder can use them. Set with .get() to be safe for legacy
+        # callers (tests building metrics by hand).
+        "_data_status": metrics.get("_data_status"),
+        "_provider_used": metrics.get("_provider_used"),
+        "_field_sources": metrics.get("_field_sources"),
+        "_missing_fields": metrics.get("_missing_fields"),
+        "override_applied": metrics.get("override_applied"),
+        "override_source": metrics.get("override_source"),
+        "override_fields": metrics.get("override_fields"),
     }
 
     score_final = round(max(0.0, min(100.0, score)), 1)
-
-    narrative = _build_narrative(
-        score=score_final,
-        zone=zone,
-        pattern=pattern,
-        sector_tr=sector_tr,
-        components={k: float(v) for k, v in sub_scores.items() if v is not None},
-        metrics=metrics_dict,
-        data_quality=dq,
-    )
+    # Phase A.10 Step 2-A.2: narrative is now built AFTER Phase A modules
+    # (conflict / maturity / playbook / pinning) so it can use their
+    # diagnostic outputs. Initialize empty here to keep variable scope.
+    narrative: dict[str, str] = {}
 
     # ────────────────────────────────────────────────────────────────
     # BullWatch v2 Addendum — Phase A modules
@@ -1032,6 +1226,31 @@ def score_symbol(metrics: dict,
     except Exception as _e:
         log.debug("Phase A evidence failed for %s: %r", symbol, _e)
 
+    # Phase A.10 Step 2-A.2: build narrative WITH all Phase A diagnostic
+    # context now available. Falls back to v1 pattern-only narrative if
+    # any of the dicts is None (graceful degradation).
+    narrative = _build_narrative(
+        score=score_final,
+        zone=zone,
+        pattern=pattern,
+        sector_tr=sector_tr,
+        components={k: float(v) for k, v in sub_scores.items() if v is not None},
+        metrics=metrics_dict,
+        data_quality=dq,
+        conflict_dict=conflict_dict,
+        maturity_dict=maturity_dict,
+        playbook_dict=playbook_dict,
+        pinning_dict=pinning_dict,
+    )
+
+    # Phase A.10 Step 2-A.2: derive UI cycle state from existing engines
+    cycle_state = _compute_cycle_state(
+        metrics=metrics_dict,
+        conflict_dict=conflict_dict,
+        maturity_dict=maturity_dict,
+        playbook_dict=playbook_dict,
+    )
+
     return BullWatchResult(
         symbol=symbol,
         score=score_final,
@@ -1055,6 +1274,8 @@ def score_symbol(metrics: dict,
         evidence_layer=evidence_dict,
         # Phase A.10 Step 2-A: data provider diagnostics (additive)
         **_diagnostic_fields(metrics),
+        # Phase A.10 Step 2-A.2: UI cycle state (display-only mapping)
+        cycle_state=cycle_state,
     )
 
 
