@@ -34,6 +34,22 @@ def _ohlcv(closes, volumes=None):
     }, index=idx)
 
 
+
+
+# A.9 fix: portable runner path resolution. Tests for the runner script
+# need to find phase_a_review_runner.py. Look at repo root first, then
+# fall back to /home/claude (legacy sandbox). Skip if unavailable.
+def _runner_path():
+    import os
+    here = os.path.dirname(os.path.abspath(__file__))
+    for p in (
+        os.path.join(here, "..", "phase_a_review_runner.py"),
+        "/home/claude/phase_a_review_runner.py",
+    ):
+        if os.path.exists(p):
+            return p
+    return None
+
 # ============================================================
 # 1. Absorption pattern case-sensitivity
 # ============================================================
@@ -255,8 +271,10 @@ class TestRunnerSoftFlagMIATK:
         """Build a raw_evidence dict matching MIATK live data and
         verify classify_row marks it as needs_review."""
         # Need to import classify_row from runner — it's in /home/claude
-        runner_path = "/home/claude/phase_a_review_runner.py"
-        # Import via exec (runner isn't a package)
+        import pytest
+        runner_path = _runner_path()
+        if runner_path is None:
+            pytest.skip("phase_a_review_runner.py not available")
         ns = {}
         with open(runner_path) as f:
             exec(f.read().replace('if __name__ == "__main__":\n    main()', ''), ns)
@@ -291,7 +309,10 @@ class TestRunnerSoftFlagMIATK:
     def test_quiet_unclear_does_not_trigger_soft_flag(self):
         """A truly quiet UNCLEAR (low position, low turnover) should
         remain looks_right — soft flag is for high-heat ambiguity only."""
-        runner_path = "/home/claude/phase_a_review_runner.py"
+        import pytest
+        runner_path = _runner_path()
+        if runner_path is None:
+            pytest.skip("phase_a_review_runner.py not available")
         ns = {}
         with open(runner_path) as f:
             exec(f.read().replace('if __name__ == "__main__":\n    main()', ''), ns)
@@ -324,7 +345,10 @@ class TestRunnerSoftFlagMIATK:
     def test_high_position_low_turnover_does_not_trigger(self):
         """Soft flag requires turnover > 1.0. ANHYT-like (turnover 0.29)
         should not be flagged by THIS rule (other flags may still apply)."""
-        runner_path = "/home/claude/phase_a_review_runner.py"
+        import pytest
+        runner_path = _runner_path()
+        if runner_path is None:
+            pytest.skip("phase_a_review_runner.py not available")
         ns = {}
         with open(runner_path) as f:
             exec(f.read().replace('if __name__ == "__main__":\n    main()', ''), ns)

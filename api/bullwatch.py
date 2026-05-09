@@ -518,14 +518,23 @@ async def api_bullwatch_symbol(symbol: str):
 
     sym = normalize_symbol(symbol).replace(".IS", "")
     try:
-        from data.providers import compute_metrics_v9
+        # Phase A.10 Step 2-A FIX: route through cached_compute_metrics
+        # so that direct symbol calls go through the same sanity +
+        # override + Redis cache pipeline as the warmup scan. Previously
+        # this called compute_metrics_v9 directly, bypassing manual
+        # overrides — which is why /api/bullwatch/KAPLM showed "no float
+        # data" even though KAPLM has an override. cached_compute_metrics
+        # also stamps diagnostic fields (_data_status, _field_sources,
+        # override_applied, ...) which the score_symbol downstream then
+        # surfaces in the BullWatchResult.
+        from data.bullwatch_cache import cached_compute_metrics
         from engine.technical import batch_download_history
     except ImportError as exc:
         return error(f"data layer unavailable: {exc}", status_code=503)
 
     try:
         metrics = await asyncio.get_event_loop().run_in_executor(
-            None, compute_metrics_v9, sym,
+            None, cached_compute_metrics, sym,
         )
     except Exception as exc:
         return error(f"metrics fetch failed: {exc}", status_code=502)

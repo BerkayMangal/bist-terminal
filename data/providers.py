@@ -540,6 +540,42 @@ def compute_metrics_v9(symbol: str) -> dict:
         missing = [s for s, ok in [("income", has_income), ("balance", has_balance), ("cashflow", has_cashflow)] if not ok]
         log.info(f"DATA QUALITY [{tc}]: Missing {', '.join(missing)} statement(s)")
 
+    # Phase A.10 Step 2-A: field-level source tagging.
+    #
+    # We tag each major field with WHERE it would have come from. This
+    # is coarse — it doesn't track whether the actual returned value is
+    # None or fell back through a different path inside fast/info. But it
+    # gives the diagnostics endpoint enough granularity to answer
+    # "for symbol X, why is free_float missing?" by looking at which
+    # source was supposed to supply it. Manual overrides will overwrite
+    # these labels in `_apply_overrides`.
+    _field_sources = {
+        # Market data — first try fast_info, fall back to info dict
+        "price": "borsapy.fast_info" if fast.get("last_price") is not None else "borsapy.info",
+        "market_cap": "borsapy.fast_info" if fast.get("market_cap") is not None else "borsapy.info",
+        "shares": "borsapy.fast_info" if fast.get("shares") is not None else (
+            "derived_market_cap_over_price" if shares is not None else "missing"
+        ),
+        "pe": "borsapy.fast_info" if fast.get("pe_ratio") is not None else "borsapy.info",
+        "pb": "borsapy.fast_info" if fast.get("pb_ratio") is not None else "borsapy.info",
+        # BIST-specific — only fast_info supplies these
+        "free_float": "borsapy.fast_info" if fast.get("free_float") is not None else "missing",
+        "foreign_ratio": "borsapy.fast_info" if fast.get("foreign_ratio") is not None else "missing",
+        # Sector/industry — info dict only
+        "sector": "borsapy.info" if info.get("sector") else "missing",
+        "industry": "borsapy.info" if info.get("industry") else "missing",
+        # Fundamentals — borsapy income statement (UFRS-grouped)
+        "revenue": "borsapy.income_stmt_ufrs" if revenue is not None else "missing",
+        "net_income": "borsapy.income_stmt_ufrs" if net_income is not None else "missing",
+        "operating_income": "borsapy.income_stmt_ufrs" if operating_income is not None else "missing",
+        "ebitda": "derived_income_plus_dep" if ebitda is not None else "missing",
+        "total_assets": "borsapy.balance_sheet" if total_assets is not None else "missing",
+        "total_debt": "borsapy.balance_sheet" if total_debt is not None else "missing",
+        "equity": "borsapy.balance_sheet" if equity is not None else "missing",
+        "operating_cf": "borsapy.cashflow" if op_cf is not None else "missing",
+        # ohlcv source set later by batch_download_history caller
+    }
+
     return {
         "symbol": symbol, "ticker": tc,
         "name": str(info.get("shortName") or info.get("longName") or tc),
@@ -584,6 +620,9 @@ def compute_metrics_v9(symbol: str) -> dict:
         "ciro_pd": (revenue / market_cap) if revenue is not None and market_cap not in (None, 0) else None,
         "data_source": "borsapy",
         "data_quality": data_quality,
+        # Phase A.10 Step 2-A: source tagging (additive, doesn't change
+        # any existing field). May be updated by _apply_overrides.
+        "_field_sources": _field_sources,
     }
 
 

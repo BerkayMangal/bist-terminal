@@ -469,6 +469,16 @@ class BullWatchResult:
     move_maturity: Optional[dict] = None            # Module 6
     engine_conflict_matrix: Optional[dict] = None   # Module 9
     evidence_layer: Optional[dict] = None           # Module 10
+    # ── Phase A.10 Step 2-A: data provider diagnostics (additive) ──
+    # All optional, default None. Backwards compatible with v1 clients.
+    data_status: Optional[str] = None        # "live"|"stale"|"partial"|"missing"
+    provider_used: Optional[str] = None      # "borsapy"|"cached_borsapy"|...
+    field_sources: Optional[dict] = None     # {"market_cap": "borsapy.fast_info", ...}
+    missing_fields: Optional[list] = None    # ["free_float", ...]
+    provider_errors: Optional[list] = None   # [{"error_type":..., "message":...}]
+    override_applied: Optional[bool] = None
+    override_source: Optional[str] = None
+    override_fields: Optional[list] = None
 
     def to_dict(self) -> dict[str, Any]:
         d = asdict(self)
@@ -689,6 +699,27 @@ def _pattern_label(active_engines: list[str], patterns: dict,
     return " + ".join(out[:4])
 
 
+def _diagnostic_fields(metrics: dict) -> dict:
+    """Phase A.10 Step 2-A: extract diagnostic kwargs for BullWatchResult.
+
+    Reads the `_*` and override fields stamped by data.bullwatch_cache and
+    data.providers. Returns a kwargs dict ready to **-unpack into
+    BullWatchResult(...). All values are optional (default None) so this
+    is safe even when metrics doesn't have the diagnostic fields (e.g.
+    legacy v1 callers that build metrics by hand).
+    """
+    return {
+        "data_status": metrics.get("_data_status"),
+        "provider_used": metrics.get("_provider_used"),
+        "field_sources": metrics.get("_field_sources"),
+        "missing_fields": metrics.get("_missing_fields"),
+        "provider_errors": metrics.get("_provider_errors"),
+        "override_applied": metrics.get("override_applied"),
+        "override_source": metrics.get("override_source"),
+        "override_fields": metrics.get("override_fields"),
+    }
+
+
 # ================================================================
 # Main scoring entry point — pure, deterministic, no I/O.
 # ================================================================
@@ -746,6 +777,7 @@ def score_symbol(metrics: dict,
                      "free_float": free_float},
             data_quality="low",
             universe_tier=universe_tier,
+            **_diagnostic_fields(metrics),
         )
 
     if not passes_liquidity(df):
@@ -761,6 +793,7 @@ def score_symbol(metrics: dict,
             metrics={"float_market_cap": fmc, "avg_traded_value_20d": atv},
             data_quality="low",
             universe_tier=universe_tier,
+            **_diagnostic_fields(metrics),
         )
 
     # ---- Feature extraction ----
@@ -811,6 +844,7 @@ def score_symbol(metrics: dict,
             metrics={"float_market_cap": fmc},
             data_quality="low",
             universe_tier=universe_tier,
+            **_diagnostic_fields(metrics),
         )
 
     weights = {k: WEIGHTS_WITH_OWNERSHIP[k] for k in available}
@@ -1019,6 +1053,8 @@ def score_symbol(metrics: dict,
         move_maturity=maturity_dict,
         engine_conflict_matrix=conflict_dict,
         evidence_layer=evidence_dict,
+        # Phase A.10 Step 2-A: data provider diagnostics (additive)
+        **_diagnostic_fields(metrics),
     )
 
 

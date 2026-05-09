@@ -170,8 +170,20 @@ class TestRunnerHotfix18Fields:
     """
 
     def _load_runner(self):
+        # A.9 fix: portable runner path resolution
+        import os, pytest
+        here = os.path.dirname(os.path.abspath(__file__))
+        for p in (
+            os.path.join(here, "..", "phase_a_review_runner.py"),
+            "/home/claude/phase_a_review_runner.py",
+        ):
+            if os.path.exists(p):
+                runner_path = p
+                break
+        else:
+            pytest.skip("phase_a_review_runner.py not available")
         ns = {}
-        with open("/home/claude/phase_a_review_runner.py") as f:
+        with open(runner_path) as f:
             exec(f.read().replace('if __name__ == "__main__":\n    main()', ''), ns)
         return ns
 
