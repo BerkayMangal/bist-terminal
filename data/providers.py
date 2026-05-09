@@ -104,9 +104,34 @@ def _norm(s: Any) -> str:
     return re.sub(r'\s+', ' ', s.replace('\xa0', ' ')).strip()
 
 
+def _is_empty_frame(df: Any) -> bool:
+    """Phase A.10 Step 2-A.1: defensive guard for borsapy responses.
+
+    borsapy occasionally returns a string (rate-limit or error message)
+    instead of a DataFrame for income/balance/cashflow statements. Naive
+    `df.empty` checks then raise AttributeError → '/api/bullwatch/{sym}'
+    returns 502 before override or partial-data layers can run.
+
+    Returns True when:
+      - df is None
+      - df is not a pandas-DataFrame-like object (no `.empty` attr)
+      - df is empty (no rows or no columns)
+
+    Returns False ONLY when df is a real, non-empty DataFrame.
+    """
+    if df is None:
+        return True
+    if not hasattr(df, "empty"):
+        return True
+    try:
+        return bool(df.empty)
+    except Exception:
+        return True
+
+
 def _find_data_col(df: Optional[pd.DataFrame]) -> int:
     """İlk gerçek veri kolonu (2025 boşsa skip)."""
-    if df is None or df.empty:
+    if _is_empty_frame(df):
         return 0
     for ci in range(len(df.columns)):
         non_zero = sum(1 for val in df.iloc[:, ci] if _safe_num(val) not in (None, 0))
@@ -122,7 +147,7 @@ def _pick(
     base: Optional[int] = None,
 ) -> Optional[float]:
     """DataFrame'den satır ismine göre değer çek."""
-    if df is None or df.empty:
+    if _is_empty_frame(df):
         return None
     if base is None:
         base = _find_data_col(df)
@@ -153,7 +178,7 @@ def _pair(
     names: list[str],
 ) -> tuple[Optional[float], Optional[float]]:
     """Cari ve önceki dönem değerlerini çek."""
-    if df is None or df.empty:
+    if _is_empty_frame(df):
         return None, None
     b = _find_data_col(df)
     return _pick(df, names, 0, b), _pick(df, names, 1, b)
@@ -163,7 +188,7 @@ def _pick_debt(
     bal: Optional[pd.DataFrame],
 ) -> tuple[Optional[float], Optional[float]]:
     """Kısa + Uzun vadeli Finansal Borçlar (aynı isim, farklı section)."""
-    if bal is None or bal.empty:
+    if _is_empty_frame(bal):
         return None, None
     b = _find_data_col(bal)
     ci0 = b
@@ -616,6 +641,10 @@ def compute_metrics_v9(symbol: str) -> dict:
         "share_change": None,
         "asset_turnover": asset_to, "asset_turnover_prev": asset_to_p,
         "inst_holders_pct": foreign_ratio, "foreign_ratio": foreign_ratio,
+        # Phase A.10 Step 2-A.1 Fix A: shares was computed (line ~448) and
+        # tagged in _field_sources but never made it to the returned dict.
+        # That caused data_status to flag it as 'missing' for every symbol.
+        "shares": shares,
         "free_float": _safe_num(fast.get("free_float")),
         "ciro_pd": (revenue / market_cap) if revenue is not None and market_cap not in (None, 0) else None,
         "data_source": "borsapy",
@@ -655,7 +684,7 @@ def batch_download_history_v9(
         try:
             tk = bp.Ticker(tc)
             df = tk.history(period=bp_period, interval=interval)
-            if df is not None and not df.empty and len(df) >= 20:
+            if not _is_empty_frame(df) and len(df) >= 20:
                 return sym, df
         except Exception:
             pass
@@ -733,7 +762,7 @@ def batch_download_history_v9(
         try:
             tk = bp.Ticker(tc)
             df = tk.history(period=bp_period, interval=interval)
-            if df is not None and not df.empty and len(df) >= 20:
+            if not _is_empty_frame(df) and len(df) >= 20:
                 return sym, df
         except Exception:
             pass
