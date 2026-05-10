@@ -1,0 +1,81 @@
+BULLALFA v1.4 — Merge Package
+================================
+
+This zip extracts on top of the repo root and adds the BullAlfa v1.4
+implementation. All files in this package are NEW — none of them
+overwrite existing files in the repository.
+
+Out-of-scope modules (engine/verdict.py, engine/scoring*.py,
+engine/aggregation.py, engine/labels.py, engine/bullwatch.py,
+engine/technical.py, api/bullwatch.py) are NOT modified by this
+package, verified by tests/test_bullalfa_integration.py::
+TestOutOfScopeModulesUntouched.
+
+Package contents (29 files):
+  engine/
+    bullalfa.py                  # orchestrator
+    bullalfa_degrade.py          # §15 degradation matrix
+    bullalfa_params.py           # all heuristic numbers
+  features/
+    bullalfa_features.py         # E1-E7 + EngineInputs
+    bullalfa_sector.py           # §14 sector branching
+    bullalfa_calibration.py      # Layer 3 sigmoid + isotonic hook
+    bullalfa_risk.py             # Layer 4 risk frame + invariants
+    bullalfa_toplaniyor.py       # §12 detection
+    bullalfa_ranking.py          # §17 opportunity score
+    bullalfa_why_now.py          # §18 phrasing
+  api/
+    bullalfa.py                  # FastAPI router (NOT auto-wired)
+    bullalfa_schemas.py          # Pydantic v2 §19 models
+  tests/
+    test_bullalfa_engines.py        # 68 tests
+    test_bullalfa_sector.py         # 59 tests
+    test_bullalfa_calibration.py    # 44 tests
+    test_bullalfa_risk_frame.py     # 41 tests
+    test_bullalfa_toplaniyor.py     # 34 tests
+    test_bullalfa_ranking.py        # 32 tests
+    test_bullalfa_degradation.py    # 28 tests
+    test_bullalfa_integration.py    # 28 tests
+    test_bullalfa_api.py            # 21 tests
+    test_bullalfa_schemas.py        # 13 tests
+                                  ─────
+                                    368 total
+  research/
+    __init__.py
+    bullalfa_walkforward.py      # v2 calibration scaffold
+  static/js/
+    bullalfa.js                  # §23 mode-specific cards (mobile)
+  bullalfa_jsonschema.json       # §19 JSON Schema artifact
+
+Top-level docs:
+  BULLALFA_PROGRESS_SUMMARY.md    # cumulative progress (Turkish)
+  BULLALFA_FINAL_DELIVERABLES.md  # full v1 acceptance package
+  POLISH_NOTES.md                 # post-M-D housekeeping notes
+
+After extracting, the consumer must STILL wire the API router into
+app.py. See "Wire-up instructions" in BULLALFA_FINAL_DELIVERABLES.md
+section 5. Pattern:
+
+    from api.bullalfa import (
+        router as bullalfa_router,
+        register_data_provider,
+        warmup_cache_loop,
+    )
+    app.include_router(bullalfa_router)
+
+    @app.on_event("startup")
+    async def _bullalfa_startup() -> None:
+        register_data_provider(
+            scan_provider   = your_scan_data_fetcher,
+            ticker_provider = your_ticker_data_fetcher,
+            name="production",
+        )
+        asyncio.create_task(warmup_cache_loop())
+
+Verification after merge:
+    pytest tests/test_bullalfa_*.py -q
+
+Should report: 368 passed.
+
+Pre-existing project tests (1260 passed, 13 skipped) should remain
+unchanged — this package modifies zero existing files.
