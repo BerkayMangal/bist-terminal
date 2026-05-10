@@ -123,13 +123,19 @@ def _pick_bench_df(metrics: dict[str, Any], benches: dict[str, pd.DataFrame]) ->
     sector = str(metrics.get("sector") or "").lower()
     industry = str(metrics.get("industry") or "").lower()
     haystack = f"{sector} {industry}"
+    # NOTE: explicit None check, not `or` — pandas DataFrames raise
+    # ValueError when treated as truthy.
+    fallback = benches.get("XU100")
     if any(k in haystack for k in ("real estate", "reit", "gayrimenkul")):
-        return benches.get("XGMYO") or benches.get("XU100")
+        bench = benches.get("XGMYO")
+        return bench if bench is not None else fallback
     if any(k in haystack for k in ("conglomerate", "holding", "diversified financial")):
-        return benches.get("XHOLD") or benches.get("XU100")
+        bench = benches.get("XHOLD")
+        return bench if bench is not None else fallback
     if "bank" in haystack:
-        return benches.get("XBANK") or benches.get("XU100")
-    return benches.get("XU100")
+        bench = benches.get("XBANK")
+        return bench if bench is not None else fallback
+    return fallback
 
 
 def _build_macro_result() -> Optional[dict[str, Any]]:
