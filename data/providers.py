@@ -235,8 +235,16 @@ def _pick_debt(
 #      a cascade).
 # Fix: log exception type + repr + exc_info; add retry-with-backoff
 # around the ThreadPoolExecutor block. CB interaction preserved.
-FETCH_RAW_MAX_ATTEMPTS = 3
-FETCH_RAW_BACKOFF_SEC = (0.5, 1.0, 2.0)   # per-attempt sleep before retry
+# Phase A.10 Step 2-B.1: lighter retry profile.
+# Pre-2-B.1: 3 attempts × (0.5s, 1.0s, 2.0s) backoff = up to 3.5s blocked
+#            per failed symbol (12 symbols × 3.5s ≈ 42s of pool blocked).
+# Post-2-B.1: 2 attempts × 0.7s backoff = max 0.7s per failed symbol.
+# Provider failures still surface (no exception swallowing), they just
+# fail faster so the scan loop can move on. Stale-while-revalidate
+# (Step 2-B) ensures users don't see 502s — the failed symbol returns
+# stale data if cache exists, otherwise data_status=missing.
+FETCH_RAW_MAX_ATTEMPTS = 2
+FETCH_RAW_BACKOFF_SEC = (0.3, 0.7)   # per-attempt sleep before retry
 
 
 def fetch_raw_v9(symbol: str) -> dict:

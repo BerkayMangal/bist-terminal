@@ -395,7 +395,20 @@ async def api_bullwatch_health():
         "scan_elapsed_sec": round(elapsed_sec, 1) if elapsed_sec is not None else None,
         "cache": _cache_stats_safe(),
         "history": _history_stats_safe(),
+        # Phase A.10 Step 2-B.1: scan runtime diagnostics
+        "scan_diagnostics": _scan_diagnostics_safe(),
     })
+
+
+def _scan_diagnostics_safe() -> dict:
+    """Phase A.10 Step 2-B.1: per-scan runtime stats (which symbols hit
+    timeout / cancellation, average + p95 timing, total duration). Never
+    raises from the health check path."""
+    try:
+        from engine.bullwatch import get_scan_stats
+        return get_scan_stats()
+    except Exception:
+        return {"error": "scan_stats_unavailable"}
 
 
 def _cache_stats_safe() -> dict:

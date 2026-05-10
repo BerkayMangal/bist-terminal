@@ -30,8 +30,11 @@
 
 from __future__ import annotations
 
+import collections
 import logging
+import time as _time
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import TimeoutError as FutureTimeoutError
 from dataclasses import dataclass, field, asdict
 from typing import Any, Callable, Optional
 
@@ -628,6 +631,86 @@ def _build_narrative(
         "what_to_watch": what_to_watch,
         "caveats": caveats,
     }
+
+
+# ================================================================
+# Phase A.10 Step 2-B.1 — Scan runtime diagnostics
+#
+# Track the most-recent scan's per-symbol timing + cancellation so the
+# /api/bullwatch/health endpoint can show WHERE the scan budget went
+# (which symbols hung, which got cancelled). Bounded list lengths so
+# memory can never grow unbounded.
+# ================================================================
+_SCAN_STATS_LIST_CAP = 20
+PER_SYMBOL_TIMEOUT_SEC = 8  # individual symbol budget within the scan loop
+
+_SCAN_STATS: dict[str, Any] = {
+    "last_scan_started_at": None,
+    "last_scan_completed_at": None,
+    "last_scan_duration_sec": None,
+    "last_scan_total": 0,
+    "last_scan_done": 0,
+    "last_scan_cancelled_count": 0,
+    "last_scan_cancelled_symbols": [],     # capped
+    "last_scan_timeout_count": 0,
+    "last_scan_timeout_symbols": [],       # capped — per-symbol 8s timeouts
+    "last_scan_budget_sec": 0,
+    "last_scan_avg_symbol_ms": None,
+    "last_scan_p95_symbol_ms": None,
+    "last_scan_per_symbol_timeout_sec": PER_SYMBOL_TIMEOUT_SEC,
+}
+
+
+def get_scan_stats() -> dict:
+    """Phase A.10 Step 2-B.1: snapshot of last-scan diagnostics. Safe
+    to call any time; never raises."""
+    return dict(_SCAN_STATS)
+
+
+def _record_scan_cancelled(symbol: str) -> None:
+    _SCAN_STATS["last_scan_cancelled_count"] += 1
+    lst = _SCAN_STATS["last_scan_cancelled_symbols"]
+    if len(lst) < _SCAN_STATS_LIST_CAP:
+        lst.append(symbol)
+
+
+def _record_scan_timeout(symbol: str) -> None:
+    _SCAN_STATS["last_scan_timeout_count"] += 1
+    lst = _SCAN_STATS["last_scan_timeout_symbols"]
+    if len(lst) < _SCAN_STATS_LIST_CAP:
+        lst.append(symbol)
+
+
+def _reset_scan_stats(total: int, budget_sec: int) -> None:
+    _SCAN_STATS.update({
+        "last_scan_started_at": _time.time(),
+        "last_scan_completed_at": None,
+        "last_scan_duration_sec": None,
+        "last_scan_total": total,
+        "last_scan_done": 0,
+        "last_scan_cancelled_count": 0,
+        "last_scan_cancelled_symbols": [],
+        "last_scan_timeout_count": 0,
+        "last_scan_timeout_symbols": [],
+        "last_scan_budget_sec": budget_sec,
+        "last_scan_avg_symbol_ms": None,
+        "last_scan_p95_symbol_ms": None,
+        "last_scan_per_symbol_timeout_sec": PER_SYMBOL_TIMEOUT_SEC,
+    })
+
+
+def _finalize_scan_stats(per_symbol_ms: list[float]) -> None:
+    started = _SCAN_STATS.get("last_scan_started_at")
+    now = _time.time()
+    _SCAN_STATS["last_scan_completed_at"] = now
+    if started is not None:
+        _SCAN_STATS["last_scan_duration_sec"] = round(now - started, 1)
+    if per_symbol_ms:
+        ms_sorted = sorted(per_symbol_ms)
+        avg = sum(ms_sorted) / len(ms_sorted)
+        p95_idx = max(0, int(len(ms_sorted) * 0.95) - 1)
+        _SCAN_STATS["last_scan_avg_symbol_ms"] = round(avg, 1)
+        _SCAN_STATS["last_scan_p95_symbol_ms"] = round(ms_sorted[p95_idx], 1)
 
 
 @dataclass
@@ -1331,25 +1414,65 @@ def scan(symbols: list[str],
         hist_map = {}
 
     def _score_one(sym: str) -> Optional[BullWatchResult]:
+        """Phase A.10 Step 2-B.1: per-symbol timeout via inner sub-pool.
+
+        A few stragglers (yfinance hanging on 0-byte responses for ~90s)
+        used to block worker threads in the outer pool. Now each symbol
+        gets a hard PER_SYMBOL_TIMEOUT_SEC budget — exceeding it records
+        the symbol as a timeout and returns None (= treated as missing).
+        Stale-while-revalidate (Step 2-B) catches the missing-data case
+        from cache, so the user still sees data when possible.
+        """
+        def _inner() -> Optional[BullWatchResult]:
+            try:
+                metrics = metrics_fn(sym)
+            except Exception as exc:
+                log.debug("BullWatch %s: metrics fetch failed: %r", sym, exc)
+                return None
+            df = hist_map.get(sym)
+            try:
+                ownership = ownership_fn(sym)
+            except Exception:
+                ownership = None
+            try:
+                return score_symbol(metrics, df, ownership, cap_tl=cap_tl)
+            except Exception as exc:
+                log.warning("BullWatch %s: scoring failed: %r", sym, exc)
+                return None
+
+        # Sub-pool of 1 worker so we can hard-timeout the inner call.
+        # Pool spin-up cost is microseconds; outer pool already has
+        # max_workers parallelism so this doesn't change concurrency.
         try:
-            metrics = metrics_fn(sym)
+            with ThreadPoolExecutor(max_workers=1) as inner_pool:
+                f = inner_pool.submit(_inner)
+                try:
+                    return f.result(timeout=PER_SYMBOL_TIMEOUT_SEC)
+                except FutureTimeoutError:
+                    _record_scan_timeout(sym)
+                    log.info(
+                        "BullWatch %s: per-symbol timeout (%ds)",
+                        sym, PER_SYMBOL_TIMEOUT_SEC,
+                    )
+                    # Cancel the inner future. If the thread is stuck in
+                    # I/O it'll keep running until the daemon dies, but
+                    # we don't block on it — the inner pool is GC'd
+                    # along with the future reference.
+                    f.cancel()
+                    return None
+                except Exception as exc:
+                    log.debug("BullWatch %s: %r", sym, exc)
+                    return None
         except Exception as exc:
-            log.debug("BullWatch %s: metrics fetch failed: %r", sym, exc)
-            return None
-        df = hist_map.get(sym)
-        try:
-            ownership = ownership_fn(sym)
-        except Exception:
-            ownership = None
-        try:
-            return score_symbol(metrics, df, ownership, cap_tl=cap_tl)
-        except Exception as exc:
-            log.warning("BullWatch %s: scoring failed: %r", sym, exc)
-            return None
+            # Pool creation failure (extremely unlikely) — fall back to
+            # synchronous call without timeout protection.
+            log.debug("BullWatch %s: inner-pool failed: %r", sym, exc)
+            return _inner()
 
     results: list[BullWatchResult] = []
     total = len(symbols)
     processed = 0
+    per_symbol_ms: list[float] = []
     # Per-symbol timeout: each future must complete within this budget.
     # yfinance occasionally returns 0-byte responses that hang for ~90s.
     # If 2-3 stragglers do this, the whole scan stalls forever via the
@@ -1357,11 +1480,16 @@ def scan(symbols: list[str],
     # We use as_completed(timeout=...) measured from start-of-loop, and
     # whichever futures haven't returned by then are cancelled.
     SCAN_TIMEOUT_SEC = 240  # 4 minutes total budget for the scan loop
+    _reset_scan_stats(total=total, budget_sec=SCAN_TIMEOUT_SEC)
     pool = ThreadPoolExecutor(max_workers=max_workers)
     futures = {pool.submit(_score_one, s): s for s in symbols}
+    fut_started: dict = {f: _time.time() for f in futures}
     try:
         for fut in as_completed(futures, timeout=SCAN_TIMEOUT_SEC):
             processed += 1
+            sym_for_fut = futures.get(fut, "?")
+            elapsed_ms = (_time.time() - fut_started.get(fut, _time.time())) * 1000.0
+            per_symbol_ms.append(elapsed_ms)
             if progress_callback is not None:
                 try:
                     progress_callback(processed, total)
@@ -1391,10 +1519,14 @@ def scan(symbols: list[str],
             processed, total, len(unfinished), SCAN_TIMEOUT_SEC,
         )
         for f in unfinished:
+            sym_unfinished = futures.get(f, "?")
+            _record_scan_cancelled(sym_unfinished)
             f.cancel()
     finally:
         # Don't wait for stragglers; cancel and move on.
         pool.shutdown(wait=False, cancel_futures=True)
+        _SCAN_STATS["last_scan_done"] = processed
+        _finalize_scan_stats(per_symbol_ms)
 
     # Sort: eligible by score desc, ineligible last
     results.sort(key=lambda r: (not r.eligible, -r.score))
