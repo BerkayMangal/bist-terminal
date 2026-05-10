@@ -1,0 +1,2427 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "BullAlfa v1.4 API contract",
+  "description": "Spec §19 schema for /api/bullalfa/scan and /api/bullalfa/{ticker} responses.",
+  "$defs": {
+    "BullAlfaSignal": {
+      "$defs": {
+        "Confidence": {
+          "additionalProperties": true,
+          "properties": {
+            "raw_combined": {
+              "title": "Raw Combined",
+              "type": "number"
+            },
+            "final": {
+              "maximum": 100,
+              "minimum": 0,
+              "title": "Final",
+              "type": "number"
+            },
+            "phase": {
+              "enum": [
+                "v1_heuristic",
+                "v2_isotonic",
+                "v3_ml"
+              ],
+              "title": "Phase",
+              "type": "string"
+            }
+          },
+          "required": [
+            "raw_combined",
+            "final",
+            "phase"
+          ],
+          "title": "Confidence",
+          "type": "object"
+        },
+        "E2RelStr": {
+          "additionalProperties": true,
+          "properties": {
+            "score": {
+              "title": "Score",
+              "type": "number"
+            },
+            "benchmark": {
+              "title": "Benchmark",
+              "type": "string"
+            }
+          },
+          "required": [
+            "score",
+            "benchmark"
+          ],
+          "title": "E2RelStr",
+          "type": "object"
+        },
+        "E3Volume": {
+          "additionalProperties": true,
+          "properties": {
+            "rvol": {
+              "minimum": 0,
+              "title": "Rvol",
+              "type": "number"
+            },
+            "passed": {
+              "title": "Passed",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "rvol",
+            "passed"
+          ],
+          "title": "E3Volume",
+          "type": "object"
+        },
+        "E4Breakout": {
+          "additionalProperties": true,
+          "properties": {
+            "type": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "20d",
+                    "55d",
+                    "6m"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Type"
+            },
+            "bars_ago": {
+              "anyOf": [
+                {
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Bars Ago"
+            }
+          },
+          "title": "E4Breakout",
+          "type": "object"
+        },
+        "E5Compression": {
+          "additionalProperties": true,
+          "properties": {
+            "compressed": {
+              "title": "Compressed",
+              "type": "boolean"
+            },
+            "expanded": {
+              "title": "Expanded",
+              "type": "boolean"
+            },
+            "skipped_reason": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Skipped Reason"
+            }
+          },
+          "required": [
+            "compressed",
+            "expanded"
+          ],
+          "title": "E5Compression",
+          "type": "object"
+        },
+        "Engines": {
+          "additionalProperties": true,
+          "properties": {
+            "e1_trend": {
+              "maximum": 1,
+              "minimum": 0,
+              "title": "E1 Trend",
+              "type": "integer"
+            },
+            "e2_relstr": {
+              "$ref": "#/$defs/E2RelStr"
+            },
+            "e3_volume": {
+              "$ref": "#/$defs/E3Volume"
+            },
+            "e4_breakout": {
+              "$ref": "#/$defs/E4Breakout"
+            },
+            "e5_compression": {
+              "$ref": "#/$defs/E5Compression"
+            },
+            "e6_pullback": {
+              "title": "E6 Pullback",
+              "type": "boolean"
+            },
+            "e7_exhaustion": {
+              "maximum": 1,
+              "minimum": 0,
+              "title": "E7 Exhaustion",
+              "type": "number"
+            },
+            "pullback_to_breakout": {
+              "title": "Pullback To Breakout",
+              "type": "boolean"
+            },
+            "accumulation_strength": {
+              "maximum": 100,
+              "minimum": 0,
+              "title": "Accumulation Strength",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "e1_trend",
+            "e2_relstr",
+            "e3_volume",
+            "e4_breakout",
+            "e5_compression",
+            "e6_pullback",
+            "e7_exhaustion",
+            "pullback_to_breakout",
+            "accumulation_strength"
+          ],
+          "title": "Engines",
+          "type": "object"
+        },
+        "Explainer": {
+          "additionalProperties": true,
+          "properties": {
+            "why_this_mode": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Why This Mode",
+              "type": "array"
+            },
+            "why_not_higher_mode": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Why Not Higher Mode",
+              "type": "array"
+            },
+            "caveats": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Caveats",
+              "type": "array"
+            },
+            "warnings": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Warnings",
+              "type": "array"
+            }
+          },
+          "required": [
+            "why_this_mode",
+            "why_not_higher_mode",
+            "caveats",
+            "warnings"
+          ],
+          "title": "Explainer",
+          "type": "object"
+        },
+        "Lifecycle": {
+          "additionalProperties": true,
+          "properties": {
+            "signal_id": {
+              "title": "Signal Id",
+              "type": "string"
+            },
+            "triggered_at": {
+              "title": "Triggered At",
+              "type": "string"
+            },
+            "bars_since": {
+              "minimum": 0,
+              "title": "Bars Since",
+              "type": "integer"
+            },
+            "status": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "TAZE",
+                    "GELİŞMEKTE",
+                    "GEÇ KALDI"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Status"
+            },
+            "outcome": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "1R_VURDU",
+                    "STOP_OLDU",
+                    "SÜRESİ_DOLDU"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Outcome"
+            },
+            "mode_history": {
+              "items": {
+                "$ref": "#/$defs/ModeHistoryEntry"
+              },
+              "title": "Mode History",
+              "type": "array"
+            }
+          },
+          "required": [
+            "signal_id",
+            "triggered_at",
+            "bars_since",
+            "mode_history"
+          ],
+          "title": "Lifecycle",
+          "type": "object"
+        },
+        "Liquidity": {
+          "additionalProperties": true,
+          "properties": {
+            "adv_20d_try": {
+              "minimum": 0,
+              "title": "Adv 20D Try",
+              "type": "number"
+            },
+            "penalty_applied": {
+              "title": "Penalty Applied",
+              "type": "boolean"
+            },
+            "downgrade_reason": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Downgrade Reason"
+            }
+          },
+          "required": [
+            "adv_20d_try",
+            "penalty_applied"
+          ],
+          "title": "Liquidity",
+          "type": "object"
+        },
+        "Macro": {
+          "additionalProperties": true,
+          "properties": {
+            "regime": {
+              "enum": [
+                "risk_on",
+                "neutral",
+                "risk_off"
+              ],
+              "title": "Regime",
+              "type": "string"
+            },
+            "tl_vol_pct": {
+              "maximum": 100,
+              "minimum": 0,
+              "title": "Tl Vol Pct",
+              "type": "number"
+            },
+            "multiplier": {
+              "minimum": 0,
+              "title": "Multiplier",
+              "type": "number"
+            },
+            "hizli_disabled": {
+              "title": "Hizli Disabled",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "regime",
+            "tl_vol_pct",
+            "multiplier",
+            "hizli_disabled"
+          ],
+          "title": "Macro",
+          "type": "object"
+        },
+        "ModeHistoryEntry": {
+          "additionalProperties": true,
+          "properties": {
+            "mode": {
+              "enum": [
+                "HIZLI",
+                "SWING",
+                "POZİSYON",
+                "TOPLANIYOR",
+                "SAKİN",
+                "UZAK DUR"
+              ],
+              "title": "Mode",
+              "type": "string"
+            },
+            "entered_at": {
+              "title": "Entered At",
+              "type": "string"
+            }
+          },
+          "required": [
+            "mode",
+            "entered_at"
+          ],
+          "title": "ModeHistoryEntry",
+          "type": "object"
+        },
+        "Quality": {
+          "additionalProperties": true,
+          "properties": {
+            "score": {
+              "maximum": 100,
+              "minimum": 0,
+              "title": "Score",
+              "type": "integer"
+            },
+            "grade": {
+              "enum": [
+                "A+",
+                "A",
+                "B",
+                "C",
+                "D"
+              ],
+              "title": "Grade",
+              "type": "string"
+            },
+            "grade_capped": {
+              "title": "Grade Capped",
+              "type": "boolean"
+            },
+            "freshness_pct": {
+              "maximum": 100,
+              "minimum": 0,
+              "title": "Freshness Pct",
+              "type": "number"
+            },
+            "tags": {
+              "$ref": "#/$defs/QualityTags"
+            }
+          },
+          "required": [
+            "score",
+            "grade",
+            "grade_capped",
+            "freshness_pct",
+            "tags"
+          ],
+          "title": "Quality",
+          "type": "object"
+        },
+        "QualityTags": {
+          "additionalProperties": true,
+          "properties": {
+            "kalite": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "GÜÇLÜ",
+                    "ORTA",
+                    "ZAYIF"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Kalite"
+            },
+            "value": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "KELEPİR",
+                    "UCUZ",
+                    "NORMAL",
+                    "PAHALI"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Value"
+            },
+            "buffett": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "Geçti",
+                    "Kaldı"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Buffett"
+            },
+            "graham": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "Geçti",
+                    "Kaldı"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Graham"
+            }
+          },
+          "title": "QualityTags",
+          "type": "object"
+        },
+        "RiskFrame": {
+          "additionalProperties": true,
+          "properties": {
+            "entry_zone": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "number"
+                  },
+                  "maxItems": 2,
+                  "minItems": 2,
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Entry Zone"
+            },
+            "entry_low": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Entry Low"
+            },
+            "entry_high": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Entry High"
+            },
+            "stop": {
+              "title": "Stop",
+              "type": "number"
+            },
+            "stop_pct": {
+              "title": "Stop Pct",
+              "type": "number"
+            },
+            "target_1r": {
+              "title": "Target 1R",
+              "type": "number"
+            },
+            "target_2r": {
+              "title": "Target 2R",
+              "type": "number"
+            },
+            "target_3r": {
+              "title": "Target 3R",
+              "type": "number"
+            },
+            "invalidation": {
+              "title": "Invalidation",
+              "type": "string"
+            },
+            "max_hold_bars": {
+              "minimum": 1,
+              "title": "Max Hold Bars",
+              "type": "integer"
+            },
+            "trail_rule": {
+              "title": "Trail Rule",
+              "type": "string"
+            }
+          },
+          "required": [
+            "stop",
+            "stop_pct",
+            "target_1r",
+            "target_2r",
+            "target_3r",
+            "invalidation",
+            "max_hold_bars",
+            "trail_rule"
+          ],
+          "title": "RiskFrame",
+          "type": "object"
+        }
+      },
+      "additionalProperties": true,
+      "properties": {
+        "ticker": {
+          "title": "Ticker",
+          "type": "string"
+        },
+        "sector_group": {
+          "enum": [
+            "banka",
+            "holding",
+            "gyo",
+            "savunma",
+            "enerji",
+            "perakende",
+            "ulasim",
+            "sanayi",
+            "newly_listed",
+            "halted"
+          ],
+          "title": "Sector Group",
+          "type": "string"
+        },
+        "generated_at": {
+          "title": "Generated At",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "1.4",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "quality": {
+          "$ref": "#/$defs/Quality"
+        },
+        "macro": {
+          "$ref": "#/$defs/Macro"
+        },
+        "mode": {
+          "enum": [
+            "HIZLI",
+            "SWING",
+            "POZİSYON",
+            "TOPLANIYOR",
+            "SAKİN",
+            "UZAK DUR"
+          ],
+          "title": "Mode",
+          "type": "string"
+        },
+        "horizon_bars": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Horizon Bars"
+        },
+        "horizon_label": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Horizon Label"
+        },
+        "why_now": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Why Now",
+          "type": "array"
+        },
+        "engines": {
+          "$ref": "#/$defs/Engines"
+        },
+        "confidence": {
+          "$ref": "#/$defs/Confidence"
+        },
+        "opportunity_score": {
+          "maximum": 100,
+          "minimum": 0,
+          "title": "Opportunity Score",
+          "type": "integer"
+        },
+        "risk_frame": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RiskFrame"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "lifecycle": {
+          "$ref": "#/$defs/Lifecycle"
+        },
+        "liquidity": {
+          "$ref": "#/$defs/Liquidity"
+        },
+        "explainer": {
+          "$ref": "#/$defs/Explainer"
+        }
+      },
+      "required": [
+        "ticker",
+        "sector_group",
+        "generated_at",
+        "schema_version",
+        "quality",
+        "macro",
+        "mode",
+        "why_now",
+        "engines",
+        "confidence",
+        "opportunity_score",
+        "lifecycle",
+        "liquidity",
+        "explainer"
+      ],
+      "title": "BullAlfaSignal",
+      "type": "object"
+    },
+    "ScanResponse": {
+      "$defs": {
+        "BullAlfaSignal": {
+          "additionalProperties": true,
+          "properties": {
+            "ticker": {
+              "title": "Ticker",
+              "type": "string"
+            },
+            "sector_group": {
+              "enum": [
+                "banka",
+                "holding",
+                "gyo",
+                "savunma",
+                "enerji",
+                "perakende",
+                "ulasim",
+                "sanayi",
+                "newly_listed",
+                "halted"
+              ],
+              "title": "Sector Group",
+              "type": "string"
+            },
+            "generated_at": {
+              "title": "Generated At",
+              "type": "string"
+            },
+            "schema_version": {
+              "const": "1.4",
+              "title": "Schema Version",
+              "type": "string"
+            },
+            "quality": {
+              "$ref": "#/$defs/Quality"
+            },
+            "macro": {
+              "$ref": "#/$defs/Macro"
+            },
+            "mode": {
+              "enum": [
+                "HIZLI",
+                "SWING",
+                "POZİSYON",
+                "TOPLANIYOR",
+                "SAKİN",
+                "UZAK DUR"
+              ],
+              "title": "Mode",
+              "type": "string"
+            },
+            "horizon_bars": {
+              "anyOf": [
+                {
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Horizon Bars"
+            },
+            "horizon_label": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Horizon Label"
+            },
+            "why_now": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Why Now",
+              "type": "array"
+            },
+            "engines": {
+              "$ref": "#/$defs/Engines"
+            },
+            "confidence": {
+              "$ref": "#/$defs/Confidence"
+            },
+            "opportunity_score": {
+              "maximum": 100,
+              "minimum": 0,
+              "title": "Opportunity Score",
+              "type": "integer"
+            },
+            "risk_frame": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/RiskFrame"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "lifecycle": {
+              "$ref": "#/$defs/Lifecycle"
+            },
+            "liquidity": {
+              "$ref": "#/$defs/Liquidity"
+            },
+            "explainer": {
+              "$ref": "#/$defs/Explainer"
+            }
+          },
+          "required": [
+            "ticker",
+            "sector_group",
+            "generated_at",
+            "schema_version",
+            "quality",
+            "macro",
+            "mode",
+            "why_now",
+            "engines",
+            "confidence",
+            "opportunity_score",
+            "lifecycle",
+            "liquidity",
+            "explainer"
+          ],
+          "title": "BullAlfaSignal",
+          "type": "object"
+        },
+        "CircuitBreaker": {
+          "additionalProperties": true,
+          "properties": {
+            "frozen": {
+              "title": "Frozen",
+              "type": "boolean"
+            },
+            "consecutive_failures": {
+              "minimum": 0,
+              "title": "Consecutive Failures",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "frozen",
+            "consecutive_failures"
+          ],
+          "title": "CircuitBreaker",
+          "type": "object"
+        },
+        "Confidence": {
+          "additionalProperties": true,
+          "properties": {
+            "raw_combined": {
+              "title": "Raw Combined",
+              "type": "number"
+            },
+            "final": {
+              "maximum": 100,
+              "minimum": 0,
+              "title": "Final",
+              "type": "number"
+            },
+            "phase": {
+              "enum": [
+                "v1_heuristic",
+                "v2_isotonic",
+                "v3_ml"
+              ],
+              "title": "Phase",
+              "type": "string"
+            }
+          },
+          "required": [
+            "raw_combined",
+            "final",
+            "phase"
+          ],
+          "title": "Confidence",
+          "type": "object"
+        },
+        "E2RelStr": {
+          "additionalProperties": true,
+          "properties": {
+            "score": {
+              "title": "Score",
+              "type": "number"
+            },
+            "benchmark": {
+              "title": "Benchmark",
+              "type": "string"
+            }
+          },
+          "required": [
+            "score",
+            "benchmark"
+          ],
+          "title": "E2RelStr",
+          "type": "object"
+        },
+        "E3Volume": {
+          "additionalProperties": true,
+          "properties": {
+            "rvol": {
+              "minimum": 0,
+              "title": "Rvol",
+              "type": "number"
+            },
+            "passed": {
+              "title": "Passed",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "rvol",
+            "passed"
+          ],
+          "title": "E3Volume",
+          "type": "object"
+        },
+        "E4Breakout": {
+          "additionalProperties": true,
+          "properties": {
+            "type": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "20d",
+                    "55d",
+                    "6m"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Type"
+            },
+            "bars_ago": {
+              "anyOf": [
+                {
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Bars Ago"
+            }
+          },
+          "title": "E4Breakout",
+          "type": "object"
+        },
+        "E5Compression": {
+          "additionalProperties": true,
+          "properties": {
+            "compressed": {
+              "title": "Compressed",
+              "type": "boolean"
+            },
+            "expanded": {
+              "title": "Expanded",
+              "type": "boolean"
+            },
+            "skipped_reason": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Skipped Reason"
+            }
+          },
+          "required": [
+            "compressed",
+            "expanded"
+          ],
+          "title": "E5Compression",
+          "type": "object"
+        },
+        "Engines": {
+          "additionalProperties": true,
+          "properties": {
+            "e1_trend": {
+              "maximum": 1,
+              "minimum": 0,
+              "title": "E1 Trend",
+              "type": "integer"
+            },
+            "e2_relstr": {
+              "$ref": "#/$defs/E2RelStr"
+            },
+            "e3_volume": {
+              "$ref": "#/$defs/E3Volume"
+            },
+            "e4_breakout": {
+              "$ref": "#/$defs/E4Breakout"
+            },
+            "e5_compression": {
+              "$ref": "#/$defs/E5Compression"
+            },
+            "e6_pullback": {
+              "title": "E6 Pullback",
+              "type": "boolean"
+            },
+            "e7_exhaustion": {
+              "maximum": 1,
+              "minimum": 0,
+              "title": "E7 Exhaustion",
+              "type": "number"
+            },
+            "pullback_to_breakout": {
+              "title": "Pullback To Breakout",
+              "type": "boolean"
+            },
+            "accumulation_strength": {
+              "maximum": 100,
+              "minimum": 0,
+              "title": "Accumulation Strength",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "e1_trend",
+            "e2_relstr",
+            "e3_volume",
+            "e4_breakout",
+            "e5_compression",
+            "e6_pullback",
+            "e7_exhaustion",
+            "pullback_to_breakout",
+            "accumulation_strength"
+          ],
+          "title": "Engines",
+          "type": "object"
+        },
+        "Explainer": {
+          "additionalProperties": true,
+          "properties": {
+            "why_this_mode": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Why This Mode",
+              "type": "array"
+            },
+            "why_not_higher_mode": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Why Not Higher Mode",
+              "type": "array"
+            },
+            "caveats": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Caveats",
+              "type": "array"
+            },
+            "warnings": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Warnings",
+              "type": "array"
+            }
+          },
+          "required": [
+            "why_this_mode",
+            "why_not_higher_mode",
+            "caveats",
+            "warnings"
+          ],
+          "title": "Explainer",
+          "type": "object"
+        },
+        "Lifecycle": {
+          "additionalProperties": true,
+          "properties": {
+            "signal_id": {
+              "title": "Signal Id",
+              "type": "string"
+            },
+            "triggered_at": {
+              "title": "Triggered At",
+              "type": "string"
+            },
+            "bars_since": {
+              "minimum": 0,
+              "title": "Bars Since",
+              "type": "integer"
+            },
+            "status": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "TAZE",
+                    "GELİŞMEKTE",
+                    "GEÇ KALDI"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Status"
+            },
+            "outcome": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "1R_VURDU",
+                    "STOP_OLDU",
+                    "SÜRESİ_DOLDU"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Outcome"
+            },
+            "mode_history": {
+              "items": {
+                "$ref": "#/$defs/ModeHistoryEntry"
+              },
+              "title": "Mode History",
+              "type": "array"
+            }
+          },
+          "required": [
+            "signal_id",
+            "triggered_at",
+            "bars_since",
+            "mode_history"
+          ],
+          "title": "Lifecycle",
+          "type": "object"
+        },
+        "Liquidity": {
+          "additionalProperties": true,
+          "properties": {
+            "adv_20d_try": {
+              "minimum": 0,
+              "title": "Adv 20D Try",
+              "type": "number"
+            },
+            "penalty_applied": {
+              "title": "Penalty Applied",
+              "type": "boolean"
+            },
+            "downgrade_reason": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Downgrade Reason"
+            }
+          },
+          "required": [
+            "adv_20d_try",
+            "penalty_applied"
+          ],
+          "title": "Liquidity",
+          "type": "object"
+        },
+        "Macro": {
+          "additionalProperties": true,
+          "properties": {
+            "regime": {
+              "enum": [
+                "risk_on",
+                "neutral",
+                "risk_off"
+              ],
+              "title": "Regime",
+              "type": "string"
+            },
+            "tl_vol_pct": {
+              "maximum": 100,
+              "minimum": 0,
+              "title": "Tl Vol Pct",
+              "type": "number"
+            },
+            "multiplier": {
+              "minimum": 0,
+              "title": "Multiplier",
+              "type": "number"
+            },
+            "hizli_disabled": {
+              "title": "Hizli Disabled",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "regime",
+            "tl_vol_pct",
+            "multiplier",
+            "hizli_disabled"
+          ],
+          "title": "Macro",
+          "type": "object"
+        },
+        "ModeHistoryEntry": {
+          "additionalProperties": true,
+          "properties": {
+            "mode": {
+              "enum": [
+                "HIZLI",
+                "SWING",
+                "POZİSYON",
+                "TOPLANIYOR",
+                "SAKİN",
+                "UZAK DUR"
+              ],
+              "title": "Mode",
+              "type": "string"
+            },
+            "entered_at": {
+              "title": "Entered At",
+              "type": "string"
+            }
+          },
+          "required": [
+            "mode",
+            "entered_at"
+          ],
+          "title": "ModeHistoryEntry",
+          "type": "object"
+        },
+        "Pagination": {
+          "additionalProperties": true,
+          "properties": {
+            "page": {
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            },
+            "per_page": {
+              "minimum": 1,
+              "title": "Per Page",
+              "type": "integer"
+            },
+            "total": {
+              "minimum": 0,
+              "title": "Total",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "page",
+            "per_page",
+            "total"
+          ],
+          "title": "Pagination",
+          "type": "object"
+        },
+        "Quality": {
+          "additionalProperties": true,
+          "properties": {
+            "score": {
+              "maximum": 100,
+              "minimum": 0,
+              "title": "Score",
+              "type": "integer"
+            },
+            "grade": {
+              "enum": [
+                "A+",
+                "A",
+                "B",
+                "C",
+                "D"
+              ],
+              "title": "Grade",
+              "type": "string"
+            },
+            "grade_capped": {
+              "title": "Grade Capped",
+              "type": "boolean"
+            },
+            "freshness_pct": {
+              "maximum": 100,
+              "minimum": 0,
+              "title": "Freshness Pct",
+              "type": "number"
+            },
+            "tags": {
+              "$ref": "#/$defs/QualityTags"
+            }
+          },
+          "required": [
+            "score",
+            "grade",
+            "grade_capped",
+            "freshness_pct",
+            "tags"
+          ],
+          "title": "Quality",
+          "type": "object"
+        },
+        "QualityTags": {
+          "additionalProperties": true,
+          "properties": {
+            "kalite": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "GÜÇLÜ",
+                    "ORTA",
+                    "ZAYIF"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Kalite"
+            },
+            "value": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "KELEPİR",
+                    "UCUZ",
+                    "NORMAL",
+                    "PAHALI"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Value"
+            },
+            "buffett": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "Geçti",
+                    "Kaldı"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Buffett"
+            },
+            "graham": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "Geçti",
+                    "Kaldı"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Graham"
+            }
+          },
+          "title": "QualityTags",
+          "type": "object"
+        },
+        "RiskFrame": {
+          "additionalProperties": true,
+          "properties": {
+            "entry_zone": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "number"
+                  },
+                  "maxItems": 2,
+                  "minItems": 2,
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Entry Zone"
+            },
+            "entry_low": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Entry Low"
+            },
+            "entry_high": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Entry High"
+            },
+            "stop": {
+              "title": "Stop",
+              "type": "number"
+            },
+            "stop_pct": {
+              "title": "Stop Pct",
+              "type": "number"
+            },
+            "target_1r": {
+              "title": "Target 1R",
+              "type": "number"
+            },
+            "target_2r": {
+              "title": "Target 2R",
+              "type": "number"
+            },
+            "target_3r": {
+              "title": "Target 3R",
+              "type": "number"
+            },
+            "invalidation": {
+              "title": "Invalidation",
+              "type": "string"
+            },
+            "max_hold_bars": {
+              "minimum": 1,
+              "title": "Max Hold Bars",
+              "type": "integer"
+            },
+            "trail_rule": {
+              "title": "Trail Rule",
+              "type": "string"
+            }
+          },
+          "required": [
+            "stop",
+            "stop_pct",
+            "target_1r",
+            "target_2r",
+            "target_3r",
+            "invalidation",
+            "max_hold_bars",
+            "trail_rule"
+          ],
+          "title": "RiskFrame",
+          "type": "object"
+        },
+        "ScanMeta": {
+          "additionalProperties": true,
+          "properties": {
+            "generated_at": {
+              "title": "Generated At",
+              "type": "string"
+            },
+            "universe_size": {
+              "minimum": 0,
+              "title": "Universe Size",
+              "type": "integer"
+            },
+            "by_mode": {
+              "additionalProperties": {
+                "type": "integer"
+              },
+              "title": "By Mode",
+              "type": "object"
+            },
+            "sector_concentration": {
+              "additionalProperties": {
+                "type": "integer"
+              },
+              "title": "Sector Concentration",
+              "type": "object"
+            },
+            "warnings": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Warnings",
+              "type": "array"
+            },
+            "pagination": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Pagination"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "schema_version": {
+              "anyOf": [
+                {
+                  "const": "1.4",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Schema Version"
+            },
+            "cache_as_of": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Cache As Of"
+            },
+            "provider": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Provider"
+            },
+            "circuit_breaker": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/CircuitBreaker"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            }
+          },
+          "required": [
+            "generated_at",
+            "universe_size",
+            "by_mode",
+            "sector_concentration",
+            "warnings"
+          ],
+          "title": "ScanMeta",
+          "type": "object"
+        }
+      },
+      "additionalProperties": true,
+      "properties": {
+        "signals": {
+          "items": {
+            "$ref": "#/$defs/BullAlfaSignal"
+          },
+          "title": "Signals",
+          "type": "array"
+        },
+        "meta": {
+          "$ref": "#/$defs/ScanMeta"
+        }
+      },
+      "required": [
+        "signals",
+        "meta"
+      ],
+      "title": "ScanResponse",
+      "type": "object"
+    },
+    "TickerResponse": {
+      "$defs": {
+        "BullAlfaSignal": {
+          "additionalProperties": true,
+          "properties": {
+            "ticker": {
+              "title": "Ticker",
+              "type": "string"
+            },
+            "sector_group": {
+              "enum": [
+                "banka",
+                "holding",
+                "gyo",
+                "savunma",
+                "enerji",
+                "perakende",
+                "ulasim",
+                "sanayi",
+                "newly_listed",
+                "halted"
+              ],
+              "title": "Sector Group",
+              "type": "string"
+            },
+            "generated_at": {
+              "title": "Generated At",
+              "type": "string"
+            },
+            "schema_version": {
+              "const": "1.4",
+              "title": "Schema Version",
+              "type": "string"
+            },
+            "quality": {
+              "$ref": "#/$defs/Quality"
+            },
+            "macro": {
+              "$ref": "#/$defs/Macro"
+            },
+            "mode": {
+              "enum": [
+                "HIZLI",
+                "SWING",
+                "POZİSYON",
+                "TOPLANIYOR",
+                "SAKİN",
+                "UZAK DUR"
+              ],
+              "title": "Mode",
+              "type": "string"
+            },
+            "horizon_bars": {
+              "anyOf": [
+                {
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Horizon Bars"
+            },
+            "horizon_label": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Horizon Label"
+            },
+            "why_now": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Why Now",
+              "type": "array"
+            },
+            "engines": {
+              "$ref": "#/$defs/Engines"
+            },
+            "confidence": {
+              "$ref": "#/$defs/Confidence"
+            },
+            "opportunity_score": {
+              "maximum": 100,
+              "minimum": 0,
+              "title": "Opportunity Score",
+              "type": "integer"
+            },
+            "risk_frame": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/RiskFrame"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "lifecycle": {
+              "$ref": "#/$defs/Lifecycle"
+            },
+            "liquidity": {
+              "$ref": "#/$defs/Liquidity"
+            },
+            "explainer": {
+              "$ref": "#/$defs/Explainer"
+            }
+          },
+          "required": [
+            "ticker",
+            "sector_group",
+            "generated_at",
+            "schema_version",
+            "quality",
+            "macro",
+            "mode",
+            "why_now",
+            "engines",
+            "confidence",
+            "opportunity_score",
+            "lifecycle",
+            "liquidity",
+            "explainer"
+          ],
+          "title": "BullAlfaSignal",
+          "type": "object"
+        },
+        "Confidence": {
+          "additionalProperties": true,
+          "properties": {
+            "raw_combined": {
+              "title": "Raw Combined",
+              "type": "number"
+            },
+            "final": {
+              "maximum": 100,
+              "minimum": 0,
+              "title": "Final",
+              "type": "number"
+            },
+            "phase": {
+              "enum": [
+                "v1_heuristic",
+                "v2_isotonic",
+                "v3_ml"
+              ],
+              "title": "Phase",
+              "type": "string"
+            }
+          },
+          "required": [
+            "raw_combined",
+            "final",
+            "phase"
+          ],
+          "title": "Confidence",
+          "type": "object"
+        },
+        "E2RelStr": {
+          "additionalProperties": true,
+          "properties": {
+            "score": {
+              "title": "Score",
+              "type": "number"
+            },
+            "benchmark": {
+              "title": "Benchmark",
+              "type": "string"
+            }
+          },
+          "required": [
+            "score",
+            "benchmark"
+          ],
+          "title": "E2RelStr",
+          "type": "object"
+        },
+        "E3Volume": {
+          "additionalProperties": true,
+          "properties": {
+            "rvol": {
+              "minimum": 0,
+              "title": "Rvol",
+              "type": "number"
+            },
+            "passed": {
+              "title": "Passed",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "rvol",
+            "passed"
+          ],
+          "title": "E3Volume",
+          "type": "object"
+        },
+        "E4Breakout": {
+          "additionalProperties": true,
+          "properties": {
+            "type": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "20d",
+                    "55d",
+                    "6m"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Type"
+            },
+            "bars_ago": {
+              "anyOf": [
+                {
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Bars Ago"
+            }
+          },
+          "title": "E4Breakout",
+          "type": "object"
+        },
+        "E5Compression": {
+          "additionalProperties": true,
+          "properties": {
+            "compressed": {
+              "title": "Compressed",
+              "type": "boolean"
+            },
+            "expanded": {
+              "title": "Expanded",
+              "type": "boolean"
+            },
+            "skipped_reason": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Skipped Reason"
+            }
+          },
+          "required": [
+            "compressed",
+            "expanded"
+          ],
+          "title": "E5Compression",
+          "type": "object"
+        },
+        "Engines": {
+          "additionalProperties": true,
+          "properties": {
+            "e1_trend": {
+              "maximum": 1,
+              "minimum": 0,
+              "title": "E1 Trend",
+              "type": "integer"
+            },
+            "e2_relstr": {
+              "$ref": "#/$defs/E2RelStr"
+            },
+            "e3_volume": {
+              "$ref": "#/$defs/E3Volume"
+            },
+            "e4_breakout": {
+              "$ref": "#/$defs/E4Breakout"
+            },
+            "e5_compression": {
+              "$ref": "#/$defs/E5Compression"
+            },
+            "e6_pullback": {
+              "title": "E6 Pullback",
+              "type": "boolean"
+            },
+            "e7_exhaustion": {
+              "maximum": 1,
+              "minimum": 0,
+              "title": "E7 Exhaustion",
+              "type": "number"
+            },
+            "pullback_to_breakout": {
+              "title": "Pullback To Breakout",
+              "type": "boolean"
+            },
+            "accumulation_strength": {
+              "maximum": 100,
+              "minimum": 0,
+              "title": "Accumulation Strength",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "e1_trend",
+            "e2_relstr",
+            "e3_volume",
+            "e4_breakout",
+            "e5_compression",
+            "e6_pullback",
+            "e7_exhaustion",
+            "pullback_to_breakout",
+            "accumulation_strength"
+          ],
+          "title": "Engines",
+          "type": "object"
+        },
+        "Explainer": {
+          "additionalProperties": true,
+          "properties": {
+            "why_this_mode": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Why This Mode",
+              "type": "array"
+            },
+            "why_not_higher_mode": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Why Not Higher Mode",
+              "type": "array"
+            },
+            "caveats": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Caveats",
+              "type": "array"
+            },
+            "warnings": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Warnings",
+              "type": "array"
+            }
+          },
+          "required": [
+            "why_this_mode",
+            "why_not_higher_mode",
+            "caveats",
+            "warnings"
+          ],
+          "title": "Explainer",
+          "type": "object"
+        },
+        "Lifecycle": {
+          "additionalProperties": true,
+          "properties": {
+            "signal_id": {
+              "title": "Signal Id",
+              "type": "string"
+            },
+            "triggered_at": {
+              "title": "Triggered At",
+              "type": "string"
+            },
+            "bars_since": {
+              "minimum": 0,
+              "title": "Bars Since",
+              "type": "integer"
+            },
+            "status": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "TAZE",
+                    "GELİŞMEKTE",
+                    "GEÇ KALDI"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Status"
+            },
+            "outcome": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "1R_VURDU",
+                    "STOP_OLDU",
+                    "SÜRESİ_DOLDU"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Outcome"
+            },
+            "mode_history": {
+              "items": {
+                "$ref": "#/$defs/ModeHistoryEntry"
+              },
+              "title": "Mode History",
+              "type": "array"
+            }
+          },
+          "required": [
+            "signal_id",
+            "triggered_at",
+            "bars_since",
+            "mode_history"
+          ],
+          "title": "Lifecycle",
+          "type": "object"
+        },
+        "Liquidity": {
+          "additionalProperties": true,
+          "properties": {
+            "adv_20d_try": {
+              "minimum": 0,
+              "title": "Adv 20D Try",
+              "type": "number"
+            },
+            "penalty_applied": {
+              "title": "Penalty Applied",
+              "type": "boolean"
+            },
+            "downgrade_reason": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Downgrade Reason"
+            }
+          },
+          "required": [
+            "adv_20d_try",
+            "penalty_applied"
+          ],
+          "title": "Liquidity",
+          "type": "object"
+        },
+        "Macro": {
+          "additionalProperties": true,
+          "properties": {
+            "regime": {
+              "enum": [
+                "risk_on",
+                "neutral",
+                "risk_off"
+              ],
+              "title": "Regime",
+              "type": "string"
+            },
+            "tl_vol_pct": {
+              "maximum": 100,
+              "minimum": 0,
+              "title": "Tl Vol Pct",
+              "type": "number"
+            },
+            "multiplier": {
+              "minimum": 0,
+              "title": "Multiplier",
+              "type": "number"
+            },
+            "hizli_disabled": {
+              "title": "Hizli Disabled",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "regime",
+            "tl_vol_pct",
+            "multiplier",
+            "hizli_disabled"
+          ],
+          "title": "Macro",
+          "type": "object"
+        },
+        "ModeHistoryEntry": {
+          "additionalProperties": true,
+          "properties": {
+            "mode": {
+              "enum": [
+                "HIZLI",
+                "SWING",
+                "POZİSYON",
+                "TOPLANIYOR",
+                "SAKİN",
+                "UZAK DUR"
+              ],
+              "title": "Mode",
+              "type": "string"
+            },
+            "entered_at": {
+              "title": "Entered At",
+              "type": "string"
+            }
+          },
+          "required": [
+            "mode",
+            "entered_at"
+          ],
+          "title": "ModeHistoryEntry",
+          "type": "object"
+        },
+        "Quality": {
+          "additionalProperties": true,
+          "properties": {
+            "score": {
+              "maximum": 100,
+              "minimum": 0,
+              "title": "Score",
+              "type": "integer"
+            },
+            "grade": {
+              "enum": [
+                "A+",
+                "A",
+                "B",
+                "C",
+                "D"
+              ],
+              "title": "Grade",
+              "type": "string"
+            },
+            "grade_capped": {
+              "title": "Grade Capped",
+              "type": "boolean"
+            },
+            "freshness_pct": {
+              "maximum": 100,
+              "minimum": 0,
+              "title": "Freshness Pct",
+              "type": "number"
+            },
+            "tags": {
+              "$ref": "#/$defs/QualityTags"
+            }
+          },
+          "required": [
+            "score",
+            "grade",
+            "grade_capped",
+            "freshness_pct",
+            "tags"
+          ],
+          "title": "Quality",
+          "type": "object"
+        },
+        "QualityTags": {
+          "additionalProperties": true,
+          "properties": {
+            "kalite": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "GÜÇLÜ",
+                    "ORTA",
+                    "ZAYIF"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Kalite"
+            },
+            "value": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "KELEPİR",
+                    "UCUZ",
+                    "NORMAL",
+                    "PAHALI"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Value"
+            },
+            "buffett": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "Geçti",
+                    "Kaldı"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Buffett"
+            },
+            "graham": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "Geçti",
+                    "Kaldı"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Graham"
+            }
+          },
+          "title": "QualityTags",
+          "type": "object"
+        },
+        "RiskFrame": {
+          "additionalProperties": true,
+          "properties": {
+            "entry_zone": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "number"
+                  },
+                  "maxItems": 2,
+                  "minItems": 2,
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Entry Zone"
+            },
+            "entry_low": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Entry Low"
+            },
+            "entry_high": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Entry High"
+            },
+            "stop": {
+              "title": "Stop",
+              "type": "number"
+            },
+            "stop_pct": {
+              "title": "Stop Pct",
+              "type": "number"
+            },
+            "target_1r": {
+              "title": "Target 1R",
+              "type": "number"
+            },
+            "target_2r": {
+              "title": "Target 2R",
+              "type": "number"
+            },
+            "target_3r": {
+              "title": "Target 3R",
+              "type": "number"
+            },
+            "invalidation": {
+              "title": "Invalidation",
+              "type": "string"
+            },
+            "max_hold_bars": {
+              "minimum": 1,
+              "title": "Max Hold Bars",
+              "type": "integer"
+            },
+            "trail_rule": {
+              "title": "Trail Rule",
+              "type": "string"
+            }
+          },
+          "required": [
+            "stop",
+            "stop_pct",
+            "target_1r",
+            "target_2r",
+            "target_3r",
+            "invalidation",
+            "max_hold_bars",
+            "trail_rule"
+          ],
+          "title": "RiskFrame",
+          "type": "object"
+        }
+      },
+      "additionalProperties": true,
+      "description": "Wrapper returned by `GET /api/bullalfa/{ticker}`.",
+      "properties": {
+        "schema_version": {
+          "const": "1.4",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "signal": {
+          "$ref": "#/$defs/BullAlfaSignal"
+        }
+      },
+      "required": [
+        "schema_version",
+        "signal"
+      ],
+      "title": "TickerResponse",
+      "type": "object"
+    }
+  }
+}
