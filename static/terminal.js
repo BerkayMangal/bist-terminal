@@ -700,6 +700,41 @@ function _bwDataBadge(item){
   return `<span class="pill ${cls}" title="${esc(tipText)}" style="font-size:9px;padding:2px 6px;cursor:help">${label}</span>`;
 }
 
+// ─── Phase A.10 Step 2-C — Workflow readiness badge ───
+// Display-only label that complements cycle_state. Tells the user what
+// the system thinks they should DO about this stock, in observation
+// language only (never buy/sell). Tooltip carries the rationale.
+function _bwReadinessBadge(item){
+  const r = item.readiness || '';
+  const map = {
+    'HAZIRLANIYOR':         {bg:'rgba(106,167,255,.18)', col:'var(--cyn)', ico:'🔵'},
+    'ATEŞLENDİ':            {bg:'rgba(0,229,160,.22)',   col:'var(--grn)', ico:'🟢'},
+    'TEYİT BEKLİYOR':       {bg:'rgba(255,205,86,.18)',  col:'var(--ylw)', ico:'🟡'},
+    'GEÇ KALMIŞ OLABİLİR':  {bg:'rgba(255,107,107,.18)', col:'var(--red)', ico:'🔴'},
+    'İZLEMEDE':             {bg:'var(--bg3)',            col:'var(--t3)',  ico:'⚪'},
+  };
+  const m = map[r];
+  if(!m) return '';
+  const tip = item.readiness_rationale || r;
+  return `<span title="${esc(tip)}" style="display:inline-flex;align-items:center;gap:4px;background:${m.bg};color:${m.col};font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;padding:3px 8px;border-radius:4px;letter-spacing:.4px;cursor:help">${m.ico} ${esc(r)}</span>`;
+}
+
+// Segment fit — explanatory only, never affects scoring or ordering.
+// Compact pill; tooltip carries the explainer.
+function _bwSegmentFitBadge(item){
+  const f = item.segment_fit || '';
+  if(!f) return '';
+  const map = {
+    'GÜÇLÜ': {bg:'rgba(0,229,160,.12)',  col:'var(--grn)', ico:'✓'},
+    'ORTA':  {bg:'rgba(255,205,86,.12)', col:'var(--ylw)', ico:'~'},
+    'ZAYIF': {bg:'rgba(255,167,38,.14)', col:'var(--orn)', ico:'!'},
+  };
+  const m = map[f];
+  if(!m) return '';
+  const tip = item.segment_fit_explainer || f;
+  return `<span title="${esc(tip)}" style="display:inline-flex;align-items:center;gap:3px;background:${m.bg};color:${m.col};font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:600;padding:2px 6px;border-radius:3px;letter-spacing:.3px;cursor:help">${m.ico} FIT: ${esc(f)}</span>`;
+}
+
 // Evidence chips — 2-4 strongest facts in compact monochrome chips.
 // Display order: prioritize the most discriminating signals first.
 function _bwEvidenceChips(item){
@@ -838,6 +873,141 @@ function _bwWatchCard(it){
   </div>`;
 }
 
+// ─── Phase A.10 Step 2-C — Workflow shortlist ───
+// Bugünün BullWatch Shortlist'i — compact ranking layer ABOVE the full
+// grid. Rules (matching backend Step 2-C contract):
+//   - Max 12-15 total names
+//   - Max 5 per group
+//   - Sort: score desc → confidence_tier desc → evidence_depth_count desc
+//   - Sector diversity: same sector capped at 3 per group
+//   - Exclude data_status=missing
+//   - Avoid LOW confidence in primary groups (allowed in late-risk only)
+//   - Full grid is NOT filtered by shortlist — additive only
+//
+// Three groups returned: hazirlananlar, atestlenenler, late_risk.
+function bwBuildShortlist(items){
+  if(!Array.isArray(items)) return {hazirlananlar:[], atestlenenler:[], late_risk:[]};
+
+  // Step 1 — exclude data_status=missing (shortlist only)
+  const usable = items.filter(it => (it.data_status || '').toLowerCase() !== 'missing');
+
+  // Step 2 — confidence rank for sort
+  const ctRank = {HIGH: 3, MEDIUM: 2, LOW: 1};
+  const _sortKey = (a, b) => {
+    const sa = a.score || 0, sb = b.score || 0;
+    if(sb !== sa) return sb - sa;
+    const cta = ctRank[(a.engine_conflict_matrix?.confidence_tier || '').toUpperCase()] || 0;
+    const ctb = ctRank[(b.engine_conflict_matrix?.confidence_tier || '').toUpperCase()] || 0;
+    if(ctb !== cta) return ctb - cta;
+    const da = a.engine_conflict_matrix?.evidence_depth_count || 0;
+    const db = b.engine_conflict_matrix?.evidence_depth_count || 0;
+    return db - da;
+  };
+
+  // Step 3 — bucket by readiness state
+  const HAZIRLANAN_STATES = new Set(['HAZIRLANIYOR', 'TEYİT BEKLİYOR']);
+  const ATESLENEN_STATES = new Set(['ATEŞLENDİ']);
+  const LATE_STATES = new Set(['GEÇ KALMIŞ OLABİLİR']);
+
+  const hazirlanan_pool = usable.filter(it => HAZIRLANAN_STATES.has(it.readiness));
+  const ateslenen_pool = usable.filter(it => ATESLENEN_STATES.has(it.readiness));
+  const late_pool = usable.filter(it => LATE_STATES.has(it.readiness));
+
+  // Step 4 — primary groups exclude LOW confidence
+  const primaryFilter = it => (it.engine_conflict_matrix?.confidence_tier || '').toUpperCase() !== 'LOW';
+  const haz_primary = hazirlanan_pool.filter(primaryFilter).sort(_sortKey);
+  const ate_primary = ateslenen_pool.filter(primaryFilter).sort(_sortKey);
+  // Late-risk: ALL confidences allowed (warning group)
+  const late_sorted = late_pool.slice().sort(_sortKey);
+
+  // Step 5 — sector diversity within group: max 3 per sector_tr
+  function diversify(arr, perSectorCap, totalCap){
+    const taken = [];
+    const sectorCount = {};
+    for(const it of arr){
+      const s = it.sector_tr || 'Diğer';
+      if((sectorCount[s] || 0) >= perSectorCap) continue;
+      taken.push(it);
+      sectorCount[s] = (sectorCount[s] || 0) + 1;
+      if(taken.length >= totalCap) break;
+    }
+    return taken;
+  }
+
+  const hazirlananlar = diversify(haz_primary, 3, 5);
+  const atestlenenler = diversify(ate_primary, 3, 5);
+  const late_risk = diversify(late_sorted, 3, 5);
+
+  return {hazirlananlar, atestlenenler, late_risk};
+}
+
+// Render the shortlist section. Empty groups are still rendered (with a
+// dim "—" placeholder) so users learn the layout. The section sits
+// ABOVE the existing grid and never replaces or hides cards.
+function _bwShortlistSection(items){
+  const sl = bwBuildShortlist(items);
+  const total = sl.hazirlananlar.length + sl.atestlenenler.length + sl.late_risk.length;
+  if(total === 0) return '';  // No items qualify — skip the whole section
+
+  const groupRender = (title, icon, color, list, isWarning) => {
+    if(!list.length){
+      return `<div style="margin-bottom:12px"><div style="display:flex;align-items:center;gap:6px;color:${color};font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;letter-spacing:.5px;margin-bottom:6px">${icon} ${title} <span style="color:var(--t4);font-weight:400">(0)</span></div><div style="color:var(--t4);font-size:11px;font-style:italic">— bu grupta uygun aday yok</div></div>`;
+    }
+    const rows = list.map(it => _bwShortlistRow(it, isWarning)).join('');
+    return `<div style="margin-bottom:12px"><div style="display:flex;align-items:center;gap:6px;color:${color};font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;letter-spacing:.5px;margin-bottom:6px">${icon} ${title} <span style="color:var(--t4);font-weight:400">(${list.length})</span></div>${rows}</div>`;
+  };
+
+  const lateBox = sl.late_risk.length
+    ? `<div style="background:rgba(255,107,107,.06);border:1px solid rgba(255,107,107,.3);border-radius:6px;padding:10px;margin-top:8px">
+         <div style="font-size:10px;color:var(--red);font-family:'JetBrains Mono',monospace;font-weight:700;letter-spacing:.5px;margin-bottom:6px">⚠ DİKKAT — GEÇ EVRE / DAĞITIM RİSKİ</div>
+         <div style="font-size:10px;color:var(--t4);margin-bottom:8px">İnsan gözüyle kontrol edilmeli — risk artıyor.</div>
+         ${sl.late_risk.map(it => _bwShortlistRow(it, true)).join('')}
+       </div>`
+    : '';
+
+  return `<div style="background:var(--bg2);border:1px solid var(--bdr);border-radius:8px;padding:14px;margin-bottom:14px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+      <div style="font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:700;color:var(--t1);letter-spacing:.5px">📋 BUGÜNÜN BULLWATCH SHORTLIST'İ</div>
+      <div style="font-size:10px;color:var(--t4)">${total} aday — tüm liste aşağıda korunuyor</div>
+    </div>
+    ${groupRender('HAZIRLANANLAR', '🔵', 'var(--cyn)', sl.hazirlananlar, false)}
+    ${groupRender('ATEŞLENENLER', '⚡', 'var(--grn)', sl.atestlenenler, false)}
+    ${lateBox}
+  </div>`;
+}
+
+// Compact one-row representation used inside the shortlist groups.
+// Click on the symbol opens the full ticker (existing loadTicker).
+function _bwShortlistRow(item, isWarning){
+  const score = (item.score || 0).toFixed(0);
+  const z = _bwZoneStyle(item.zone);
+  const sec = item.sector_tr || 'Diğer';
+  const rationale = item.readiness_rationale || '';
+  const dataBadge = _bwDataBadge(item);
+  const segBadge = _bwSegmentFitBadge(item);
+  const borderColor = isWarning ? 'rgba(255,107,107,.4)' : 'var(--bdr)';
+  const ev = item.evidence_layer?.evidence_chips || [];
+  const top2 = ev.slice(0, 2).map(c =>
+    `<span style="background:var(--bg3);color:var(--t3);font-size:9px;padding:2px 6px;border-radius:3px;font-family:'JetBrains Mono',monospace">${esc(c.label || c)}</span>`
+  ).join(' ');
+  return `<div style="display:flex;align-items:flex-start;gap:10px;padding:8px;border:1px solid ${borderColor};border-radius:6px;margin-bottom:6px;background:var(--bg3)">
+    <div style="flex-shrink:0;width:42px;text-align:center">
+      <div style="font-family:'JetBrains Mono',monospace;font-size:18px;font-weight:700;color:${z.col};line-height:1">${score}</div>
+      <div style="font-size:8px;color:var(--t4);margin-top:1px">SCORE</div>
+    </div>
+    <div style="flex:1;min-width:0">
+      <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:3px">
+        <span class="clk-t" style="font-size:13px;font-weight:700;color:var(--t1)" onclick="loadTicker('${esc(item.symbol)}')">${esc(item.symbol)}</span>
+        <span style="font-size:9px;color:var(--t4);font-family:'JetBrains Mono',monospace">${esc(sec)}</span>
+        ${dataBadge}
+        ${segBadge}
+      </div>
+      ${rationale ? `<div style="font-size:11px;color:var(--t2);line-height:1.4">${esc(rationale)}</div>` : ''}
+      ${top2 ? `<div style="margin-top:4px;display:flex;gap:4px;flex-wrap:wrap">${top2}</div>` : ''}
+    </div>
+  </div>`;
+}
+
 function _bwCard(item){
   const z = _bwZoneStyle(item.zone);
   const score = (item.score||0).toFixed(0);
@@ -863,7 +1033,9 @@ function _bwCard(item){
         <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;align-items:center">
           <span class="pill ${z.pill}">${z.icon} ${z.label}</span>
           ${_bwCycleBadge(item)}
+          ${_bwReadinessBadge(item)}
           <span style="display:inline-flex;align-items:center;gap:4px;background:${ss.bg};color:${ss.col};font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:600;padding:3px 8px;border-radius:4px;text-transform:uppercase;letter-spacing:.4px">${ss.ico} ${esc(sec)}</span>
+          ${_bwSegmentFitBadge(item)}
           ${_bwDataBadge(item)}
           ${trendHtml}
         </div>
@@ -1283,6 +1455,10 @@ function renderBullwatchPage(){
       h+='</div>';
     }
   }else{
+    // Phase A.10 Step 2-C: prepend shortlist section ABOVE the full grid.
+    // Shortlist is purely additive — full grid is rendered AFTER it,
+    // unchanged. Items missing from shortlist STILL appear in the grid.
+    h += _bwShortlistSection(filtered);
     h+=`<div class="bw-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px">${filtered.map(_bwCard).join('')}</div>`;
   }
   // Snapshot save toast (auto-dismisses)

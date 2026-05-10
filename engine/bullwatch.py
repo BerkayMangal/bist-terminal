@@ -398,6 +398,277 @@ def _compute_cycle_state(
     return "BELİRSİZ"
 
 
+# ================================================================
+# Phase A.10 Step 2-C — Readiness label
+#
+# A workflow-oriented status that complements cycle_state. Cycle says
+# WHERE the stock is in the tape cycle; readiness says WHAT the user
+# should do about it (in observation terms — never buy/sell language).
+#
+# Allowed values:
+#   HAZIRLANIYOR        — accumulation, early/mid, pinning/float pressure
+#   ATEŞLENDİ           — accumulation/markup + high RVOL + breakout-like
+#   TEYİT BEKLİYOR      — pattern present, trigger confirmation missing
+#   GEÇ KALMIŞ OLABİLİR — distribution / late maturity / high position
+#   İZLEMEDE            — unclear OR data is too weak to read confidently
+#
+# CRITICAL CONTRACT — Step 2-C:
+#   This function is DERIVED metadata only. It MUST NOT affect
+#   score / eligibility / zone / dominant_read / confidence_tier.
+#   It only tells the UI which workflow group to put the card in.
+# ================================================================
+READINESS_STATES = (
+    "HAZIRLANIYOR",
+    "ATEŞLENDİ",
+    "TEYİT BEKLİYOR",
+    "GEÇ KALMIŞ OLABİLİR",
+    "İZLEMEDE",
+)
+
+
+def _compute_readiness(
+    metrics: dict[str, Any],
+    conflict_dict: Optional[dict] = None,
+    maturity_dict: Optional[dict] = None,
+    playbook_dict: Optional[dict] = None,
+    pinning_dict: Optional[dict] = None,
+) -> str:
+    """Phase A.10 Step 2-C: derive workflow readiness from existing fields.
+
+    Decision tree (priority order — first match wins):
+      1. Data too weak → İZLEMEDE       (data_status missing/stale)
+      2. Late-risk guard → GEÇ KALMIŞ OLABİLİR
+         (DISTRIBUTION dominant, OR LATE/EXHAUSTED maturity,
+          OR position>85% with climax-volume)
+      3. Ignition → ATEŞLENDİ
+         (ACCUMULATION/MARKUP + (RVOL≥3 OR walk-up/breakout pattern)
+          + position>50%)
+      4. Preparation → HAZIRLANIYOR
+         (ACCUMULATION + EARLY/MID maturity
+          + (pinning≥60 OR float_turnover_20d≥1.5))
+      5. Pattern but weak trigger → TEYİT BEKLİYOR
+         (pattern non-empty, dominant read recognized, but RVOL/conf weak)
+      6. Default → İZLEMEDE
+    """
+    cm = conflict_dict or {}
+    mat = maturity_dict or {}
+    pb = playbook_dict or {}
+    pin = pinning_dict or {}
+    ind = mat.get("indicators") or {}
+
+    # Pull only allowed fields from the spec (no scoring/threshold lookups)
+    data_status = (metrics.get("_data_status") or "").lower()
+    dom = (cm.get("dominant_read") or "").upper()
+    conf_tier = (cm.get("confidence_tier") or "").upper()
+    depth = cm.get("evidence_depth_count") or 0
+    maturity = (mat.get("maturity") or "").upper()
+    pb_name = (pb.get("playbook") or "").upper()
+    position = ind.get("position_in_range")
+    pinning_score = pin.get("price_pinning_score") or 0
+    turnover_20d = ind.get("float_turnover_20d") or metrics.get("float_turnover_20d")
+    rvol = metrics.get("rvol") or ind.get("rvol")
+
+    patterns_lc = [str(p).lower() for p in (metrics.get("patterns") or [])]
+    has_walk_up = any("walk" in p and "up" in p for p in patterns_lc)
+    has_breakout = any("break" in p for p in patterns_lc)
+    has_absorption = any("absorption" in p or "absorb" in p for p in patterns_lc)
+
+    # ── 1. Data quality guard ───────────────────────────────────────
+    # Spec: "If data_status is missing or weak, readiness should
+    #        default to İZLEMEDE."
+    if data_status in ("missing", "stale"):
+        return "İZLEMEDE"
+    # Partial data is acceptable IF dominant_read is set AND confidence
+    # is at least MEDIUM. Otherwise the readings are too noisy to trust.
+    if data_status == "partial" and (not dom or conf_tier == "LOW"):
+        return "İZLEMEDE"
+
+    # ── 2. Late-risk guard (highest priority after data) ────────────
+    if dom == "DISTRIBUTION":
+        return "GEÇ KALMIŞ OLABİLİR"
+    if maturity in ("LATE", "EXHAUSTED"):
+        return "GEÇ KALMIŞ OLABİLİR"
+    # Climax pattern: high in range + climactic volume
+    if (position is not None and position > 0.85
+            and rvol is not None and rvol >= 2.5):
+        return "GEÇ KALMIŞ OLABİLİR"
+
+    # ── 3. Ignition (clear breakout-like behavior) ──────────────────
+    is_acc_or_markup = (dom == "ACCUMULATION" or "MARKUP" in pb_name)
+    has_strong_volume = (rvol is not None and rvol >= 3.0)
+    has_breakout_pattern = (has_walk_up or has_breakout)
+    not_too_early = (position is None or position > 0.5)
+    if is_acc_or_markup and (has_strong_volume or has_breakout_pattern) and not_too_early:
+        return "ATEŞLENDİ"
+
+    # ── 4. Preparation (early accumulation with pressure signals) ───
+    is_early_acc = (
+        dom == "ACCUMULATION"
+        and maturity in ("EARLY", "MID", "")  # blank is OK during accumulation
+    )
+    has_pressure = (
+        pinning_score >= 60
+        or (turnover_20d is not None and turnover_20d >= 1.5)
+        or has_absorption
+    )
+    if is_early_acc and has_pressure:
+        return "HAZIRLANIYOR"
+
+    # ── 5. Pattern but trigger missing ──────────────────────────────
+    has_any_pattern = bool(patterns_lc) or has_walk_up or has_breakout
+    has_recognized_dom = dom in ("ACCUMULATION", "MARKUP")
+    weak_trigger = (
+        (rvol is None or rvol < 2.0)
+        and conf_tier in ("LOW", "MEDIUM", "")
+    )
+    if has_any_pattern and has_recognized_dom and weak_trigger:
+        return "TEYİT BEKLİYOR"
+    # Edge: ACCUMULATION dominant but no pressure + no patterns yet
+    if dom == "ACCUMULATION" and depth >= 2:
+        return "TEYİT BEKLİYOR"
+
+    # ── 6. Default ──────────────────────────────────────────────────
+    return "İZLEMEDE"
+
+
+def _build_readiness_rationale(
+    readiness: str,
+    metrics: dict[str, Any],
+    conflict_dict: Optional[dict] = None,
+    maturity_dict: Optional[dict] = None,
+    playbook_dict: Optional[dict] = None,
+    pinning_dict: Optional[dict] = None,
+) -> str:
+    """Phase A.10 Step 2-C: 1-sentence Turkish rationale for readiness.
+
+    LEGAL-SAFE — never says: al, sat, hedef, dur, kesin, garanti,
+    manipülasyon. Uses observation-language only:
+      gözlemleniyor, ihtimal, teyit bekliyor, risk artıyor,
+      insan gözüyle kontrol edilmeli.
+    """
+    cm = conflict_dict or {}
+    mat = maturity_dict or {}
+    pb = playbook_dict or {}
+    pin = pinning_dict or {}
+    ind = mat.get("indicators") or {}
+
+    dom = (cm.get("dominant_read") or "").upper()
+    conf_tier = (cm.get("confidence_tier") or "").upper()
+    maturity = (mat.get("maturity") or "").upper()
+    position = ind.get("position_in_range")
+    pinning_score = pin.get("price_pinning_score") or 0
+    turnover_20d = ind.get("float_turnover_20d") or metrics.get("float_turnover_20d")
+    rvol = metrics.get("rvol") or ind.get("rvol")
+    data_status = (metrics.get("_data_status") or "").lower()
+    missing_fields = metrics.get("_missing_fields") or []
+
+    parts: list[str] = []
+    if readiness == "HAZIRLANIYOR":
+        if turnover_20d is not None and turnover_20d >= 1.5:
+            parts.append(f"20g'de float'ın {turnover_20d:.1f}x'i el değiştirmiş")
+        if pinning_score >= 60:
+            parts.append(f"pinning skoru {pinning_score:.0f}")
+        if position is not None and position < 0.5:
+            parts.append(f"alt-orta bantta (pos %{position*100:.0f})")
+        parts.append("erken accumulation gözlemleniyor")
+
+    elif readiness == "ATEŞLENDİ":
+        if rvol is not None and rvol >= 3.0:
+            parts.append(f"RVOL {rvol:.1f}×")
+        patterns_lc = [str(p).lower() for p in (metrics.get("patterns") or [])]
+        if any("walk" in p and "up" in p for p in patterns_lc):
+            parts.append("walk-up profili")
+        elif any("break" in p for p in patterns_lc):
+            parts.append("breakout profili")
+        if dom == "ACCUMULATION":
+            parts.append("accumulation devam ediyor")
+        elif "MARKUP" in (pb.get("playbook") or "").upper():
+            parts.append("markup geçişi")
+        parts.append("hareket ihtimal arttı, insan gözüyle kontrol edilmeli")
+
+    elif readiness == "TEYİT BEKLİYOR":
+        patterns_lc = [str(p).lower() for p in (metrics.get("patterns") or [])]
+        if patterns_lc:
+            parts.append(f"pattern ({patterns_lc[0]}) oluştu")
+        if rvol is not None and rvol < 2.0:
+            parts.append(f"ama RVOL henüz zayıf ({rvol:.1f}×)")
+        elif conf_tier == "LOW":
+            parts.append("ama confidence düşük")
+        else:
+            parts.append("ama trigger henüz net değil")
+        parts.append("teyit bekliyor")
+
+    elif readiness == "GEÇ KALMIŞ OLABİLİR":
+        if dom == "DISTRIBUTION":
+            parts.append("distribution profili")
+        if maturity in ("LATE", "EXHAUSTED"):
+            parts.append(f"olgunluk {maturity.lower()}")
+        if position is not None and position > 0.85:
+            parts.append(f"pos %{position*100:.0f} (üst bant)")
+        if rvol is not None and rvol >= 2.5:
+            parts.append(f"climax hacim ({rvol:.1f}×)")
+        parts.append("risk artıyor, insan gözüyle kontrol edilmeli")
+
+    else:  # İZLEMEDE
+        if data_status in ("missing", "stale"):
+            parts.append(f"veri {data_status} — okumalar zayıf")
+        elif data_status == "partial":
+            mf = ", ".join(missing_fields[:2]) if missing_fields else "kısmi"
+            parts.append(f"veri partial ({mf}) — sinyaller belirsiz")
+        elif not dom:
+            parts.append("dominant okuma henüz net değil")
+        else:
+            parts.append("sinyaller karışık")
+        parts.append("insan gözüyle kontrol edilmeli")
+
+    text = ", ".join(parts) + "."
+    # Capitalize first letter for niceness
+    return text[0].upper() + text[1:] if text else ""
+
+
+# ================================================================
+# Phase A.10 Step 2-C — Segment fit
+#
+# Explanatory label only — does NOT filter or change score.
+# Indicates how well BullWatch's pattern engine fits the company type.
+#
+# Mapping (uses sector_tr from existing map_sector_tr):
+#   GÜÇLÜ — ENDÜSTRİ, MADENCİLİK, TÜKETİM, SAĞLIK
+#           (low-float industrial / commodity-like — BullWatch sweet spot)
+#   ORTA  — TEKNOLOJİ, DİĞER
+#           (volatility-prone, patterns work but interpret carefully)
+#   ZAYIF — FİNANSAL
+#           (banks/holdings/REITs/insurance — BullWatch patterns less reliable)
+# ================================================================
+SEGMENT_FIT_STATES = ("GÜÇLÜ", "ORTA", "ZAYIF")
+_SEGMENT_FIT_MAP = {
+    "Endüstri": "GÜÇLÜ",
+    "Madencilik": "GÜÇLÜ",
+    "Tüketim": "GÜÇLÜ",
+    "Sağlık": "GÜÇLÜ",
+    "Teknoloji": "ORTA",
+    "Diğer": "ORTA",
+    "Finansal": "ZAYIF",
+}
+
+
+def _compute_segment_fit(sector_tr: Optional[str]) -> tuple[str, str]:
+    """Return (segment_fit, segment_fit_explainer).
+
+    Explanatory only. Does not affect score, eligibility, or zone.
+    """
+    if not sector_tr:
+        return "ORTA", "Sektör belirsiz — patternler dikkatli yorumlanmalı."
+    fit = _SEGMENT_FIT_MAP.get(sector_tr, "ORTA")
+    if fit == "GÜÇLÜ":
+        explainer = "Düşük float endüstriyel/üretim profili — BullWatch patternleri daha güvenilir."
+    elif fit == "ZAYIF":
+        explainer = "Finansal/Holding/GYO — BullWatch patternleri daha dikkatli yorumlanmalı."
+    else:
+        explainer = "Volatilite yüksek olabilir — patternler dikkatli yorumlanmalı."
+    return fit, explainer
+
+
 def _build_narrative(
     score: float,
     zone: str,
@@ -752,6 +1023,14 @@ class BullWatchResult:
     override_fields: Optional[list] = None
     # ── Phase A.10 Step 2-A.2: UI cycle state (display-only mapping) ──
     cycle_state: Optional[str] = None        # "TOPLANIYOR"|"ATEŞLENİYOR"|"DAĞITIM RİSKİ"|"BOŞALTIYOR"|"BELİRSİZ"
+    # ── Phase A.10 Step 2-C: workflow readiness + segment fit ──────────
+    # All optional — additive metadata only. Step 2-C contract:
+    #   These MUST NOT affect score / eligibility / zone / dominant_read /
+    #   confidence_tier. They are workflow display labels only.
+    readiness: Optional[str] = None          # HAZIRLANIYOR|ATEŞLENDİ|TEYİT BEKLİYOR|GEÇ KALMIŞ OLABİLİR|İZLEMEDE
+    readiness_rationale: Optional[str] = None  # 1-sentence Turkish, legal-safe
+    segment_fit: Optional[str] = None        # GÜÇLÜ|ORTA|ZAYIF — explanatory
+    segment_fit_explainer: Optional[str] = None  # 1-sentence Turkish
 
     def to_dict(self) -> dict[str, Any]:
         d = asdict(self)
@@ -1031,6 +1310,21 @@ def score_symbol(metrics: dict,
     fmc = float_market_cap(market_cap, free_float)
     universe_tier = classify_universe_tier(market_cap, free_float)
 
+    # Phase A.10 Step 2-C: compute sector_tr + segment_fit early so all
+    # exit paths (including early returns for ineligible) get consistent
+    # display metadata. readiness for early-return paths defaults to
+    # İZLEMEDE since these symbols don't have enough data to read.
+    _early_sector = metrics.get("sector") or None
+    _early_industry = metrics.get("industry") or None
+    _early_sector_tr = map_sector_tr(_early_sector, _early_industry, symbol=symbol)
+    _early_segment_fit, _early_segment_explainer = _compute_segment_fit(_early_sector_tr)
+    _early_readiness = "İZLEMEDE"
+    _early_readiness_rationale = (
+        "Sembol BullWatch evreninde değil — readiness değerlendirilmiyor."
+        if universe_tier in ("institutional", "no_data")
+        else "Yeterli sinyal yok — insan gözüyle kontrol edilmeli."
+    )
+
     # ---- Universe filters ----
     # Phase A.6: tiered visibility. Core (<3B) and Extended (3-15B) both
     # proceed to scoring; Institutional (>15B) and no_data are rejected
@@ -1050,7 +1344,14 @@ def score_symbol(metrics: dict,
                      "free_float": free_float},
             data_quality="low",
             universe_tier=universe_tier,
+            sector=_early_sector,
+            industry=_early_industry,
+            sector_tr=_early_sector_tr,
             **_diagnostic_fields(metrics),
+            readiness=_early_readiness,
+            readiness_rationale=_early_readiness_rationale,
+            segment_fit=_early_segment_fit,
+            segment_fit_explainer=_early_segment_explainer,
         )
 
     if not passes_liquidity(df):
@@ -1066,7 +1367,14 @@ def score_symbol(metrics: dict,
             metrics={"float_market_cap": fmc, "avg_traded_value_20d": atv},
             data_quality="low",
             universe_tier=universe_tier,
+            sector=_early_sector,
+            industry=_early_industry,
+            sector_tr=_early_sector_tr,
             **_diagnostic_fields(metrics),
+            readiness=_early_readiness,
+            readiness_rationale=_early_readiness_rationale,
+            segment_fit=_early_segment_fit,
+            segment_fit_explainer=_early_segment_explainer,
         )
 
     # ---- Feature extraction ----
@@ -1117,7 +1425,14 @@ def score_symbol(metrics: dict,
             metrics={"float_market_cap": fmc},
             data_quality="low",
             universe_tier=universe_tier,
+            sector=_early_sector,
+            industry=_early_industry,
+            sector_tr=_early_sector_tr,
             **_diagnostic_fields(metrics),
+            readiness=_early_readiness,
+            readiness_rationale=_early_readiness_rationale,
+            segment_fit=_early_segment_fit,
+            segment_fit_explainer=_early_segment_explainer,
         )
 
     weights = {k: WEIGHTS_WITH_OWNERSHIP[k] for k in available}
@@ -1161,9 +1476,11 @@ def score_symbol(metrics: dict,
     else:
         dq = "medium"
 
-    sector = metrics.get("sector") or None
-    industry = metrics.get("industry") or None
-    sector_tr = map_sector_tr(sector, industry, symbol=symbol)
+    # Phase A.10 Step 2-C: reuse the early-computed sector_tr (same value)
+    # to keep early-return and main-path sector classification consistent.
+    sector = _early_sector
+    industry = _early_industry
+    sector_tr = _early_sector_tr
 
     metrics_dict = {
         "float_market_cap": fmc,
@@ -1334,6 +1651,25 @@ def score_symbol(metrics: dict,
         playbook_dict=playbook_dict,
     )
 
+    # Phase A.10 Step 2-C: derive workflow readiness + segment fit.
+    # Both are display metadata — do not feed back into score/eligibility.
+    readiness = _compute_readiness(
+        metrics=metrics_dict,
+        conflict_dict=conflict_dict,
+        maturity_dict=maturity_dict,
+        playbook_dict=playbook_dict,
+        pinning_dict=pinning_dict,
+    )
+    readiness_rationale = _build_readiness_rationale(
+        readiness=readiness,
+        metrics=metrics_dict,
+        conflict_dict=conflict_dict,
+        maturity_dict=maturity_dict,
+        playbook_dict=playbook_dict,
+        pinning_dict=pinning_dict,
+    )
+    segment_fit, segment_fit_explainer = _compute_segment_fit(sector_tr)
+
     return BullWatchResult(
         symbol=symbol,
         score=score_final,
@@ -1359,6 +1695,11 @@ def score_symbol(metrics: dict,
         **_diagnostic_fields(metrics),
         # Phase A.10 Step 2-A.2: UI cycle state (display-only mapping)
         cycle_state=cycle_state,
+        # Phase A.10 Step 2-C: workflow readiness + segment fit
+        readiness=readiness,
+        readiness_rationale=readiness_rationale,
+        segment_fit=segment_fit,
+        segment_fit_explainer=segment_fit_explainer,
     )
 
 
