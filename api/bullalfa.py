@@ -292,6 +292,39 @@ def _cache_is_fresh() -> bool:
     return _CACHE.payload is not None and time.time() < _CACHE.expires_at
 
 
+# Module-level handle to the in-flight background scan task. The
+# endpoint kicks one of these off when the cache is empty or stale,
+# but never awaits its completion blocking — the user gets an
+# immediate response (empty + warming_up if cache is None, stale
+# otherwise).
+_BG_SCAN_TASK: Optional[asyncio.Task] = None
+
+
+async def _ensure_background_scan() -> bool:
+    """Trigger a background scan iff one isn't already running.
+
+    Returns True if a new task was scheduled, False if one was already
+    in flight.
+    """
+    global _BG_SCAN_TASK
+    if _BG_SCAN_TASK is not None and not _BG_SCAN_TASK.done():
+        return False  # already running
+
+    async def _wrapped() -> None:
+        try:
+            async with _get_lock():
+                # Re-check freshness inside the lock — another task may
+                # have completed between our trigger and the lock acquire.
+                if _cache_is_fresh():
+                    return
+                await _run_scan()
+        except Exception as exc:
+            log.exception("background scan failed: %s", exc)
+
+    _BG_SCAN_TASK = asyncio.create_task(_wrapped())
+    return True
+
+
 # ================================================================
 # Endpoints
 # ================================================================
@@ -317,9 +350,25 @@ async def get_scan(
     Filters (mode, sector) are applied AFTER the underlying scan so
     pagination is consistent with the scan view.
     """
-    async with _get_lock():
-        if not _cache_is_fresh():
-            await _run_scan()
+    cache_warming = False
+    if _CACHE.payload is None:
+        # Cold start — kick off the scan, wait briefly for cache to
+        # fill. Tests with fast in-memory providers complete the scan
+        # in <100ms; production with 437 BIST tickers takes minutes,
+        # in which case we fall through to warming_up.
+        await _ensure_background_scan()
+        if _BG_SCAN_TASK is not None and not _BG_SCAN_TASK.done():
+            try:
+                # asyncio.shield prevents wait_for from cancelling the
+                # bg task on timeout — it continues running in the bg.
+                await asyncio.wait_for(asyncio.shield(_BG_SCAN_TASK), timeout=8.0)
+            except (asyncio.TimeoutError, Exception):
+                pass
+        if _CACHE.payload is None:
+            cache_warming = True
+    elif not _cache_is_fresh():
+        # Stale — kick off a refresh, but serve the stale payload now.
+        await _ensure_background_scan()
 
     payload = _CACHE.payload or _empty_payload()
     signals = payload.get("signals", [])
@@ -347,6 +396,13 @@ async def get_scan(
         "frozen":               _CACHE.is_frozen,
         "consecutive_failures": _CACHE.consecutive_failures,
     }
+    if cache_warming:
+        response["meta"]["warming_up"] = True
+        warnings = list(response["meta"].get("warnings", []))
+        msg = "Hisseler hazırlanıyor — ilk scan ~1-3 dakika sürer"
+        if msg not in warnings:
+            warnings.append(msg)
+        response["meta"]["warnings"] = warnings
     return response
 
 
