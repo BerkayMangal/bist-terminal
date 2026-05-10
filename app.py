@@ -198,10 +198,25 @@ async def lifespan(application: FastAPI):
         log.info("BullWatch warmup task started")
     except Exception as e:
         log.warning(f"BullWatch warmup not started: {e}")
+    bullalfa_task = None
+    try:
+        from api.bullalfa import register_data_provider, warmup_cache_loop as _ba_warmup
+        from api.bullalfa_provider import production_scan_provider, production_ticker_provider
+        register_data_provider(
+            scan_provider=production_scan_provider,
+            ticker_provider=production_ticker_provider,
+            name="production",
+        )
+        bullalfa_task = asyncio.create_task(_ba_warmup())
+        log.info("BullAlfa data provider registered, warmup task started")
+    except Exception as e:
+        log.warning(f"BullAlfa provider not started: {e}")
     yield
     task.cancel()
     if bullwatch_task is not None:
         bullwatch_task.cancel()
+    if bullalfa_task is not None:
+        bullalfa_task.cancel()
     redis_client.shutdown()
     log.info(f"{APP_NAME} shutting down")
 
