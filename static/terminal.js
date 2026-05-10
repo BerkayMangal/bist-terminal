@@ -3,7 +3,7 @@
 // ===== STATE =====
 const S={page:'home',scan:null,cross:null,macro:null,dash:null,takas:null,social:null,hero:null,quote:null,book:null,wl:JSON.parse(localStorage.getItem('bb_wl')||'[]'),seen:JSON.parse(localStorage.getItem('bb_seen')||'[]'),_alerts:[]};
 const QT=['ASELS','THYAO','BIMAS','KCHOL','TUPRS','AKBNK','GARAN','FROTO','TOASO','PGSUS'];
-const PAGES=[{id:'nasil',label:'Nasıl?',icon:'❓'},{id:'home',label:'Ana Sayfa',icon:'🏠'},{id:'radar',label:'Radar',icon:'📡'},{id:'bullwatch',label:'BullWatch',icon:'🐂'},{id:'cross',label:'Sinyaller',icon:'⚡'},{id:'makro',label:'Makro',icon:'🌍'},{id:'portfoy',label:'Portföy',icon:'💼'}];
+const PAGES=[{id:'nasil',label:'Nasıl?',icon:'❓'},{id:'home',label:'Ana Sayfa',icon:'🏠'},{id:'radar',label:'Radar',icon:'📡'},{id:'bullwatch',label:'BullWatch',icon:'🐂'},{id:'bullalfa',label:'BullAlfa',icon:'🎯'},{id:'cross',label:'Sinyaller',icon:'⚡'},{id:'makro',label:'Makro',icon:'🌍'},{id:'portfoy',label:'Portföy',icon:'💼'}];
 const $=s=>document.getElementById(s);
 
 // ===== XSS SANITIZER =====
@@ -120,7 +120,7 @@ setInterval(()=>{$('clk').textContent=new Date().toLocaleTimeString('tr-TR',{hou
 
 // ===== NAVIGATION =====
 const nav=$('nav');const mobNav=$('mobNav');PAGES.forEach(p=>{const b=document.createElement('button');b.className='nav-b'+(p.id==='home'?' on':'');b.textContent=p.label;b.dataset.p=p.id;b.onclick=()=>goPage(p.id);nav.appendChild(b);if(mobNav){const mb=document.createElement('button');mb.className='mob-bnav-item'+(p.id==='home'?' on':'');mb.dataset.p=p.id;mb.onclick=()=>goPage(p.id);mb.innerHTML=`<span class="ico" aria-hidden="true">${p.icon||'•'}</span><span>${esc(p.label)}</span>`;mobNav.appendChild(mb);}});
-function goPage(id){S.page=id;nav.querySelectorAll('.nav-b').forEach(b=>b.classList.toggle('on',b.dataset.p===id));if(mobNav)mobNav.querySelectorAll('.mob-bnav-item').forEach(b=>b.classList.toggle('on',b.dataset.p===id));document.querySelectorAll('.page').forEach(p=>p.classList.toggle('on',p.dataset.page===id));if(id==='home')renderHome();if(id==='radar')renderRadarPage();if(id==='cross')renderCrossPage();if(id==='bullwatch')renderBullwatchPage();if(id==='makro')renderMakroPage();if(id==='nasil')renderNasilPage();if(id==='takas')renderTakasPage();if(id==='sosyal')renderSosyalPage();if(id==='portfoy')renderPortfoyPage();}
+function goPage(id){S.page=id;nav.querySelectorAll('.nav-b').forEach(b=>b.classList.toggle('on',b.dataset.p===id));if(mobNav)mobNav.querySelectorAll('.mob-bnav-item').forEach(b=>b.classList.toggle('on',b.dataset.p===id));document.querySelectorAll('.page').forEach(p=>p.classList.toggle('on',p.dataset.page===id));if(id==='home')renderHome();if(id==='radar')renderRadarPage();if(id==='cross')renderCrossPage();if(id==='bullwatch')renderBullwatchPage();if(id==='bullalfa')renderBullalfaPage();if(id==='makro')renderMakroPage();if(id==='nasil')renderNasilPage();if(id==='takas')renderTakasPage();if(id==='sosyal')renderSosyalPage();if(id==='portfoy')renderPortfoyPage();}
 
 // ===== QUICK TICKERS =====
 // ===== QUICK TICKERS =====
@@ -2911,3 +2911,14 @@ setTimeout(() => {
     startOnboarding();
   }
 }, 1500);
+
+// ===== BULLALFA TAB =====
+function renderBullalfaPage(){
+  const el=document.getElementById('pg-bullalfa');
+  if(!el)return;
+  if(window.BullAlfa && typeof window.BullAlfa.renderTab==='function'){
+    window.BullAlfa.renderTab(el);
+  } else {
+    el.innerHTML='<div style="padding:1rem;color:var(--t3)">BullAlfa modülü yüklenemedi (bullalfa.js eksik olabilir).</div>';
+  }
+}
