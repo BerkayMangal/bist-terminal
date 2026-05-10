@@ -347,7 +347,25 @@
     const ribbon = renderMacroRibbon(macro);
     const banner = renderConcentrationBanner(meta);
     const filters = renderFilters();
-    const cards = (scan.signals || []).map(renderCard).join('');
+
+    // Empty-state handling — distinguish "warming up" (first scan in
+    // progress) from "no signals match filters". When warming, we
+    // also re-fetch every 30s until the cache fills.
+    const isEmpty = !scan.signals || scan.signals.length === 0;
+    const isWarming = meta.warming_up === true;
+    let cards;
+    if (isEmpty && isWarming) {
+      cards = `<div class="ba-warming" style="padding:1.5rem;text-align:center;color:var(--ylw);background:rgba(255,202,40,.06);border-radius:6px;margin:1rem 0;">⏳ Hisseler hazırlanıyor — ilk tarama ~1-3 dakika sürer.<br><span style="color:var(--t3);font-size:0.9em;">30 saniyede bir otomatik yenileniyor…</span></div>`;
+      // Schedule a refresh — only if the user is still on this tab.
+      setTimeout(() => {
+        if (BA.scan && BA.scan.meta && BA.scan.meta.warming_up) renderTab(rootEl);
+      }, 30000);
+    } else if (isEmpty) {
+      cards = `<div style="padding:1.5rem;text-align:center;color:var(--t3);">Filtre kriterlerine uygun hisse bulunamadı.</div>`;
+    } else {
+      cards = scan.signals.map(renderCard).join('');
+    }
+
     const pag = renderPagination(meta);
     rootEl.innerHTML = `
       ${ribbon}
