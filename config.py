@@ -227,8 +227,22 @@ UNIVERSE_EXTENDED: list[str] = [
 ]
 
 UNIVERSE: list[str] = UNIVERSE_BIST30 + UNIVERSE_EXTRA
-# UNIVERSE_EXTENDED kaldırıldı — 241→108 hisse
-# Küçük hisseler arama yapınca on-demand çekilir (analyze_symbol)
+# Legacy "active" alias = BIST30 + EXTRA = 108. Used by /api/scan, heatmap,
+# watchlist, ticker_resolver, technical computation, etc.
+# UNIVERSE_EXTENDED IS still actively used — by BullWatch (api/bullwatch.py
+# scans EXTRA + EXTENDED). The earlier "kaldırıldı" note was misleading.
+
+# ================================================================
+# FULL_BIST — canonical deduplicated universe across all modules.
+# 437 unique tickers = dedup(BIST30 ∪ EXTRA ∪ EXTENDED). Used by the
+# shared snapshot pipeline as the single source of truth so per-module
+# scanners can compute their own filters without maintaining separate
+# universe lists. Per-module scan inputs may still narrow this (e.g.
+# BullWatch intentionally excludes BIST30) — see api/bullwatch.py.
+# ================================================================
+FULL_BIST: list[str] = list(dict.fromkeys(
+    UNIVERSE_BIST30 + UNIVERSE_EXTRA + UNIVERSE_EXTENDED
+))
 
 # ================================================================
 # FA SCORE AĞIRLIKLARI

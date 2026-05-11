@@ -76,6 +76,13 @@ HEATMAP_REFRESH_INTERVAL: int = 1800  # OPT: 600→1800 (10dk→30dk, API yükü
 PAPER_TRADE_STARTUP_DELAY:    int = 90   # 1.5 minutes
 PAPER_TRADE_INTERVAL:          int = 300  # 5 minutes
 
+# BullWatch snapshot refresh: 240s startup delay (let heatmap run first to
+# avoid borsapy contention), then every 30 min. Single-tier in D.1;
+# D.3 will introduce hot/warm/cold tiered cadences.
+BULLWATCH_REFRESH_STARTUP_DELAY: int = 240
+BULLWATCH_REFRESH_INTERVAL:      int = 1800
+BULLWATCH_RETRY_AFTER_ERROR:     int = 300
+
 # ================================================================
 # DATA SOURCE IMPORTS — borsapy only
 # ================================================================
@@ -322,3 +329,43 @@ async def paper_trade_loop() -> None:
             log.error(f"PaperTrade loop hatasi: {e}", exc_info=True)
 
         await asyncio.sleep(PAPER_TRADE_INTERVAL)
+
+
+# ================================================================
+# BULLWATCH SNAPSHOT REFRESH LOOP
+# ================================================================
+
+async def bullwatch_refresh_loop() -> None:
+    """Periodically refresh the BullWatch snapshot store.
+
+    Replaces the old api.bullwatch.warmup_cache_loop. The scan itself,
+    snapshot persistence, and in-memory mirror update all live in
+    api.bullwatch._refresh_and_persist (lazy import avoids the
+    api → engine.background_tasks → api circular dep at module load).
+
+    Single tier in D.1: one cadence for the full BullWatch universe.
+    D.3 will split this into hot/warm/cold tiers.
+    """
+    log.info(
+        "BullWatch refresh loop scheduled — first run in %ds, then every %ds",
+        BULLWATCH_REFRESH_STARTUP_DELAY, BULLWATCH_REFRESH_INTERVAL,
+    )
+    await asyncio.sleep(BULLWATCH_REFRESH_STARTUP_DELAY)
+
+    while True:
+        sleep_for = BULLWATCH_REFRESH_INTERVAL
+        try:
+            from api.bullwatch import _refresh_and_persist as _bw_refresh
+            payload = await _bw_refresh()
+            if payload is None:
+                # Either scan-in-flight skip or hard failure — either way,
+                # back off briefly so we don't spin.
+                sleep_for = BULLWATCH_RETRY_AFTER_ERROR
+        except asyncio.CancelledError:
+            log.info("BullWatch refresh loop cancelled")
+            raise
+        except Exception as e:
+            log.warning("BullWatch refresh loop tick failed: %r", e)
+            sleep_for = BULLWATCH_RETRY_AFTER_ERROR
+
+        await asyncio.sleep(sleep_for)

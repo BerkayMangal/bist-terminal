@@ -1814,13 +1814,15 @@ def scan(symbols: list[str],
     total = len(symbols)
     processed = 0
     per_symbol_ms: list[float] = []
-    # Per-symbol timeout: each future must complete within this budget.
-    # yfinance occasionally returns 0-byte responses that hang for ~90s.
-    # If 2-3 stragglers do this, the whole scan stalls forever via the
-    # default `with ThreadPoolExecutor` block (which waits on shutdown).
-    # We use as_completed(timeout=...) measured from start-of-loop, and
-    # whichever futures haven't returned by then are cancelled.
-    SCAN_TIMEOUT_SEC = 240  # 4 minutes total budget for the scan loop
+    # Total-scan budget: caps wall-time so a few stragglers can't hold up
+    # the loop forever. PER_SYMBOL_TIMEOUT_SEC (8 s) is the inner-loop
+    # guardrail; this is the outer ceiling. Raised from 240 → 1200 so
+    # full-universe scans can complete on slow links / cold caches.
+    # The snapshot pipeline means users no longer wait on the scan — old
+    # snapshot serves while this runs — so the budget can be generous.
+    # 1200 s stays below the 1800 s refresh-loop interval, leaving room
+    # for cleanup without overlap.
+    SCAN_TIMEOUT_SEC = 1200
     _reset_scan_stats(total=total, budget_sec=SCAN_TIMEOUT_SEC)
     pool = ThreadPoolExecutor(max_workers=max_workers)
     futures = {pool.submit(_score_one, s): s for s in symbols}

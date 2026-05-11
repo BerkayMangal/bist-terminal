@@ -193,11 +193,15 @@ async def lifespan(application: FastAPI):
     # block app startup if it has an import-time error.
     bullwatch_task = None
     try:
-        from api.bullwatch import warmup_cache_loop as _bw_warmup
-        bullwatch_task = asyncio.create_task(_bw_warmup())
-        log.info("BullWatch warmup task started")
+        # BullWatch snapshot refresh — periodically scans the universe and
+        # persists results into the shared snapshot store (core/snapshot_store).
+        # Endpoint reads from the snapshot, never blocks on a live scan when
+        # a snapshot exists. Replaces the previous in-memory warmup loop.
+        from engine.background_tasks import bullwatch_refresh_loop
+        bullwatch_task = asyncio.create_task(bullwatch_refresh_loop())
+        log.info("BullWatch refresh loop started")
     except Exception as e:
-        log.warning(f"BullWatch warmup not started: {e}")
+        log.warning(f"BullWatch refresh loop not started: {e}")
     bullalfa_task = None
     try:
         from api.bullalfa import register_data_provider, warmup_cache_loop as _ba_warmup

@@ -21,13 +21,18 @@ from fastapi import APIRouter, Query, Body
 from fastapi.responses import JSONResponse
 
 from core.response_envelope import success, error
+from core.snapshot_store import get_default_store, SnapshotLockHeld
 
 log = logging.getLogger("bistbull.bullwatch_api")
 router = APIRouter()
 
+# Snapshot store module key — also used by tests and the background loop.
+SNAPSHOT_MODULE = "bullwatch"
 
-# In-memory cache — deliberately simple. The scan is idempotent so
-# concurrent requests during a refresh are safe (last-write-wins).
+# In-memory cache — write-through mirror of the snapshot store. Kept so
+# /api/bullwatch/watchlist/state (and any future module needing fast in-proc
+# access) doesn't pay a Redis roundtrip on every request. Snapshot store is
+# the source of truth; this is purely an L1 mirror.
 _CACHE: dict[str, Any] = {
     "items": None,
     "as_of": None,
@@ -37,41 +42,37 @@ _CACHE: dict[str, Any] = {
     "total": 0,           # total symbols in the in-flight scan
     "scan_started_at": 0.0,
 }
-_CACHE_TTL_SEC = 300  # 5 minutes
+_CACHE_TTL_SEC = 300  # 5 minutes — used for in-mem mirror freshness
 _SCAN_DONE: Optional[asyncio.Event] = None  # set by the runner, awaited by waiters
 _SCAN_MAX_WAIT_SEC = 300  # hard ceiling — even slow scans should fit (yfinance can be flaky)
+# Snapshot age beyond which a refresh=false request schedules a background
+# refresh anyway (still serves the stale data). 30 min matches the planned
+# refresh loop cadence so we never deliver data older than ~one cycle.
+_SNAPSHOT_SOFT_MAX_AGE_SEC = 1800
 
 
 def _resolve_universe() -> list[str]:
-    """
-    BullWatch universe = UNIVERSE_EXTRA + UNIVERSE_EXTENDED only.
+    """BullWatch universe = FULL_BIST (deduped BIST30 ∪ EXTRA ∪ EXTENDED).
 
-    BIST30 (top 30 large-caps) is intentionally EXCLUDED — those names have
-    market caps in the tens of billions of TL, and even with 5% free float
-    their float-mcap is in the billions, hopelessly above any sensible cap.
-    Scanning them just wastes ~30 metrics-fetch calls per scan.
-
-    Power users can still inspect a BIST30 name via /api/bullwatch/{symbol}.
+    All 437 unique BIST tickers we know about. BIST30 large-caps will
+    almost always come back ineligible (float-mcap above the cap), but
+    they are scanned and surfaced as ineligible rather than silently
+    skipped — the user asked to "scan every stock". Power users can
+    drill into any name via /api/bullwatch/{symbol}.
     """
-    out: list[str] = []
     try:
-        from config import UNIVERSE_EXTRA
-        out.extend(UNIVERSE_EXTRA)
+        from config import FULL_BIST
+        out = list(FULL_BIST)
     except ImportError:
-        pass
-    try:
-        from config import UNIVERSE_EXTENDED
-        out.extend(UNIVERSE_EXTENDED)
-    except ImportError:
-        pass
+        out = []
     if not out:
-        # Fallback: use full UNIVERSE if neither EXTRA nor EXTENDED is exposed
-        try:
-            from config import UNIVERSE
-            out.extend(UNIVERSE)
-        except ImportError:
-            return []
-    # Dedupe while preserving order
+        # Fallbacks if FULL_BIST isn't exported (older config layouts)
+        for const_name in ("UNIVERSE_EXTRA", "UNIVERSE_EXTENDED", "UNIVERSE_BIST30", "UNIVERSE"):
+            try:
+                mod = __import__("config", fromlist=[const_name])
+                out.extend(getattr(mod, const_name, []))
+            except Exception:
+                continue
     return list(dict.fromkeys(out))
 
 
@@ -157,76 +158,183 @@ def _run_scan(min_score: float = 0.0,
 
 
 # ================================================================
-# BACKGROUND WARMUP — keep the cache hot so user clicks are instant.
+# SNAPSHOT STORE INTEGRATION
 #
-# Called from app.py's lifespan, runs in parallel with the main
-# background scanner. Strategy:
-#   1. Wait WARMUP_INITIAL_DELAY seconds after boot (let the main scan
-#      run first — yfinance bandwidth is shared, no point fighting).
-#   2. Run a BullWatch scan, populate _CACHE.
-#   3. Sleep WARMUP_INTERVAL, repeat.
+# The previous warmup_cache_loop lived here and wrote to an in-memory
+# _CACHE only. It has been replaced by:
+#   - engine.background_tasks.bullwatch_refresh_loop (the periodic loop)
+#   - _refresh_and_persist (one scan + snapshot write + _CACHE mirror)
+#   - _schedule_background_refresh (fire-and-forget refresh from request)
+#   - _read_snapshot_payload (snapshot → response payload)
 #
-# Errors are logged but never propagate — a failed warmup just means
-# the next user click triggers a fresh scan (current behaviour).
+# Snapshot store is the source of truth; _CACHE is a write-through mirror
+# kept for in-proc lookups (watchlist enrichment, single-symbol endpoint).
 # ================================================================
-WARMUP_INITIAL_DELAY = 90      # seconds — let main background scan finish first
-WARMUP_INTERVAL = 600          # seconds — refresh every 10 minutes
-WARMUP_RETRY_AFTER_ERROR = 300 # seconds — back off on yfinance flakiness
 
 
-async def warmup_cache_loop() -> None:
+def _persist_snapshot(payload: dict) -> Optional[str]:
+    """Write a _run_scan output to the shared snapshot store.
+
+    Returns the new scan_id on success, None if the store is unavailable
+    or rejected the write. Caller continues normally — snapshot persistence
+    is best-effort, never blocks the response path.
     """
-    Background coroutine: keep _CACHE warm so the BullWatch tab opens
-    instantly. Started by app.py lifespan, cancelled on shutdown.
+    items = payload.get("items") or []
+    if not items:
+        return None
+    try:
+        scored = [
+            (it.get("symbol", ""), float(it.get("score") or 0.0), it)
+            for it in items
+            if it.get("symbol")
+        ]
+        meta = {
+            "scanned": payload.get("scanned"),
+            "eligible_count": payload.get("eligible_count"),
+            "ineligible_count": payload.get("ineligible_count"),
+            "cap_tl": payload.get("cap_tl"),
+            "duration_ms": payload.get("duration_ms"),
+            "as_of": payload.get("as_of"),
+            "near_misses": payload.get("near_misses", []),
+        }
+        store = get_default_store()
+        return store.write_snapshot(SNAPSHOT_MODULE, scored, meta=meta)
+    except Exception as exc:
+        log.warning("BullWatch snapshot persist failed: %r", exc)
+        return None
+
+
+def _read_snapshot_payload(limit: int = 200) -> Optional[dict]:
+    """Reconstruct a _run_scan-shaped payload from the latest snapshot.
+
+    Returns None when no healthy snapshot is available. If the latest is
+    corrupted, attempts a one-time fallback to `previous` automatically.
     """
+    try:
+        store = get_default_store()
+        scan_id = store.read_latest_scan_id(SNAPSHOT_MODULE)
+        if scan_id is None:
+            return None
+        if not store.is_healthy(SNAPSHOT_MODULE, scan_id=scan_id):
+            log.warning("BullWatch snapshot %s corrupted — trying previous", scan_id)
+            if not store.fallback_to_previous(SNAPSHOT_MODULE):
+                return None
+            scan_id = store.read_latest_scan_id(SNAPSHOT_MODULE)
+            if scan_id is None:
+                return None
+        meta = store.read_meta(SNAPSHOT_MODULE, scan_id=scan_id)
+        if meta is None:
+            return None
+        top = store.read_top(SNAPSHOT_MODULE, limit, scan_id=scan_id)
+        if not top:
+            return None
+        items_map = store.read_items(
+            SNAPSHOT_MODULE, [t for t, _ in top], scan_id=scan_id,
+        )
+        items = [items_map[t] for t, _ in top if t in items_map]
+        if not items:
+            return None
+        return {
+            "items": items,
+            "scanned": meta.get("scanned"),
+            "eligible_count": meta.get("eligible_count"),
+            "ineligible_count": meta.get("ineligible_count"),
+            "cap_tl": meta.get("cap_tl"),
+            "duration_ms": meta.get("duration_ms"),
+            "as_of": meta.get("as_of"),
+            "near_misses": meta.get("near_misses", []),
+            "_snapshot_scan_id": meta.get("scan_id"),
+            "_snapshot_asof_unix": meta.get("asof_unix"),
+        }
+    except Exception as exc:
+        log.warning("BullWatch snapshot read failed: %r", exc)
+        return None
+
+
+async def _refresh_and_persist(min_score: float = 0.0) -> Optional[dict]:
+    """Run one full scan and persist it. Idempotent — returns None if a
+    scan is already in flight. Used by the background refresh loop and by
+    the request-triggered `_schedule_background_refresh`."""
     global _SCAN_DONE
+    if _CACHE["running"]:
+        log.debug("BullWatch refresh: scan already in flight, skipping")
+        return None
+    _CACHE["running"] = True
+    _SCAN_DONE = asyncio.Event()
+    try:
+        t0 = time.time()
+        payload = await asyncio.get_event_loop().run_in_executor(
+            None, _run_scan, min_score, None, None, False,
+        )
+        scan_id = _persist_snapshot(payload)
+        _CACHE["items"] = payload
+        _CACHE["as_of"] = payload["as_of"]
+        _CACHE["stale_after"] = time.time() + _CACHE_TTL_SEC
+        log.info(
+            "BullWatch refresh complete in %.1fs — %d eligible / %d scanned, snapshot=%s",
+            time.time() - t0,
+            payload.get("eligible_count", 0),
+            payload.get("scanned", 0),
+            scan_id or "(not persisted)",
+        )
+        return payload
+    except asyncio.CancelledError:
+        log.info("BullWatch refresh: cancelled")
+        raise
+    except Exception as exc:
+        log.exception("BullWatch refresh failed: %r", exc)
+        return None
+    finally:
+        if _SCAN_DONE is not None:
+            _SCAN_DONE.set()
+        _CACHE["running"] = False
 
-    log.info("BullWatch warmup task scheduled (initial delay: %ds, interval: %ds)",
-             WARMUP_INITIAL_DELAY, WARMUP_INTERVAL)
-    await asyncio.sleep(WARMUP_INITIAL_DELAY)
 
-    while True:
-        # Skip if a user-triggered scan is already running — just wait and try later
-        if _CACHE["running"]:
-            log.debug("BullWatch warmup: another scan in flight, waiting one cycle")
-            await asyncio.sleep(WARMUP_INTERVAL)
-            continue
+def _schedule_background_refresh() -> bool:
+    """Fire-and-forget background refresh. Returns True if a new scan
+    was scheduled, False if one was already in flight (idempotent)."""
+    if _CACHE["running"]:
+        return False
+    try:
+        loop = asyncio.get_event_loop()
+    except RuntimeError:
+        return False
+    loop.create_task(_refresh_and_persist())
+    return True
 
-        log.info("BullWatch warmup: starting background scan")
-        _CACHE["running"] = True
-        _SCAN_DONE = asyncio.Event()
-        sleep_for = WARMUP_INTERVAL
+
+async def _cold_start_scan() -> Optional[dict]:
+    """Blocking scan path, used only when no snapshot and no in-mem cache
+    exists. If another scan is already in flight, awaits its completion
+    rather than starting a duplicate."""
+    global _SCAN_DONE
+    if _CACHE["running"]:
+        evt = _SCAN_DONE
+        if evt is None:
+            return None
         try:
-            t0 = time.time()
-            payload = await asyncio.get_event_loop().run_in_executor(
-                None, _run_scan, 0.0, None, None, False,
-            )
-            _CACHE["items"] = payload
-            _CACHE["as_of"] = payload["as_of"]
-            _CACHE["stale_after"] = time.time() + _CACHE_TTL_SEC
-            elapsed = time.time() - t0
-            log.info(
-                "BullWatch warmup: cache refreshed in %.1fs — %d eligible / %d scanned",
-                elapsed,
-                payload.get("eligible_count", 0),
-                payload.get("scanned", 0),
-            )
-        except asyncio.CancelledError:
-            # Graceful shutdown — release waiters and exit
-            if _SCAN_DONE is not None:
-                _SCAN_DONE.set()
-            _CACHE["running"] = False
-            log.info("BullWatch warmup: cancelled (shutdown)")
-            raise
-        except Exception as exc:
-            log.warning("BullWatch warmup failed (will retry): %r", exc)
-            sleep_for = WARMUP_RETRY_AFTER_ERROR
-        finally:
-            if _SCAN_DONE is not None:
-                _SCAN_DONE.set()
-            _CACHE["running"] = False
+            await asyncio.wait_for(evt.wait(), timeout=_SCAN_MAX_WAIT_SEC)
+        except asyncio.TimeoutError:
+            return None
+        return _CACHE.get("items")
+    return await _refresh_and_persist()
 
-        await asyncio.sleep(sleep_for)
+
+def _apply_filters_and_slice(
+    payload: dict,
+    zone: Optional[str],
+    min_score: float,
+    limit: int,
+) -> list[dict]:
+    """Per-request filter on the cached/snapshot items. Filters happen on
+    read, never on write — caching every parameter combo isn't worth it."""
+    items = list(payload.get("items") or [])
+    if zone:
+        zone_norm = zone.strip().upper()
+        items = [it for it in items if it.get("zone") == zone_norm]
+    if min_score > 0:
+        items = [it for it in items if (it.get("score") or 0) >= min_score]
+    return items[:limit]
 
 
 @router.get("/api/bullwatch")
@@ -261,96 +369,113 @@ async def api_bullwatch(
         }
     """
     now = time.time()
-    # Experimental requests (custom cap or diagnostic mode) bypass the
-    # cache entirely — they're for one-off tuning, not user-facing default.
     is_experimental = (cap_tl is not None) or diagnostic
-    use_cache = (
-        not refresh
-        and not is_experimental
-        and _CACHE["items"] is not None
-        and now < _CACHE["stale_after"]
-    )
 
-    global _SCAN_DONE
-
+    # ── Experimental requests bypass snapshot+cache (ad-hoc tuning) ──
     if is_experimental:
-        # Run fresh, directly. No cache update, no _SCAN_DONE coordination —
-        # this is an ad-hoc query.
         try:
             payload = await asyncio.get_event_loop().run_in_executor(
                 None, _run_scan, min_score, None, cap_tl, diagnostic,
             )
-            cache_status = "experimental"
         except Exception as exc:
             log.exception("BullWatch experimental scan failed: %r", exc)
             return error(f"BullWatch scan failed: {exc}", status_code=500)
-    elif use_cache:
-        payload = _CACHE["items"]
-        cache_status = "hit"
-    else:
-        if _CACHE["running"]:
-            # Another scan is in flight. If we have stale cache, serve it
-            # immediately (warm path). Otherwise wait for the running scan
-            # to finish — do NOT 503, the user is already waiting.
-            if _CACHE["items"] is not None:
-                payload = _CACHE["items"]
-                cache_status = "stale_during_refresh"
-            else:
-                evt = _SCAN_DONE
-                if evt is None:
-                    return error("scan state inconsistent — please retry",
-                                 status_code=503)
-                try:
-                    await asyncio.wait_for(evt.wait(),
-                                           timeout=_SCAN_MAX_WAIT_SEC)
-                except asyncio.TimeoutError:
-                    return error(
-                        f"scan still running after {_SCAN_MAX_WAIT_SEC}s — try again",
-                        status_code=504)
-                if _CACHE["items"] is None:
-                    return error("scan finished but cache empty",
-                                 status_code=500)
-                payload = _CACHE["items"]
-                cache_status = "fresh_after_wait"
-        else:
-            _CACHE["running"] = True
-            _SCAN_DONE = asyncio.Event()
-            try:
-                # Run the blocking scan off the event loop.
-                payload = await asyncio.get_event_loop().run_in_executor(
-                    None, _run_scan, min_score, None,
-                )
-                _CACHE["items"] = payload
-                _CACHE["as_of"] = payload["as_of"]
-                _CACHE["stale_after"] = now + _CACHE_TTL_SEC
-                cache_status = "miss"
-            except Exception as exc:
-                log.exception("BullWatch scan failed: %r", exc)
-                # Fall back to stale cache if we have one
-                if _CACHE["items"] is not None:
-                    payload = _CACHE["items"]
-                    cache_status = "stale_after_error"
-                else:
-                    _SCAN_DONE.set()  # release any waiters before returning
-                    _CACHE["running"] = False
-                    return error(f"BullWatch scan failed: {exc}", status_code=500)
-            finally:
-                # Wake up any other requests parked on this scan
-                if _SCAN_DONE is not None:
-                    _SCAN_DONE.set()
-                _CACHE["running"] = False
+        return _build_response(
+            payload, "experimental", zone, min_score, limit,
+            from_snapshot=False,
+        )
 
-    items = list(payload["items"])
+    # ── Build "current view" — snapshot first, in-memory _CACHE as fallback ──
+    view = _read_snapshot_payload(limit=200)
+    view_source: Optional[str] = "snapshot" if view is not None else None
+    if view is None and _CACHE.get("items") is not None:
+        view = _CACHE["items"]
+        view_source = "memory"
 
-    # Apply per-request filters (cache stays unfiltered — cheap server-side
-    # filter is friendlier than caching every parameter combo).
-    if zone:
-        zone_norm = zone.strip().upper()
-        items = [it for it in items if it.get("zone") == zone_norm]
-    if min_score > 0:
-        items = [it for it in items if (it.get("score") or 0) >= min_score]
-    items = items[:limit]
+    view_age_sec: Optional[float] = None
+    if view is not None:
+        asof_unix = view.get("_snapshot_asof_unix")
+        if asof_unix is None and _CACHE.get("stale_after"):
+            asof_unix = _CACHE["stale_after"] - _CACHE_TTL_SEC
+        if asof_unix is not None:
+            view_age_sec = max(0.0, now - float(asof_unix))
 
+    snapshot_scan_id = view.get("_snapshot_scan_id") if view else None
+    from_snapshot = view_source == "snapshot"
+
+    # ── refresh=true: never block when a view exists ────────────────
+    if refresh:
+        if view is not None:
+            scheduled = _schedule_background_refresh()
+            return _build_response(
+                view, "snapshot_with_refresh" if from_snapshot else "memory_with_refresh",
+                zone, min_score, limit,
+                from_snapshot=from_snapshot,
+                scan_id=snapshot_scan_id,
+                refresh_scheduled=scheduled,
+            )
+        # No view at all → cold-start (blocks; spec-allowed only here)
+        payload = await _cold_start_scan()
+        if payload is None:
+            return error("BullWatch cold-start scan failed", status_code=500)
+        return _build_response(
+            payload, "cold_start", zone, min_score, limit,
+            from_snapshot=False,
+        )
+
+    # ── refresh=false: serve view if fresh; schedule refresh if stale ──
+    if view is not None:
+        is_fresh = view_age_sec is None or view_age_sec < _SNAPSHOT_SOFT_MAX_AGE_SEC
+        if is_fresh:
+            return _build_response(
+                view, "snapshot_hit" if from_snapshot else "memory_hit",
+                zone, min_score, limit,
+                from_snapshot=from_snapshot,
+                scan_id=snapshot_scan_id,
+            )
+        # Stale → schedule refresh and serve stale view in the meantime
+        scheduled = _schedule_background_refresh()
+        return _build_response(
+            view, "stale_with_refresh", zone, min_score, limit,
+            from_snapshot=from_snapshot,
+            scan_id=snapshot_scan_id,
+            refresh_scheduled=scheduled,
+            stale=True,
+        )
+
+    # ── No view exists at all → cold-start (blocking) ───────────────
+    payload = await _cold_start_scan()
+    if payload is None:
+        return error("BullWatch cold-start scan failed", status_code=500)
+    return _build_response(
+        payload, "cold_start", zone, min_score, limit,
+        from_snapshot=False,
+    )
+
+
+def _build_response(
+    payload: dict,
+    cache_status: str,
+    zone: Optional[str],
+    min_score: float,
+    limit: int,
+    from_snapshot: bool = False,
+    scan_id: Optional[str] = None,
+    refresh_scheduled: bool = False,
+    stale: bool = False,
+) -> JSONResponse:
+    """Apply filters, build response envelope, attach snapshot meta."""
+    items = _apply_filters_and_slice(payload, zone, min_score, limit)
+    extra_meta: dict[str, Any] = {
+        "engine": "bullwatch_v1",
+        "from_snapshot": from_snapshot,
+    }
+    if scan_id:
+        extra_meta["scan_id"] = scan_id
+    if refresh_scheduled:
+        extra_meta["refresh_scheduled"] = True
+    if stale:
+        extra_meta["stale"] = True
     return success(
         {
             "items": items,
@@ -363,7 +488,7 @@ async def api_bullwatch(
         },
         as_of=payload.get("as_of"),
         cache_status=cache_status,
-        extra_meta={"engine": "bullwatch_v1"},
+        extra_meta=extra_meta,
     )
 
 
