@@ -13,6 +13,8 @@
 #   Benchmarks     <- XU100, XBANK, XHOLD, XGMYO (best-effort)
 #
 # Defensive: every external call wrapped in try/except.
+# All DataFrame fallbacks use explicit `is None` checks (NOT `or`,
+# which raises ValueError on DataFrames).
 # ================================================================
 
 from __future__ import annotations
@@ -120,9 +122,11 @@ def _fetch_benchmarks() -> dict[str, pd.DataFrame]:
 
 
 def _pick_bench_df(metrics: dict[str, Any], benches: dict[str, pd.DataFrame]) -> Optional[pd.DataFrame]:
+    """Pick the right benchmark DataFrame for this ticker's sector."""
     sector = str(metrics.get("sector") or "").lower()
     industry = str(metrics.get("industry") or "").lower()
     haystack = f"{sector} {industry}"
+
     # NOTE: explicit None check, not `or` — pandas DataFrames raise
     # ValueError when treated as truthy.
     fallback = benches.get("XU100")
@@ -197,12 +201,22 @@ def _ticker_inputs_for(
     metrics_map: dict[str, dict[str, Any]],
     benches: dict[str, pd.DataFrame],
 ) -> Optional[TickerInputs]:
-    hist = (hist_map.get(symbol)
-            or hist_map.get(f"{symbol}.IS")
-            or hist_map.get(symbol.replace(".IS", "")))
+    """Build a TickerInputs row from the pre-fetched data maps."""
+    # NOTE: chained `or` doesn't work on DataFrames (truthy is
+    # ambiguous and raises ValueError); use explicit None checks.
+    hist = hist_map.get(symbol)
+    if hist is None:
+        hist = hist_map.get(f"{symbol}.IS")
+    if hist is None:
+        hist = hist_map.get(symbol.replace(".IS", ""))
     if hist is None or len(hist) == 0:
-        return None
-    metrics = metrics_map.get(symbol) or metrics_map.get(f"{symbol}.IS") or {}
+        return None  # orchestrator can't do anything without OHLCV
+
+    metrics = metrics_map.get(symbol)
+    if metrics is None:
+        metrics = metrics_map.get(f"{symbol}.IS")
+    if metrics is None:
+        metrics = {}
     sector_raw = metrics.get("sector") or None
     industry_raw = metrics.get("industry") or None
     bench_df = _pick_bench_df(metrics, benches)
