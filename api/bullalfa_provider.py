@@ -37,14 +37,22 @@ _BENCH_TICKERS: dict[str, str] = {
     "XGMYO":  "XGMYO.IS",
 }
 
-_METRICS_MAX_WORKERS = 16
+_METRICS_MAX_WORKERS = 8
 _UNIVERSE_CAP: Optional[int] = None
 
 
 def _load_universe() -> list[str]:
+    """BullAlfa universe — sadece UNIVERSE (BIST 100, ~108 ticker).
+
+    Spec §13 'every BIST stock' diyor ama borsapy yavaşlığı ile 437
+    ticker ilk scan'i 10+ dakika sürüyor (bullwatch logs: 608s).
+    Kullanıcı bunu bekleyemiyor. v1 başlangıç: sadece BIST 100.
+    v2'de batched warmup'la genişletilecek.
+    """
     universe: list[str] = []
     seen: set[str] = set()
-    for const_name in ("UNIVERSE", "UNIVERSE_EXTRA", "UNIVERSE_EXTENDED"):
+    # Sadece UNIVERSE — diğer iki const v2'de eklenecek.
+    for const_name in ("UNIVERSE",):
         try:
             mod = __import__("config", fromlist=[const_name])
             tickers = getattr(mod, const_name, [])
@@ -56,7 +64,7 @@ def _load_universe() -> list[str]:
             log.warning("failed to load %s from config: %r", const_name, exc)
     if _UNIVERSE_CAP is not None:
         universe = universe[:_UNIVERSE_CAP]
-    log.info("bullalfa: universe size = %d", len(universe))
+    log.info("bullalfa: universe size = %d (BIST 100 only)", len(universe))
     return universe
 
 
