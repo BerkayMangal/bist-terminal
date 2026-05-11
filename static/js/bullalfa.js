@@ -1,36 +1,26 @@
 // ================================================================
 // BISTBULL TERMINAL — BULLALFA v1.4
-// static/js/bullalfa.js
+// static/js/bullalfa.js  (UI rewrite — BullWatch tutarlı)
 //
-// Mobile-first (~380px) tab + card components per spec §23.
-// Mode-specific card layouts: HIZLI / SWING / POZİSYON / TOPLANIYOR
-// / SAKİN / UZAK DUR.
-//
-// API contracts (spec §19):
-//   GET /api/bullalfa/scan?page=N&per_page=M&mode=X&sector=Y
-//     → { signals: [...], meta: {...} }
-//   GET /api/bullalfa/{ticker}
-//     → { signal: {...}, schema_version: "1.4" }
-//
-// Style mirrors `static/terminal.js` — single-letter helpers for
-// brevity, esc() for XSS, CSS vars for theming.
+// Görsel dil: BullWatch (terminal.js _bwCard / renderBullwatchPage)
+// ile birebir aynı. Mevcut .pkc / .pill / .btn / .clk-t class'larını
+// kullanır; ayrı CSS gerekmez. Tüm renkler --ylw/--grn/--blu/...
+// CSS var'larından — tema değişirse otomatik uyar.
 // ================================================================
 
 (function () {
   'use strict';
 
-  // ===== STATE =====
+  // ── State ─────────────────────────────────────────────────────
   const BA = {
     scan: null,
-    ticker: null,
     page: 1,
     perPage: 50,
     filters: { mode: null, sector: null },
-    macroRibbon: null,
+    refreshing: false,
   };
 
-  // ===== HELPERS (mirror terminal.js conventions) =====
-  const $ = id => document.getElementById(id);
+  // ── Helpers ───────────────────────────────────────────────────
   const esc = s => {
     if (s == null) return '';
     const d = document.createElement('div');
@@ -38,64 +28,33 @@
     return d.innerHTML;
   };
   const fmt = (x, d = 2) => x == null ? '—' : Number(x).toFixed(d);
-  const fmtPct = (x, d = 1) => x == null ? '—' : (Number(x) * 100).toFixed(d) + '%';
-  const fmtTL = x => {
-    if (x == null) return '—';
-    if (x >= 1e9) return (x / 1e9).toFixed(2) + 'B TL';
-    if (x >= 1e6) return (x / 1e6).toFixed(2) + 'M TL';
-    if (x >= 1e3) return (x / 1e3).toFixed(0) + 'K TL';
-    return x.toFixed(0) + ' TL';
-  };
 
-  // ===== MODE THEMING =====
-  const MODE_COLOR = {
-    'HIZLI':      'var(--grn)',
-    'SWING':      'var(--grn)',
-    'POZİSYON':   'var(--grn)',
-    'TOPLANIYOR': 'var(--ylw)',
-    'SAKİN':      'var(--t3)',
-    'UZAK DUR':   'var(--red)',
+  // ── Mode theming — color + bg + icon + label ──────────────────
+  const MODE = {
+    'HIZLI':      { color: 'var(--blu)',  bg: 'var(--blud)',           icon: '🚀', label: 'HIZLI' },
+    'SWING':      { color: 'var(--grn)',  bg: 'var(--grnd)',           icon: '📈', label: 'SWING' },
+    'POZİSYON':   { color: 'var(--gold)', bg: 'rgba(255,213,79,.12)',  icon: '🎯', label: 'POZİSYON' },
+    'TOPLANIYOR': { color: 'var(--prp)',  bg: 'var(--prpd)',           icon: '🔍', label: 'TOPLANIYOR' },
+    'SAKİN':      { color: 'var(--t3)',   bg: 'var(--bg3)',            icon: '😴', label: 'SAKİN' },
+    'UZAK DUR':   { color: 'var(--red)',  bg: 'var(--redd)',           icon: '⛔', label: 'UZAK DUR' },
   };
-  const MODE_BG = {
-    'HIZLI':      'rgba(76,175,80,.10)',
-    'SWING':      'rgba(76,175,80,.10)',
-    'POZİSYON':   'rgba(76,175,80,.10)',
-    'TOPLANIYOR': 'rgba(255,202,40,.10)',
-    'SAKİN':      'rgba(127,127,127,.06)',
-    'UZAK DUR':   'rgba(239,83,80,.12)',
-  };
+  const modeMeta = m => MODE[m] || MODE['SAKİN'];
+
   const GRADE_COLOR = g =>
     g === 'A+' || g === 'A' ? 'var(--grn)' :
     g === 'B' ? 'var(--ylw)' :
-    g === 'C' ? 'var(--ylw)' : 'var(--red)';
+    g === 'C' ? 'var(--orn)' :
+    g === 'D' ? 'var(--red)' : 'var(--t3)';
 
-  // Engine pass/warn/fail icon — three states from §23.
-  const ICN = {
-    ok: '✅', warn: '⚠️', fail: '❌',
+  const SECTOR_ICON = {
+    banka: '🏦', holding: '🏢', gyo: '🏗️', sanayi: '🏭',
+    savunma: '🛡️', enerji: '⚡', perakende: '🛒', ulasim: '✈️',
+    teknoloji: '💻', metal: '⛏️', gida: '🍞',
   };
-  const e1Icon = e1 => e1 ? ICN.ok : ICN.fail;
-  const e3Icon = e3 => {
-    if (!e3) return ICN.fail;
-    if (e3.passed) return ICN.ok;
-    if (e3.rvol >= 1.0) return ICN.warn;
-    return ICN.fail;
-  };
-  const e4Icon = e4 => {
-    if (!e4 || !e4.type) return ICN.fail;
-    if (e4.bars_ago === 0 || e4.bars_ago === 1) return ICN.ok;
-    return ICN.warn;
-  };
-  const e7Icon = e7 => {
-    if (e7 == null || e7 === 0) return ICN.fail;
-    if (e7 > 0.6) return ICN.fail;
-    if (e7 > 0.3) return ICN.warn;
-    return ICN.fail; // low exhaustion is a "good" state, but the §23
-                     // sample shows ❌ for "Yorgun" — meaning "the
-                     // 'tired' check did NOT fire". Match the sample.
-  };
+  const sectorIcon = s => SECTOR_ICON[String(s||'').toLowerCase()] || '📊';
 
-  // ===== API =====
-  async function fetchScan(page = 1, perPage = 50, mode = null, sector = null) {
+  // ── API ───────────────────────────────────────────────────────
+  async function fetchScan(page, perPage, mode, sector) {
     const params = new URLSearchParams({ page, per_page: perPage });
     if (mode) params.set('mode', mode);
     if (sector) params.set('sector', sector);
@@ -104,322 +63,288 @@
     return r.json();
   }
 
-  async function fetchTicker(ticker) {
-    const r = await fetch('/api/bullalfa/' + encodeURIComponent(ticker));
-    if (!r.ok) throw new Error('ticker fetch failed: ' + r.status);
-    return r.json();
-  }
-
-  // ===== CARD RENDERERS (per §23) =====
-
-  // ---- HEADER LINE — common across modes
-  function renderHeader(s) {
-    const q = s.quality || {};
-    const tags = q.tags || {};
-    const grade = q.grade || '?';
-    const score = q.score == null ? '?' : q.score;
-    const kalite = tags.kalite || '';
-    const valueTag = tags.value ? `<span class="ba-tag">${esc(tags.value)}</span>` : '';
-    const buffettTag = tags.buffett === 'Geçti' ? '<span class="ba-tag">Buffett: Geçti</span>' : '';
-    const grahamTag = tags.graham === 'Geçti' ? '<span class="ba-tag">Graham: Geçti</span>' : '';
-    return `
-      <div class="ba-card-header">
-        <span class="ba-ticker">${esc(s.ticker)}</span>
-        <span class="ba-grade" style="color:${GRADE_COLOR(grade)}">${esc(grade)} (${esc(score)})</span>
-        <span class="ba-kalite">Kalite ${esc(kalite)}</span>
-      </div>
-      <div class="ba-tags">${valueTag}${buffettTag}${grahamTag}</div>
-    `;
-  }
-
-  // ---- MODE LINE
-  function renderModeLine(s) {
-    const mode = s.mode;
-    const opp = s.opportunity_score;
-    const conf = (s.confidence || {}).final;
-    const horizon = s.horizon_label || '—';
-    const lifecycleStatus = (s.lifecycle || {}).status;
-    const fresh = lifecycleStatus ? `${esc(lifecycleStatus)}` : '';
-    let body = '';
-    if (mode === 'HIZLI' || mode === 'SWING' || mode === 'POZİSYON') {
-      body += `<div class="ba-row"><span class="ba-lbl">MODE</span><span style="color:${MODE_COLOR[mode]}">${esc(mode)}</span></div>`;
-      body += `<div class="ba-row"><span class="ba-lbl">HORİZON</span><span>${esc(horizon)}</span></div>`;
-      body += `<div class="ba-row"><span class="ba-lbl">GÜVEN</span><span>${esc(fmt(conf, 0))}% ${esc(fresh)}</span></div>`;
-      body += `<div class="ba-row"><span class="ba-lbl">FIRSAT</span><span>${esc(opp)}/100</span></div>`;
-    } else if (mode === 'TOPLANIYOR') {
-      body += `<div class="ba-row"><span class="ba-lbl">MODE</span><span style="color:${MODE_COLOR[mode]}">${esc(mode)}</span></div>`;
-      body += `<div class="ba-row"><span class="ba-lbl">FIRSAT</span><span>${esc(opp)}/100  <span class="ba-muted">(kurulum şekilleniyor)</span></span></div>`;
-    } else if (mode === 'UZAK DUR') {
-      body += `<div class="ba-row"><span class="ba-lbl">MODE</span><span style="color:${MODE_COLOR[mode]}">${esc(mode)}</span></div>`;
-    }
-    return body;
-  }
-
-  // ---- WHY NOW
-  function renderWhyNow(s) {
-    const why = s.why_now || [];
-    if (mode_is_sakin(s)) return '';
-    if (!why.length) return '';
-    const label = s.mode === 'UZAK DUR' ? 'NEDEN?' : 'NEDEN ŞİMDİ?';
-    return `
-      <div class="ba-section-title">${label}</div>
-      <ul class="ba-bullets">
-        ${why.map(b => `<li>${esc(b)}</li>`).join('')}
-      </ul>
-    `;
-  }
-
-  // ---- ENGINE STATES (actionable only)
-  function renderEngineStates(s) {
-    if (s.mode !== 'HIZLI' && s.mode !== 'SWING' && s.mode !== 'POZİSYON') return '';
-    const e = s.engines || {};
-    const e1 = e1Icon(e.e1_trend);
-    const e2 = (e.e2_relstr && e.e2_relstr.score >= 1) ? ICN.ok :
-               (e.e2_relstr && e.e2_relstr.score >= 0.5) ? ICN.warn : ICN.fail;
-    const e3 = e3Icon(e.e3_volume);
-    const e4 = e4Icon(e.e4_breakout);
-    const e7 = (e.e7_exhaustion > 0.6) ? ICN.fail :
-               (e.e7_exhaustion > 0.3) ? ICN.warn : ICN.ok;
-    return `
-      <div class="ba-engine-row">
-        <span>Trend ${e1}</span>
-        <span>Göreli güç ${e2}</span>
-        <span>Hacim ${e3}</span>
-        <span>Kırılım ${e4}</span>
-        <span>Yorgun değil ${e7}</span>
-      </div>
-    `;
-  }
-
-  // ---- RISK FRAME (actionable only)
-  function renderRiskFrame(s) {
-    const rf = s.risk_frame;
-    if (!rf) return '';
-    const ez = rf.entry_zone || [];
-    const stop = fmt(rf.stop, 2);
-    const stopPct = rf.stop_pct == null ? '' : ` (${fmt(rf.stop_pct, 1)}%)`;
-    const t1 = fmt(rf.target_1r, 2);
-    const t2 = fmt(rf.target_2r, 2);
-    const t3 = fmt(rf.target_3r, 2);
-    return `
-      <div class="ba-risk">
-        <div class="ba-row"><span class="ba-lbl">GİRİŞ</span><span>${esc(fmt(ez[0], 2))} – ${esc(fmt(ez[1], 2))}</span></div>
-        <div class="ba-row"><span class="ba-lbl">STOP</span><span>${esc(stop)}${esc(stopPct)}</span></div>
-        <div class="ba-row"><span class="ba-lbl">HEDEF</span><span>1R ${esc(t1)} · 2R ${esc(t2)} · 3R ${esc(t3)}</span></div>
-        <div class="ba-row"><span class="ba-lbl">MAX SÜRE</span><span>${esc(rf.max_hold_bars)} işlem günü</span></div>
-        <div class="ba-row"><span class="ba-lbl">TRAIL</span><span>${esc(rf.trail_rule)}</span></div>
-        <div class="ba-row ba-muted"><span></span><span>${esc(rf.invalidation)}</span></div>
-      </div>
-    `;
-  }
-
-  // ---- TOPLANIYOR HINT
-  function renderToplaniyorHint(s) {
-    if (s.mode !== 'TOPLANIYOR') return '';
-    return `
-      <div class="ba-toplaniyor-hint">
-        ⚡ Potansiyel kırılım yakın<br>
-        <span class="ba-muted">Henüz teyit yok, takipte</span>
-      </div>
-    `;
-  }
-
-  // ---- SAKIN MESSAGE
-  function renderSakinMessage(s) {
-    if (s.mode !== 'SAKİN') return '';
-    return `<div class="ba-sakin-line">Şu an dikkat çekici bir kurulum yok.</div>`;
-  }
-
-  // ---- CAVEATS / WARNINGS
-  function renderCaveats(s) {
-    const exp = s.explainer || {};
-    const items = []
-      .concat(exp.warnings || [])
-      .concat(exp.caveats || []);
-    // Dedup, preserving order.
-    const seen = new Set();
-    const list = [];
-    for (const x of items) {
-      if (x && !seen.has(x)) {
-        seen.add(x);
-        list.push(x);
-      }
-    }
-    if (!list.length) return '';
-    return `<div class="ba-caveats">${list.map(esc).join(' · ')}</div>`;
-  }
-
-  function mode_is_sakin(s) { return s.mode === 'SAKİN'; }
-
-  // ---- CARD DISPATCH
+  // ── Card ──────────────────────────────────────────────────────
   function renderCard(s) {
-    const bg = MODE_BG[s.mode] || 'transparent';
-    return `
-      <div class="ba-card" data-mode="${esc(s.mode)}" data-ticker="${esc(s.ticker)}" style="background:${bg}">
-        ${renderHeader(s)}
-        ${renderSakinMessage(s)}
-        ${renderModeLine(s)}
-        ${renderWhyNow(s)}
-        ${renderEngineStates(s)}
-        ${renderRiskFrame(s)}
-        ${renderToplaniyorHint(s)}
-        ${renderCaveats(s)}
+    const m = modeMeta(s.mode);
+    const q = s.quality || {};
+    const grade = q.grade || '?';
+    const score = q.score == null ? '—' : Math.round(q.score);
+    const gcol = GRADE_COLOR(grade);
+    const kalite = (q.tags || {}).kalite || '';
+    const sg = s.sector_group || '';
+    const sIco = sectorIcon(sg);
+    const why = s.why_now || [];
+    const exp = s.explainer || {};
+    const caveats = [].concat(exp.warnings || [], exp.caveats || []);
+    const isSakin = s.mode === 'SAKİN';
+    const isWarn = s.mode === 'UZAK DUR';
+
+    // Why-now block — only for actionable / building / risk modes
+    let whyHtml = '';
+    if (!isSakin && why.length) {
+      const headerColor = isWarn ? 'var(--red)' : (s.mode === 'TOPLANIYOR' ? 'var(--prp)' : 'var(--cyn)');
+      const headerIco = isWarn ? '⚠️' : (s.mode === 'TOPLANIYOR' ? '🔍' : '💡');
+      const headerText = isWarn ? 'NEDEN UZAK DUR?' : 'NEDEN ŞİMDİ?';
+      whyHtml = `<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--bdr);font-size:12px;line-height:1.55">
+        <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:${headerColor};text-transform:uppercase;letter-spacing:.5px;font-weight:700;margin-bottom:6px">${headerIco} ${headerText}</div>
+        <ul style="margin:0;padding-left:18px;color:var(--t1)">
+          ${why.slice(0, 4).map(w => `<li style="margin-bottom:3px">${esc(w)}</li>`).join('')}
+        </ul>
+      </div>`;
+    } else if (isSakin) {
+      whyHtml = `<div style="margin-top:10px;color:var(--t4);font-size:11px;font-style:italic">Şu an dikkat çekici bir kurulum yok — radarda.</div>`;
+    }
+
+    // Risk frame — entry/stop/targets for actionable modes
+    let rfHtml = '';
+    const rf = s.risk_frame;
+    if (rf && (s.mode === 'HIZLI' || s.mode === 'SWING' || s.mode === 'POZİSYON')) {
+      const ez = rf.entry_zone || [];
+      rfHtml = `<div style="margin-top:10px;padding:8px 10px;background:var(--bg2);border-radius:6px;font-size:11px;font-family:'JetBrains Mono',monospace;line-height:1.7">
+        <div style="display:flex;justify-content:space-between"><span style="color:var(--t4)">GİRİŞ</span><span style="color:var(--t1)">${fmt(ez[0])} – ${fmt(ez[1])}</span></div>
+        <div style="display:flex;justify-content:space-between"><span style="color:var(--t4)">STOP</span><span style="color:var(--red)">${fmt(rf.stop)}${rf.stop_pct != null ? ' (' + fmt(rf.stop_pct, 1) + '%)' : ''}</span></div>
+        <div style="display:flex;justify-content:space-between"><span style="color:var(--t4)">HEDEF</span><span style="color:var(--grn)">1R ${fmt(rf.target_1r)} · 2R ${fmt(rf.target_2r)} · 3R ${fmt(rf.target_3r)}</span></div>
+        ${rf.max_hold_bars ? `<div style="display:flex;justify-content:space-between"><span style="color:var(--t4)">SÜRE</span><span style="color:var(--t2)">${esc(rf.max_hold_bars)} gün</span></div>` : ''}
+      </div>`;
+    }
+
+    // Caveats
+    let cavHtml = '';
+    if (caveats.length) {
+      cavHtml = `<div style="margin-top:8px;font-size:10px;color:var(--t4);font-style:italic">⚠️ ${caveats.slice(0, 3).map(esc).join(' · ')}</div>`;
+    }
+
+    // Calibration state
+    const calib = s.calibration_state;
+    let calibHtml = '';
+    if (calib && calib !== 'active') {
+      calibHtml = `<span style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--t4);background:var(--bg2);padding:2px 6px;border-radius:3px;text-transform:uppercase;letter-spacing:.3px">Kalibrasyon: ${esc(calib === 'preview' ? 'ön-aşama' : calib)}</span>`;
+    }
+
+    return `<div class="pkc" style="border-left-color:${m.color};margin-bottom:0">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:6px">
+        <div style="flex:1;min-width:0">
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <span class="clk-t" style="font-size:18px;font-weight:700" onclick="window.loadTicker && window.loadTicker('${esc(s.ticker)}')">${esc(s.ticker)}</span>
+          </div>
+          <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;align-items:center">
+            <span style="display:inline-block;font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;padding:3px 8px;border-radius:4px;background:${m.bg};color:${m.color};border:1px solid ${m.color}55">${m.icon} ${m.label}</span>
+            ${sg ? `<span style="display:inline-flex;align-items:center;gap:4px;background:var(--bg2);color:var(--t2);font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:600;padding:3px 8px;border-radius:4px;text-transform:uppercase;letter-spacing:.4px">${sIco} ${esc(sg)}</span>` : ''}
+            ${kalite ? `<span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--t3)">Kalite ${esc(kalite)}</span>` : ''}
+            ${calibHtml}
+          </div>
+        </div>
+        <div style="text-align:right;flex-shrink:0">
+          <div style="font-family:'JetBrains Mono',monospace;font-size:28px;font-weight:700;color:${gcol};line-height:1">${esc(score)}</div>
+          <div style="font-size:9px;color:var(--t4);text-transform:uppercase;letter-spacing:1px;margin-top:2px">${esc(grade)} · SCORE</div>
+        </div>
       </div>
-    `;
+      ${whyHtml}
+      ${rfHtml}
+      ${cavHtml}
+    </div>`;
   }
 
-  // ===== MACRO RIBBON (top of tab) =====
-  function renderMacroRibbon(macro) {
+  // ── Macro regime ribbon ───────────────────────────────────────
+  function renderRibbon(macro) {
     if (!macro) return '';
     const regime = macro.regime || 'neutral';
-    const REGIME_LABEL = { risk_on: 'RİSK-ON', neutral: 'NÖTR', risk_off: 'RİSK-OFF' };
-    const REGIME_COLOR = { risk_on: 'var(--grn)', neutral: 'var(--ylw)', risk_off: 'var(--red)' };
-    const label = REGIME_LABEL[regime] || regime;
-    const color = REGIME_COLOR[regime] || 'var(--t3)';
-    let suffix = '';
-    if (macro.hizli_disabled) {
-      suffix = ' — Hızlı sinyaller devre dışı';
-    } else if (regime === 'neutral') {
-      suffix = ' — Hızlı modda dikkat';
+    const LBL = { risk_on: 'RİSK-ON', neutral: 'NÖTR', risk_off: 'RİSK-OFF' };
+    const COL = { risk_on: 'var(--grn)', neutral: 'var(--ylw)', risk_off: 'var(--red)' };
+    const ICO = { risk_on: '🟢', neutral: '🟡', risk_off: '🔴' };
+    const c = COL[regime] || 'var(--t3)';
+    return `<div style="display:inline-flex;align-items:center;gap:8px;padding:6px 14px;background:${c}1a;border:1px solid ${c}66;border-radius:6px;font-family:'JetBrains Mono',monospace;font-size:11px;color:${c};font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:14px">${ICO[regime] || '⚪'} Makro Rejim: ${esc(LBL[regime] || regime)}</div>`;
+  }
+
+  // ── Mode filter tabs ──────────────────────────────────────────
+  function renderModeTabs(byMode, total) {
+    const order = ['HIZLI', 'SWING', 'POZİSYON', 'TOPLANIYOR', 'SAKİN', 'UZAK DUR'];
+    const cur = BA.filters.mode || '';
+    const tabs = [
+      `<button class="btn btn-sm" style="background:${cur ? 'var(--bg3)' : 'linear-gradient(135deg,var(--acc),var(--acc2))'};color:${cur ? 'var(--t2)' : '#000'};font-size:11px;padding:6px 12px;min-height:36px;border:1px solid ${cur ? 'transparent' : 'var(--acc)'}" onclick="BullAlfa._setMode('')">Tümü (${total})</button>`
+    ];
+    for (const m of order) {
+      const cnt = byMode[m] || 0;
+      if (cnt === 0 && cur !== m) continue;
+      const meta = MODE[m];
+      const on = cur === m;
+      tabs.push(`<button class="btn btn-sm" style="background:${on ? meta.bg : 'var(--bg3)'};color:${meta.color};border:1px solid ${on ? meta.color : 'transparent'};font-size:11px;padding:6px 12px;min-height:36px" onclick="BullAlfa._setMode('${esc(m)}')">${meta.icon} ${meta.label} (${cnt})</button>`);
     }
-    return `<div class="ba-ribbon" style="color:${color}">Rejim: ${esc(label)}${esc(suffix)}</div>`;
+    return `<div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap">${tabs.join('')}</div>`;
   }
 
-  // ===== SECTOR CONCENTRATION BANNER (§17) =====
-  function renderConcentrationBanner(meta) {
-    const sc = (meta || {}).sector_concentration || {};
-    let max = 0, sector = null;
-    for (const k of Object.keys(sc)) {
-      if (sc[k] > max) { max = sc[k]; sector = k; }
+  // ── Sector filter tabs ────────────────────────────────────────
+  function renderSectorTabs(concentration) {
+    const entries = Object.entries(concentration || {})
+      .filter(([_, n]) => n > 0)
+      .sort((a, b) => b[1] - a[1]);
+    if (entries.length <= 1) return '';
+    const cur = BA.filters.sector || '';
+    const total = entries.reduce((a, [_, n]) => a + n, 0);
+    let html = `<div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap;align-items:center">
+      <span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--t4);text-transform:uppercase;letter-spacing:.5px;margin-right:4px">SEKTÖR</span>
+      <button class="btn btn-sm" style="background:${cur ? 'var(--bg3)' : 'var(--ylwd)'};color:${cur ? 'var(--t2)' : 'var(--ylw)'};border:1px solid ${cur ? 'transparent' : 'var(--ylw)'};font-size:11px;padding:4px 10px;min-height:32px" onclick="BullAlfa._setSector('')">Tümü (${total})</button>`;
+    for (const [s, n] of entries) {
+      const on = cur === s;
+      html += `<button class="btn btn-sm" style="background:${on ? 'var(--bg4)' : 'var(--bg3)'};color:var(--t2);border:1px solid ${on ? 'var(--t2)' : 'transparent'};font-size:11px;padding:4px 10px;min-height:32px" onclick="BullAlfa._setSector('${esc(s)}')">${sectorIcon(s)} ${esc(s)} (${n})</button>`;
     }
-    if (max < 5 || !sector) return '';
-    return `<div class="ba-concentration">Bugün ${esc(sector)} sektöründe ${max} sinyal var — yoğun korelasyon, dikkat.</div>`;
+    return html + '</div>';
   }
 
-  // ===== FILTERS / PAGINATION =====
-  function renderFilters() {
-    const modes = ['', 'HIZLI', 'SWING', 'POZİSYON', 'TOPLANIYOR', 'SAKİN', 'UZAK DUR'];
-    const sectors = ['', 'banka', 'holding', 'gyo', 'sanayi', 'savunma', 'enerji', 'perakende', 'ulasim'];
-    const optsM = modes.map(m =>
-      `<option value="${esc(m)}"${BA.filters.mode === m ? ' selected' : ''}>${esc(m || 'Tüm modlar')}</option>`
-    ).join('');
-    const optsS = sectors.map(g =>
-      `<option value="${esc(g)}"${BA.filters.sector === g ? ' selected' : ''}>${esc(g || 'Tüm sektörler')}</option>`
-    ).join('');
-    return `
-      <div class="ba-filters">
-        <select id="ba-filter-mode">${optsM}</select>
-        <select id="ba-filter-sector">${optsS}</select>
-        <button id="ba-filter-apply">Uygula</button>
-        <button id="ba-filter-refresh">Yenile</button>
+  // ── Empty / warming / error states ────────────────────────────
+  function renderWarmingState() {
+    return `<div style="padding:40px 20px;text-align:center;background:rgba(255,202,40,.06);border:1px dashed var(--ylw);border-radius:var(--rad);margin:14px 0">
+      <div style="font-size:36px;margin-bottom:12px">⏳</div>
+      <div style="color:var(--ylw);font-weight:700;font-size:16px;margin-bottom:8px;font-family:'JetBrains Mono',monospace">HİSSELER HAZIRLANIYOR</div>
+      <div style="color:var(--t3);font-size:13px;line-height:1.6">İlk tarama ~1-3 dakika sürer.<br>Sayfa 30 saniyede bir otomatik yenilenir.</div>
+    </div>`;
+  }
+  function renderEmptyFilter() {
+    return `<div style="padding:30px 20px;text-align:center;color:var(--t3);background:var(--bg3);border:1px solid var(--bdr);border-radius:var(--rad);margin:10px 0">
+      <div style="font-size:32px;margin-bottom:8px">🔍</div>
+      <div style="font-size:14px">Filtre kriterlerine uygun hisse bulunamadı.</div>
+      <div style="font-size:11px;color:var(--t4);margin-top:6px">Mod veya sektör filtresini değiştir, ya da 'Tümü' tıkla.</div>
+    </div>`;
+  }
+  function renderError(msg) {
+    return `<div style="padding:30px 20px;text-align:center;color:var(--red);background:var(--redd);border:1px solid var(--red);border-radius:var(--rad);margin:14px 0">
+      <div style="font-size:24px;margin-bottom:8px">❌</div>
+      <div style="font-weight:700">Veri alınamadı</div>
+      <div style="font-size:11px;color:var(--t3);margin-top:6px;font-family:'JetBrains Mono',monospace">${esc(msg)}</div>
+    </div>`;
+  }
+  function renderLoading() {
+    return `<div style="padding:40px 20px;text-align:center;color:var(--t3)">
+      <div class="sp" style="margin:0 auto 12px"></div>
+      <div style="font-family:'JetBrains Mono',monospace;font-size:13px">Yükleniyor…</div>
+    </div>`;
+  }
+
+  // ── Header ────────────────────────────────────────────────────
+  function renderHeader(meta, total) {
+    const asof = meta.cache_as_of || meta.generated_at;
+    const asofStr = asof ? new Date(asof).toLocaleString('tr-TR') : '<i style="color:var(--t4)">veri hazırlanıyor</i>';
+    const cb = meta.circuit_breaker || {};
+    const cbBadge = cb.frozen ? `<span class="pill p-red" style="font-size:10px;margin-left:8px">⛔ Veri Donmuş</span>` : '';
+    return `<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;flex-wrap:wrap;gap:12px">
+      <div>
+        <h2 style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-lg);color:var(--acc);margin:0">🎯 BullAlfa — BIST Tarayıcı ${cbBadge}</h2>
+        <p style="font-size:var(--fs-sm);color:var(--t3);margin-top:2px">Son güncelleme: ${asofStr} · ${total} hisse · evren BIST 100</p>
+        <p style="font-size:11px;color:var(--t4);margin-top:4px;font-family:'JetBrains Mono',monospace">📅 Veri: son tamamlanmış işlem günü · 7-motor (Trend / Göreli Güç / Hacim / Kırılım / Pivot / Volatilite / Yorgunluk)</p>
       </div>
-    `;
-  }
-
-  function renderPagination(meta) {
-    const p = (meta || {}).pagination;
-    if (!p) return '';
-    const totalPages = Math.max(1, Math.ceil(p.total / p.per_page));
-    return `
-      <div class="ba-pagination">
-        <button id="ba-page-prev"${p.page <= 1 ? ' disabled' : ''}>‹</button>
-        <span>${esc(p.page)} / ${esc(totalPages)}</span>
-        <button id="ba-page-next"${p.page >= totalPages ? ' disabled' : ''}>›</button>
-        <span class="ba-muted">${esc(p.total)} hisse</span>
+      <div style="display:flex;gap:6px">
+        <button class="btn btn-grn" id="ba-refresh-btn" ${BA.refreshing ? 'disabled' : ''}>🔄 ${BA.refreshing ? 'TARANIYOR…' : 'YENİDEN TARA'}</button>
       </div>
-    `;
+    </div>`;
   }
 
-  // ===== TAB ROOT RENDER =====
+  // ── Info box (about) ──────────────────────────────────────────
+  function renderAboutBox() {
+    return `<div style="padding:12px 16px;background:var(--bg3);border-radius:var(--rad);margin-bottom:14px;font-size:var(--fs-base);color:var(--t2);line-height:1.6">
+      <b style="color:var(--acc)">BullAlfa nasıl çalışır?</b> Her BIST hissesini 6 moda ayırır:
+      <b style="color:var(--blu)">HIZLI</b> intraday momentum ·
+      <b style="color:var(--grn)">SWING</b> 3-15 gün ·
+      <b style="color:var(--gold)">POZİSYON</b> 15-60 gün ·
+      <b style="color:var(--prp)">TOPLANIYOR</b> kurulum şekilleniyor ·
+      <b style="color:var(--t3)">SAKİN</b> radar yok ·
+      <b style="color:var(--red)">UZAK DUR</b> risk yüksek.
+      Her karta tıkla, terminal görünümünde detaylı analizi gör.
+      <span style="color:var(--t4);font-size:11px">Yatırım tavsiyesi değildir.</span>
+    </div>`;
+  }
+
+  // ── Render ────────────────────────────────────────────────────
   async function renderTab(rootEl) {
     if (!rootEl) return;
-    rootEl.innerHTML = '<div class="ba-loading">Yükleniyor…</div>';
+    // First render — loading spinner
+    if (!BA.scan) rootEl.innerHTML = renderLoading();
+
     let scan;
     try {
       scan = await fetchScan(BA.page, BA.perPage, BA.filters.mode, BA.filters.sector);
     } catch (e) {
-      rootEl.innerHTML = `<div class="ba-error">Veri alınamadı: ${esc(e.message)}</div>`;
+      rootEl.innerHTML = renderError(e.message);
       return;
     }
     BA.scan = scan;
-    const meta = scan.meta || {};
-    const macro = (scan.signals && scan.signals[0] && scan.signals[0].macro) || null;
-    const ribbon = renderMacroRibbon(macro);
-    const banner = renderConcentrationBanner(meta);
-    const filters = renderFilters();
 
-    // Empty-state handling — distinguish "warming up" (first scan in
-    // progress) from "no signals match filters". When warming, we
-    // also re-fetch every 30s until the cache fills.
-    const isEmpty = !scan.signals || scan.signals.length === 0;
+    const meta = scan.meta || {};
+    const signals = scan.signals || [];
+    const macro = (signals[0] && signals[0].macro) || meta.macro || null;
+    const isEmpty = signals.length === 0;
     const isWarming = meta.warming_up === true;
-    let cards;
-    if (isEmpty && isWarming) {
-      cards = `<div class="ba-warming" style="padding:1.5rem;text-align:center;color:var(--ylw);background:rgba(255,202,40,.06);border-radius:6px;margin:1rem 0;">⏳ Hisseler hazırlanıyor — ilk tarama ~1-3 dakika sürer.<br><span style="color:var(--t3);font-size:0.9em;">30 saniyede bir otomatik yenileniyor…</span></div>`;
-      // Schedule a refresh — only if the user is still on this tab.
+    const byMode = meta.by_mode || {};
+    const sectorConc = meta.sector_concentration || {};
+    const p = meta.pagination || {};
+    const total = p.total != null ? p.total : signals.length;
+
+    let html = '';
+    html += renderHeader(meta, total);
+    html += renderAboutBox();
+    if (macro) html += renderRibbon(macro);
+
+    if (isWarming && isEmpty) {
+      html += renderWarmingState();
+      rootEl.innerHTML = html;
+      wireRefresh(rootEl);
       setTimeout(() => {
         if (BA.scan && BA.scan.meta && BA.scan.meta.warming_up) renderTab(rootEl);
       }, 30000);
-    } else if (isEmpty) {
-      cards = `<div style="padding:1.5rem;text-align:center;color:var(--t3);">Filtre kriterlerine uygun hisse bulunamadı.</div>`;
-    } else {
-      cards = scan.signals.map(renderCard).join('');
+      return;
     }
 
-    const pag = renderPagination(meta);
-    rootEl.innerHTML = `
-      ${ribbon}
-      ${banner}
-      ${filters}
-      <div class="ba-cards">${cards}</div>
-      ${pag}
-    `;
-    wireControls(rootEl);
-  }
+    html += renderModeTabs(byMode, total);
+    html += renderSectorTabs(sectorConc);
 
-  function wireControls(rootEl) {
-    const fMode = $('ba-filter-mode'), fSec = $('ba-filter-sector');
-    const apply = $('ba-filter-apply'), refresh = $('ba-filter-refresh');
-    const prev = $('ba-page-prev'), next = $('ba-page-next');
-    if (apply) apply.onclick = () => {
-      BA.filters.mode = fMode && fMode.value ? fMode.value : null;
-      BA.filters.sector = fSec && fSec.value ? fSec.value : null;
-      BA.page = 1;
-      renderTab(rootEl);
-    };
-    if (refresh) refresh.onclick = async () => {
-      try { await fetch('/api/bullalfa/scan/refresh'); } catch (_) {}
-      renderTab(rootEl);
-    };
+    if (isEmpty) {
+      html += renderEmptyFilter();
+    } else {
+      html += `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:12px;margin-top:8px">
+        ${signals.map(renderCard).join('')}
+      </div>`;
+    }
+
+    // Pagination
+    if (p.total && p.total > p.per_page) {
+      const totalPages = Math.max(1, Math.ceil(p.total / p.per_page));
+      html += `<div style="display:flex;justify-content:center;align-items:center;gap:10px;margin-top:20px;font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--t2)">
+        <button class="btn btn-sm" id="ba-prev" ${p.page <= 1 ? 'disabled' : ''}>‹ ÖNCEKİ</button>
+        <span>Sayfa <b style="color:var(--t1)">${p.page}</b> / ${totalPages}</span>
+        <button class="btn btn-sm" id="ba-next" ${p.page >= totalPages ? 'disabled' : ''}>SONRAKİ ›</button>
+      </div>`;
+    }
+
+    rootEl.innerHTML = html;
+    wireRefresh(rootEl);
+    const prev = document.getElementById('ba-prev');
+    const next = document.getElementById('ba-next');
     if (prev) prev.onclick = () => { BA.page = Math.max(1, BA.page - 1); renderTab(rootEl); };
     if (next) next.onclick = () => { BA.page = BA.page + 1; renderTab(rootEl); };
   }
 
-  // ===== SINGLE-TICKER VIEW =====
-  async function renderTicker(rootEl, ticker) {
-    if (!rootEl || !ticker) return;
-    rootEl.innerHTML = '<div class="ba-loading">Yükleniyor…</div>';
-    try {
-      const data = await fetchTicker(ticker);
-      const card = renderCard(data.signal);
-      const ribbon = renderMacroRibbon(data.signal && data.signal.macro);
-      rootEl.innerHTML = ribbon + card;
-    } catch (e) {
-      rootEl.innerHTML = `<div class="ba-error">Veri alınamadı: ${esc(e.message)}</div>`;
-    }
+  function wireRefresh(rootEl) {
+    const btn = document.getElementById('ba-refresh-btn');
+    if (btn) btn.onclick = async () => {
+      if (BA.refreshing) return;
+      BA.refreshing = true;
+      btn.disabled = true;
+      btn.innerHTML = '⏳ TARANIYOR…';
+      try { await fetch('/api/bullalfa/scan/refresh'); } catch (_) {}
+      BA.refreshing = false;
+      renderTab(rootEl);
+    };
   }
 
-  // ===== PUBLIC API =====
-  // Wire-up pattern: in the page that hosts the BullAlfa tab,
-  //   <script src="/static/js/bullalfa.js"></script>
-  //   <script>BullAlfa.renderTab(document.getElementById('ba-tab'));</script>
-  // For per-ticker drill-down:
-  //   BullAlfa.renderTicker(document.getElementById('ba-detail'), 'ASELS');
+  // ── Public API ────────────────────────────────────────────────
+  function _rerender() {
+    const el = document.getElementById('pg-bullalfa');
+    if (el) renderTab(el);
+  }
   window.BullAlfa = {
     renderTab,
-    renderTicker,
     fetchScan,
-    fetchTicker,
+    _setMode: (m) => { BA.filters.mode = m || null; BA.page = 1; _rerender(); },
+    _setSector: (s) => { BA.filters.sector = s || null; BA.page = 1; _rerender(); },
     state: BA,
   };
 })();
