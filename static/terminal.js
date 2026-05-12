@@ -28,6 +28,23 @@ function vColor(dc){return VERDICT_COLOR[dc]||'var(--t3)';}
 function vBg(dc){return VERDICT_BG[dc]||'var(--bg3)';}
 function confLevel(pct){if(pct>=80)return'Yüksek';if(pct>=60)return'Orta';return'Düşük';}
 function confColor(pct){if(pct>=80)return'var(--grn)';if(pct>=60)return'var(--ylw)';return'var(--red)';}
+// Bilanço veri yaşı rozeti — kullanıcı tarama sonucunun ne kadar taze
+// olduğunu anlasın diye (raw_cache TTL 24h, stale grace 7g).
+// r.data_age_hours: 0..168h olağan; 168+ stale (gri), 24+ uyarı (sarı).
+function bilancoBadge(r){
+  const h = r && r.data_age_hours;
+  if (h == null) return '';
+  const hours = Number(h);
+  if (!Number.isFinite(hours)) return '';
+  const label = hours < 1 ? 'az önce'
+              : hours < 24 ? `${Math.round(hours)} sa önce`
+              : `${Math.round(hours/24)} gün önce`;
+  let color = 'var(--t4)';
+  let warn = '';
+  if (hours > 168) { color = 'var(--red)'; warn = ' ⚠️'; }
+  else if (hours > 24) { color = 'var(--ylw)'; }
+  return ` · <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:${color}" title="Bilanço verisi son ${label} çekildi (raw_cache TTL=24h)">📅 Bilanço: ${label}${warn}</span>`;
+}
 
 // ===== METRIC TOOLTIP DATA =====
 const METRIC_TIPS={
@@ -1701,7 +1718,7 @@ $('dp').innerHTML=`<div class="dp-h" style="background:linear-gradient(135deg,va
     ${dc?`<span style="font-size:12px;color:var(--t3);padding:3px 8px;background:var(--bg3);border-radius:4px;border:1px solid var(--bdr)">Güven: <span style="color:${confColor(r.confidence||0)};font-weight:600">${confLevel(r.confidence||0)}</span></span>`:''}
   </div>
   <!-- Sector + quality badges -->
-  <div style="font-size:12px;color:var(--t3);margin-bottom:8px">${esc(r.sector||'')}${r.sector_group?' · '+esc(r.sector_group):''}</div>
+  <div style="font-size:12px;color:var(--t3);margin-bottom:8px">${esc(r.sector||'')}${r.sector_group?' · '+esc(r.sector_group):''}${bilancoBadge(r)}</div>
   <div style="display:flex;gap:5px;flex-wrap:wrap">
     ${el?`<span class="pill" style="background:${elBg};color:${elCol};font-weight:700;font-size:var(--fs-xs);padding:3px 8px;border:1px solid ${elCol}30" title="${esc(elDesc)}">Giriş: ${esc(el)}</span>`:''}
     ${(r.confidence||0)<40?'<span class="pill" style="background:rgba(255,179,0,.1);color:var(--ylw);font-size:8px;border:1px solid var(--ylw)" title="Veri eksikliği nedeniyle bu etiket temkinli okunmalı">⚠ Veri sınırlı</span>':''}

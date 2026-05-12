@@ -45,6 +45,28 @@ from engine.turkey_realities import compute_turkey_realities
 
 log = logging.getLogger("bistbull.analysis")
 
+
+def _data_age_hours(raw: Optional[dict]) -> Optional[float]:
+    """Hours since the underlying borsapy bilanço was fetched.
+
+    Reads `_fetched_at` (ISO8601) off the raw_cache entry. Returns None
+    when missing or unparseable so the UI can hide the badge cleanly.
+    """
+    if not raw:
+        return None
+    iso = raw.get("_fetched_at")
+    if not iso:
+        return None
+    try:
+        fetched = dt.datetime.fromisoformat(iso)
+        if fetched.tzinfo is None:
+            fetched = fetched.replace(tzinfo=dt.timezone.utc)
+        delta = dt.datetime.now(dt.timezone.utc) - fetched
+        return round(delta.total_seconds() / 3600.0, 1)
+    except (TypeError, ValueError):
+        return None
+
+
 # ================================================================
 # BORSAPY PROVIDER — tek veri kaynağı
 # ================================================================
@@ -416,6 +438,7 @@ def analyze_symbol(symbol: str, scoring_version: Optional[str] = None) -> dict:
         "score_coverage": score_coverage,
         "data_source": m.get("data_source", "unknown"),
         "data_fetched_at": raw_cache.get(symbol, {}).get("_fetched_at") if raw_cache.get(symbol) else None,
+        "data_age_hours": _data_age_hours(raw_cache.get(symbol)),
         "analyzed_at": dt.datetime.now(dt.timezone.utc).isoformat(),
         "_metric_violations": m.get("_metric_violations", 0),
         "v13": v13_block,
