@@ -126,7 +126,10 @@ class TestBuildHeroData:
     def test_has_leaders(self, sample_items):
         result = build_hero_data(sample_items, {}, [])
         assert len(result["deger_leaders"]) > 0
-        assert len(result["ivme_leaders"]) > 0
+        # Plan A renamed "ivme_leaders" → "quality_leaders" (Radar is
+        # pure-fundamental now; the second leaderboard ranks by quality
+        # instead of momentum).
+        assert len(result["quality_leaders"]) > 0
 
     def test_empty_items(self):
         result = build_hero_data([], {}, [])
