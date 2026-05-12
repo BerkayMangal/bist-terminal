@@ -184,6 +184,97 @@ def _pair(
     return _pick(df, names, 0, b), _pick(df, names, 1, b)
 
 
+def _quarterly_series(
+    df: Optional[pd.DataFrame],
+    names: list[str],
+    n: int = 8,
+) -> list[Optional[float]]:
+    """Pull up to N quarters of values for a row name, starting from the
+    most recent column with real data. Returns a fixed-length list; missing
+    cells are None.
+
+    Quarterly column order from borsapy is newest-first
+    (e.g. ['2025Q4', '2025Q3', ..., '2024Q1']), so series[0] is the
+    latest reported quarter, series[4] is the same quarter one year
+    earlier (used for YoY-Q growth).
+    """
+    if _is_empty_frame(df):
+        return [None] * n
+    base = _find_data_col(df)
+    ncols = len(df.columns)
+    return [
+        _pick(df, names, offset=i, base=base) if (base + i) < ncols else None
+        for i in range(n)
+    ]
+
+
+def _compute_quarterly_aggregates(
+    fin_q: Optional[pd.DataFrame],
+) -> dict[str, Any]:
+    """From an 8-quarter income statement, compute YTD year-over-year
+    growth metrics.
+
+    borsapy's quarterly columns are CUMULATIVE YEAR-TO-DATE values (e.g.
+    "2025Q3" = revenue for Jan–Sep 2025, not just Q3 alone). Verified by
+    cross-checking: 2025Q4 cumulative == 2025 annual figure exactly.
+    So:
+      revenue_ytd       = latest cumulative YTD value
+      revenue_ytd_prev  = same quarter from previous year (cumulative)
+      revenue_growth_yoy_q = (ytd - ytd_prev) / ytd_prev
+                           — when latest is Q4, this is full-year YoY.
+                           — when latest is Q3 (mid-year), this is
+                             "first 9 months YoY" — gives a fresher signal
+                             than the annual figures that only update on
+                             year-end reporting.
+
+    True TTM (trailing-12-month standalone) would need a
+    cumulative→standalone conversion; deferred to a follow-up.
+
+    Plan B v1 — additive: existing annual fields are not touched.
+    """
+    out: dict[str, Any] = {
+        "quarterly_data_available": False,
+        "latest_quarter": None,
+    }
+    if _is_empty_frame(fin_q):
+        return out
+
+    base = _find_data_col(fin_q)
+    cols = list(fin_q.columns)
+    if base >= len(cols):
+        return out
+    out["latest_quarter"] = str(cols[base])
+    out["quarterly_data_available"] = True
+
+    fields = [
+        ("revenue", IS_MAP["revenue"]),
+        ("net_income", IS_MAP["net_income"]),
+        ("operating_income", IS_MAP["operating_income"]),
+    ]
+    any_data = False
+    for metric, names in fields:
+        series = _quarterly_series(fin_q, names, n=8)
+        ytd = series[0]               # cumulative through latest reported quarter
+        ytd_prev = series[4]          # same quarter cumulative one year earlier
+        growth = (
+            (ytd - ytd_prev) / abs(ytd_prev)
+            if ytd is not None and ytd_prev not in (None, 0)
+            else None
+        )
+        out[f"{metric}_ytd"] = ytd
+        out[f"{metric}_ytd_prev"] = ytd_prev
+        out[f"{metric}_growth_yoy_q"] = growth
+        if growth is not None:
+            any_data = True
+
+    if not any_data:
+        # Got columns but no row-name matched (e.g. bank-format rows when
+        # caller expected non-bank schema). Demote the availability flag
+        # so callers can fall back to annual.
+        out["quarterly_data_available"] = False
+    return out
+
+
 def _pick_debt(
     bal: Optional[pd.DataFrame],
 ) -> tuple[Optional[float], Optional[float]]:
@@ -337,6 +428,30 @@ def fetch_raw_v9(symbol: str) -> dict:
                 log.warning(f"cashflow {tc}: {type(e).__name__}: {e!r}")
             return None
 
+    # Quarterly fetches (Plan B v1) — 8 trailing quarters for TTM and
+    # year-over-year same-quarter growth metrics. Errors don't fail the
+    # symbol; quarterly_data_available flag in metrics signals success.
+    def _income_q():
+        try:
+            return tk.get_income_stmt(quarterly=True, financial_group=fg, last_n=8)
+        except Exception as e:
+            log.debug(f"income_q {tc}: {type(e).__name__}: {e!r}")
+            return None
+
+    def _balance_q():
+        try:
+            return tk.get_balance_sheet(quarterly=True, financial_group=fg, last_n=8)
+        except Exception as e:
+            log.debug(f"balance_q {tc}: {type(e).__name__}: {e!r}")
+            return None
+
+    def _cashflow_q():
+        try:
+            return tk.get_cashflow(quarterly=True, financial_group=fg, last_n=8)
+        except Exception as e:
+            log.debug(f"cashflow_q {tc}: {type(e).__name__}: {e!r}")
+            return None
+
     last_exc: Optional[Exception] = None
     for attempt in range(FETCH_RAW_MAX_ATTEMPTS):
         if attempt > 0:
@@ -350,17 +465,34 @@ def fetch_raw_v9(symbol: str) -> dict:
             _t.sleep(sleep_sec)
 
         try:
-            with ThreadPoolExecutor(max_workers=5) as pool:
+            with ThreadPoolExecutor(max_workers=8) as pool:
                 f_fast = pool.submit(_fast)
                 f_info = pool.submit(_info)
                 f_fin = pool.submit(_income)
                 f_bal = pool.submit(_balance)
                 f_cf = pool.submit(_cashflow)
+                f_fin_q = pool.submit(_income_q)
+                f_bal_q = pool.submit(_balance_q)
+                f_cf_q = pool.submit(_cashflow_q)
                 fast = f_fast.result(timeout=30)
                 info = f_info.result(timeout=30)
                 fin = f_fin.result(timeout=15)
                 bal = f_bal.result(timeout=15)
                 cf = f_cf.result(timeout=15)
+                # Quarterly results — soft-fail (return None) so they
+                # never block the symbol on borsapy hiccups.
+                try:
+                    fin_q = f_fin_q.result(timeout=15)
+                except Exception:
+                    fin_q = None
+                try:
+                    bal_q = f_bal_q.result(timeout=15)
+                except Exception:
+                    bal_q = None
+                try:
+                    cf_q = f_cf_q.result(timeout=15)
+                except Exception:
+                    cf_q = None
 
             if info is None:
                 info = {
@@ -374,6 +506,7 @@ def fetch_raw_v9(symbol: str) -> dict:
             raw = {
                 "info": info, "fast": fast,
                 "financials": fin, "balance": bal, "cashflow": cf,
+                "financials_q": fin_q, "balance_q": bal_q, "cashflow_q": cf_q,
                 "source": "borsapy", "ticker_clean": tc, "is_bank": is_bank(tc),
                 "_fetched_at": _dt.datetime.now(_dt.timezone.utc).isoformat(),
                 "_fetch_attempts": attempt + 1,  # telemetry
@@ -429,6 +562,7 @@ def compute_metrics_v9(symbol: str) -> dict:
     fin = raw["financials"]
     bal = raw["balance"]
     cf = raw["cashflow"]
+    fin_q = raw.get("financials_q")  # Plan B v1 — quarterly data (optional)
     tc = raw["ticker_clean"]
 
     # Income statement
@@ -609,6 +743,12 @@ def compute_metrics_v9(symbol: str) -> dict:
         # ohlcv source set later by batch_download_history caller
     }
 
+    # Plan B v1 — quarterly aggregates (TTM, YoY-Q). Additive: existing
+    # annual fields (revenue_growth, eps_growth, ...) are untouched so
+    # nothing downstream needs to change. Scoring layer wires these in
+    # in Plan B v2.
+    q_aggs = _compute_quarterly_aggregates(fin_q)
+
     return {
         "symbol": symbol, "ticker": tc,
         "name": str(info.get("shortName") or info.get("longName") or tc),
@@ -660,6 +800,14 @@ def compute_metrics_v9(symbol: str) -> dict:
         # Phase A.10 Step 2-A: source tagging (additive, doesn't change
         # any existing field). May be updated by _apply_overrides.
         "_field_sources": _field_sources,
+        # Plan B v1 — quarterly aggregates merged in. Keys:
+        #   quarterly_data_available, latest_quarter,
+        #   revenue_ytd, revenue_ytd_prev, revenue_growth_yoy_q,
+        #   net_income_*, operating_income_*.
+        # Cumulative YTD semantics — when latest_quarter is mid-year
+        # (e.g. "2025Q3"), growth_yoy_q is the freshest signal you can
+        # get because the annual fields only update on year-end reports.
+        **q_aggs,
     }
 
 
