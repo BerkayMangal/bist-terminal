@@ -125,7 +125,13 @@ class FakeRedis:
         if not isinstance(zs, dict) or not zs:
             return []
         items = sorted(zs.items(), key=lambda kv: kv[1], reverse=True)
-        sliced = items[start: end + 1]
+        # Match Redis ZREVRANGE semantics: end is inclusive, -1 means
+        # "to the last element". end=-1 in Python slicing would be
+        # exclusive of the last element, which is wrong here.
+        if end == -1:
+            sliced = items[start:]
+        else:
+            sliced = items[start: end + 1]
         if withscores:
             return [(m, s) for m, s in sliced]
         return [m for m, _ in sliced]
