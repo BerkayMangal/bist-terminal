@@ -89,6 +89,15 @@ BULLWATCH_HOT_STARTUP_DELAY:     int = 480   # ~8 min — wait for first cold sc
 BULLWATCH_HOT_INTERVAL:          int = 300   # hot tier — 5 min
 BULLWATCH_HOT_SIZE:              int = 50    # how many top tickers to refresh
 
+# KAP disclosure feed (Faz 1). Cadence is market-hours aware: peak
+# announcement windows in Türkiye are 18:00–21:00 and 08:00–09:30 local
+# time. Off-hours we relax to KAP_INTERVAL_OFFHOURS so we don't beat on
+# KAP servers overnight for nothing.
+KAP_FEED_STARTUP_DELAY:    int = 120   # 2 min — let the rest of boot settle
+KAP_FEED_INTERVAL_PEAK:    int = 300   # 5 min during peak announcement windows
+KAP_FEED_INTERVAL_OFFHOURS: int = 1800  # 30 min overnight
+KAP_FEED_RETRY_AFTER_ERROR: int = 600   # back off 10 min on hard error
+
 # ================================================================
 # DATA SOURCE IMPORTS — borsapy only
 # ================================================================
@@ -464,3 +473,51 @@ def _run_bullwatch_hot_tier() -> Optional[dict]:
         len(items), scan_id, BULLWATCH_HOT_SIZE,
     )
     return {"scan_id": scan_id, "items": items}
+
+
+# ================================================================
+# KAP DISCLOSURE FEED LOOP (Faz 1)
+# ================================================================
+
+
+def _in_peak_window() -> bool:
+    """Return True during the two daily windows when KAP announcements
+    spike: 08:00-09:30 local and 18:00-21:00 local."""
+    now = dt.datetime.now()  # local time on the deploy host
+    h, m = now.hour, now.minute
+    if h == 8 or (h == 9 and m <= 30):
+        return True
+    if 18 <= h < 21:
+        return True
+    return False
+
+
+async def kap_feed_loop() -> None:
+    """Periodically poll KAP for new disclosures and fan out side
+    effects (Plan C cache invalidation; Faz 3 AI queue).
+
+    Errors are isolated to one cycle — the loop never dies on a
+    bad day at kap.org.tr. Cadence switches between peak and
+    off-hours intervals based on local time.
+    """
+    log.info(
+        "KAP feed loop scheduled — first run in %ds, then %ds peak / %ds off-hours",
+        KAP_FEED_STARTUP_DELAY, KAP_FEED_INTERVAL_PEAK, KAP_FEED_INTERVAL_OFFHOURS,
+    )
+    await asyncio.sleep(KAP_FEED_STARTUP_DELAY)
+
+    while True:
+        sleep_for = (
+            KAP_FEED_INTERVAL_PEAK if _in_peak_window()
+            else KAP_FEED_INTERVAL_OFFHOURS
+        )
+        try:
+            from engine.kap_feed import run_one_cycle
+            await asyncio.to_thread(run_one_cycle)
+        except asyncio.CancelledError:
+            log.info("KAP feed loop cancelled")
+            raise
+        except Exception as exc:
+            log.warning("KAP feed cycle raised: %r", exc)
+            sleep_for = KAP_FEED_RETRY_AFTER_ERROR
+        await asyncio.sleep(sleep_for)

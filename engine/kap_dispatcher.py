@@ -1,0 +1,122 @@
+# ================================================================
+# BISTBULL TERMINAL — KAP DISPATCHER
+# engine/kap_dispatcher.py
+#
+# Side-effect router for newly-detected disclosure events. Called by
+# engine.kap_feed once per new DisclosureRecord. Side effects:
+#
+#   1. Cache invalidation (Plan C) — when a balance sheet drops,
+#      raw_cache + analysis_cache + bullwatch metrics-cache entries
+#      for that ticker are removed so the next scoring read picks up
+#      the fresh data.
+#
+#   2. AI analysis queue (wire is here; processor lands in Faz 3).
+#
+#   3. Snapshot-store soft-mark (the cold BullWatch snapshot itself
+#      still lives until its refresh cycle, but we drop the in-memory
+#      mirror in api/bullwatch._CACHE so the next request reads from
+#      Redis — and Redis is now stale by intention).
+#
+# All hooks are best-effort: any individual failure is logged and
+# swallowed. The feed loop must NEVER stop because invalidation
+# blew up on one cache.
+# ================================================================
+
+from __future__ import annotations
+
+import logging
+from typing import Optional
+
+from data.kap_client import DisclosureRecord
+
+log = logging.getLogger("bistbull.kap_dispatcher")
+
+
+def dispatch_new_disclosure(rec: DisclosureRecord) -> None:
+    """Entry point: route side effects for one fresh disclosure event."""
+    log.info(
+        "KAP dispatch: %s [%s/%s] %s",
+        rec.ticker, rec.disclosure_type, rec.rule_type, rec.subject,
+    )
+    if rec.is_financial_report():
+        _invalidate_caches_for_ticker(rec.ticker)
+        _queue_ai_analysis(rec)
+
+
+# ── Plan C: cache invalidation ─────────────────────────────────────
+
+
+def _invalidate_caches_for_ticker(ticker: str) -> None:
+    """Drop every cached scoring artifact for `ticker` so the next read
+    triggers a fresh borsapy fetch — which now sees the just-released
+    balance sheet."""
+    sym = (ticker or "").upper().strip().replace(".IS", "")
+    if not sym:
+        return
+
+    n_dropped = 0
+
+    # Raw + analysis L1/L2 caches (engine/analysis.py path)
+    try:
+        from core.cache import raw_cache, analysis_cache, tech_cache
+        for cache in (raw_cache, analysis_cache, tech_cache):
+            try:
+                # SafeCache supports both .delete(key) and .pop(key, None).
+                # We use whichever exists, otherwise fall back to manual L1.
+                if hasattr(cache, "delete"):
+                    cache.delete(sym)
+                    n_dropped += 1
+                elif hasattr(cache, "pop"):
+                    cache.pop(sym, None)
+                    n_dropped += 1
+            except Exception as exc:
+                log.debug("invalidate %s on %s: %r", sym, cache, exc)
+    except Exception as exc:
+        log.warning("invalidate core.cache import failed: %r", exc)
+
+    # BullWatch's separate Redis-backed metrics cache (12h fresh /
+    # 7d stale). Same ticker key.
+    try:
+        from data import bullwatch_cache
+        if hasattr(bullwatch_cache, "invalidate"):
+            bullwatch_cache.invalidate(sym)
+            n_dropped += 1
+        else:
+            # Fall back to raw Redis delete on the well-known key.
+            from core import redis_client
+            client = redis_client.get_client()
+            if client is not None:
+                client.delete(f"bullwatch:metrics:v3:{sym}")
+                n_dropped += 1
+    except Exception as exc:
+        log.debug("invalidate bullwatch_cache %s: %r", sym, exc)
+
+    # BullWatch in-memory mirror (api/bullwatch._CACHE) — drop the items
+    # entry only; the snapshot store keeps the cold copy until its own
+    # refresh cycle. We don't kill the snapshot directly because the UI
+    # would blank; instead we let the next refresh loop write the fresh
+    # snapshot atomically.
+    try:
+        from api import bullwatch as _bw
+        items = (_bw._CACHE.get("items") or {}).get("items") or []
+        if any((it.get("symbol") or "").upper() == sym for it in items):
+            # Force the next request to fall back to the snapshot or
+            # cold-start path, where freshened metrics will be picked up
+            _bw._CACHE["stale_after"] = 0.0
+            n_dropped += 1
+    except Exception as exc:
+        log.debug("invalidate api.bullwatch mirror %s: %r", sym, exc)
+
+    log.info("Plan C: invalidated %d cache layers for %s", n_dropped, sym)
+
+
+# ── Faz 3 hook: AI analysis queue ───────────────────────────────────
+
+
+def _queue_ai_analysis(rec: DisclosureRecord) -> None:
+    """Faz 3 wires this to the Grok-3-mini-fast pipeline. For now we
+    log so the integration point is visible end-to-end."""
+    log.info(
+        "AI queue (Faz 3 stub): %s/%s → analyze",
+        rec.ticker, rec.disclosure_index,
+    )
