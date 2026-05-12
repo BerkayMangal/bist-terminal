@@ -258,9 +258,17 @@ def score_growth_calibrated(
     m: dict,
     fits: Optional[dict[str, IsotonicFit]] = None,
 ) -> Optional[float]:
+    # Plan B v2: prefer quarterly YoY-Q growth when present (fresher
+    # signal — updates on every quarterly report). The calibration fit
+    # was trained on annual numbers, but quarterly YTD-YoY uses the same
+    # ratio scale, so reusing the "revenue_growth" / "eps_growth" fits
+    # is appropriate.
+    from engine.scoring import _best_growth
+    rev_g = _best_growth(m, "revenue_growth_yoy_q", "revenue_growth")
+    eps_g = _best_growth(m, "net_income_growth_yoy_q", "eps_growth")
     parts = [
-        score_metric_calibrated("revenue_growth", m.get("revenue_growth"), fits),
-        score_metric_calibrated("eps_growth", m.get("eps_growth"), fits),
+        score_metric_calibrated("revenue_growth", rev_g, fits),
+        score_metric_calibrated("eps_growth", eps_g, fits),
         score_metric_calibrated("ebitda_growth", m.get("ebitda_growth"), fits),
         score_metric_calibrated("peg", m.get("peg"), fits),
     ]
