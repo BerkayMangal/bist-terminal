@@ -179,6 +179,14 @@ async def _background_scanner():
 @asynccontextmanager
 async def lifespan(application: FastAPI):
     init_db()
+    # KAP disclosure-feed schema lives in the same SQLite as the rest of
+    # the app; create the table on boot so it's there before the feed
+    # loop fires its first cycle.
+    try:
+        from infra.kap_storage import init_db as _kap_init_db
+        _kap_init_db()
+    except Exception as e:
+        log.warning(f"KAP storage init skipped: {e}")
     # Phase 1: refuse to boot without a real JWT_SECRET. Raises RuntimeError
     # (uvicorn will surface this as a startup failure) if the env var is
     # missing, too short, or still a placeholder string.
@@ -223,6 +231,18 @@ async def lifespan(application: FastAPI):
         log.info("BullAlfa data provider registered, warmup task started")
     except Exception as e:
         log.warning(f"BullAlfa provider not started: {e}")
+    # KAP disclosure feed loop — Faz 1. Pulls fresh disclosures every
+    # 5 min (peak hours) / 30 min (off-hours), persists them, and
+    # invalidates per-ticker scoring caches when a balance sheet drops
+    # (Plan C). The pykap dependency is optional at boot — failure here
+    # just disables the feed.
+    kap_feed_task = None
+    try:
+        from engine.background_tasks import kap_feed_loop
+        kap_feed_task = asyncio.create_task(kap_feed_loop())
+        log.info("KAP feed loop started")
+    except Exception as e:
+        log.warning(f"KAP feed loop not started: {e}")
     yield
     task.cancel()
     if bullwatch_task is not None:
@@ -231,6 +251,8 @@ async def lifespan(application: FastAPI):
         bullwatch_hot_task.cancel()
     if bullalfa_task is not None:
         bullalfa_task.cancel()
+    if kap_feed_task is not None:
+        kap_feed_task.cancel()
     redis_client.shutdown()
     log.info(f"{APP_NAME} shutting down")
 
@@ -294,6 +316,12 @@ app.include_router(auth_router)
 app.include_router(phase4_router)
 app.include_router(bullwatch_router)
 app.include_router(bullalfa_router)
+# KAP disclosure feed endpoints — Faz 1.
+try:
+    from api.kap import router as kap_router
+    app.include_router(kap_router)
+except Exception as _e:
+    log.warning(f"KAP router not mounted: {_e}")
 
 @app.exception_handler(RateLimitExceeded)
 async def _rate_limit_handler(request: Request, exc: RateLimitExceeded):
