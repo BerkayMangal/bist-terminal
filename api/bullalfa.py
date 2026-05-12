@@ -45,9 +45,14 @@ from engine.bullalfa_params import (
     SCAN_DEFAULT_PAGE_SIZE,
     SCHEMA_VERSION,
 )
+from core.snapshot_store import get_default_store
 
 log = logging.getLogger("bistbull.bullalfa_api")
 router = APIRouter()
+
+# Shared snapshot store module key — D.2 of the snapshot pipeline rollout.
+# Lives alongside snapshots:bullwatch:* and any future module namespaces.
+SNAPSHOT_MODULE = "bullalfa"
 
 
 # ================================================================
@@ -208,6 +213,107 @@ def reset_cache() -> None:
     _circuit_reset()
 
 
+# ================================================================
+# Shared snapshot store integration (D.2)
+#
+# Mirrors api/bullwatch.py — _CACHE remains the L1 fast-path mirror;
+# the Redis-backed snapshot store is the source of truth across restarts
+# and across processes. Endpoints prefer snapshot reads when the in-mem
+# mirror is empty (cold-start path).
+# ================================================================
+
+
+def _persist_snapshot(payload: dict) -> Optional[str]:
+    """Write a scan payload into the shared snapshot store.
+
+    Best-effort: any failure (Redis down, empty signals, serialisation
+    error) is logged and swallowed — the in-mem cache always handles
+    the response.
+    """
+    signals = (payload or {}).get("signals") or []
+    if not signals:
+        return None
+    try:
+        scored = [
+            (
+                str(s.get("ticker", "")),
+                float(s.get("opportunity_score") or 0),
+                s,
+            )
+            for s in signals
+            if s.get("ticker")
+        ]
+        if not scored:
+            return None
+        meta_in = (payload or {}).get("meta") or {}
+        meta = {
+            "universe_size":        meta_in.get("universe_size"),
+            "by_mode":              meta_in.get("by_mode"),
+            "sector_concentration": meta_in.get("sector_concentration"),
+            "warnings":             meta_in.get("warnings"),
+            "generated_at":         meta_in.get("generated_at"),
+        }
+        store = get_default_store()
+        return store.write_snapshot(SNAPSHOT_MODULE, scored, meta=meta)
+    except Exception as exc:
+        log.warning("bullalfa snapshot persist failed: %r", exc)
+        return None
+
+
+def _read_snapshot_payload() -> Optional[dict]:
+    """Rebuild a scan payload from the latest snapshot.
+
+    Returns None when no healthy snapshot exists. If the latest is
+    corrupted, falls back to `previous` automatically.
+    """
+    try:
+        store = get_default_store()
+        scan_id = store.read_latest_scan_id(SNAPSHOT_MODULE)
+        if scan_id is None:
+            return None
+        if not store.is_healthy(SNAPSHOT_MODULE, scan_id=scan_id):
+            log.warning(
+                "bullalfa snapshot %s corrupted — trying previous", scan_id,
+            )
+            if not store.fallback_to_previous(SNAPSHOT_MODULE):
+                return None
+            scan_id = store.read_latest_scan_id(SNAPSHOT_MODULE)
+            if scan_id is None:
+                return None
+        meta = store.read_meta(SNAPSHOT_MODULE, scan_id=scan_id)
+        if meta is None:
+            return None
+        # Read all items (limit large enough to cover any universe)
+        top = store.read_top(SNAPSHOT_MODULE, 1000, scan_id=scan_id)
+        if not top:
+            return None
+        items_map = store.read_items(
+            SNAPSHOT_MODULE, [t for t, _ in top], scan_id=scan_id,
+        )
+        signals = [items_map[t] for t, _ in top if t in items_map]
+        if not signals:
+            return None
+        # Rebuild payload — keep the original meta from when the snapshot
+        # was written so universe_size / by_mode / sector_concentration
+        # don't drift.
+        payload = {
+            "signals": signals,
+            "meta": {
+                "generated_at":         meta.get("generated_at"),
+                "universe_size":        meta.get("universe_size") or len(signals),
+                "by_mode":              meta.get("by_mode") or {},
+                "sector_concentration": meta.get("sector_concentration") or {},
+                "warnings":             meta.get("warnings") or [],
+            },
+            "_snapshot_scan_id":   meta.get("scan_id"),
+            "_snapshot_asof_unix": meta.get("asof_unix"),
+        }
+        return payload
+    except Exception as exc:
+        log.warning("bullalfa snapshot read failed: %r", exc)
+        return None
+
+
 # ----------------------------------------------------------------
 # Core scan runner — invoked by the endpoint and by the refresher
 # ----------------------------------------------------------------
@@ -268,6 +374,15 @@ async def _run_scan() -> dict:
     _CACHE.as_of = payload["meta"]["generated_at"]
     _CACHE.expires_at = time.time() + SCAN_BATCH_REFRESH_SEC
     _circuit_reset()
+    # Write-through to the shared snapshot store. Best-effort; failures
+    # don't affect the in-mem cache path.
+    try:
+        scan_id = _persist_snapshot(payload)
+        if scan_id is not None:
+            log.info("bullalfa snapshot persisted: %s (%d signals)",
+                     scan_id, len(signals))
+    except Exception as exc:
+        log.warning("bullalfa snapshot persist raised: %r", exc)
     return payload
 
 
@@ -351,26 +466,44 @@ async def get_scan(
     pagination is consistent with the scan view.
     """
     cache_warming = False
+    snapshot_scan_id: Optional[str] = None
+    from_snapshot = False
     if _CACHE.payload is None:
-        # Cold start — kick off the scan, wait briefly for cache to
-        # fill. Tests with fast in-memory providers complete the scan
-        # in <100ms; production with 437 BIST tickers takes minutes,
-        # in which case we fall through to warming_up.
-        await _ensure_background_scan()
-        if _BG_SCAN_TASK is not None and not _BG_SCAN_TASK.done():
-            try:
-                # asyncio.shield prevents wait_for from cancelling the
-                # bg task on timeout — it continues running in the bg.
-                await asyncio.wait_for(asyncio.shield(_BG_SCAN_TASK), timeout=8.0)
-            except (asyncio.TimeoutError, Exception):
-                pass
-        if _CACHE.payload is None:
-            cache_warming = True
+        # Cold start — try the shared snapshot store before kicking a
+        # live scan. A snapshot from a previous process / pod restart
+        # means we don't have to wait for the universe to be scanned
+        # all over again.
+        snap = _read_snapshot_payload()
+        if snap is not None:
+            _CACHE.payload = snap
+            _CACHE.as_of = snap.get("meta", {}).get("generated_at")
+            _CACHE.expires_at = time.time() + SCAN_BATCH_REFRESH_SEC
+            snapshot_scan_id = snap.get("_snapshot_scan_id")
+            from_snapshot = True
+            # Still kick a background refresh so the in-mem cache stays
+            # warm and the snapshot updates eventually.
+            await _ensure_background_scan()
+        else:
+            # No snapshot either — fall through to the old cold-start
+            # path: kick a scan, wait up to 8 s, otherwise warming_up.
+            await _ensure_background_scan()
+            if _BG_SCAN_TASK is not None and not _BG_SCAN_TASK.done():
+                try:
+                    await asyncio.wait_for(
+                        asyncio.shield(_BG_SCAN_TASK), timeout=8.0,
+                    )
+                except (asyncio.TimeoutError, Exception):
+                    pass
+            if _CACHE.payload is None:
+                cache_warming = True
     elif not _cache_is_fresh():
         # Stale — kick off a refresh, but serve the stale payload now.
         await _ensure_background_scan()
 
     payload = _CACHE.payload or _empty_payload()
+    if snapshot_scan_id is None:
+        snapshot_scan_id = (payload or {}).get("_snapshot_scan_id")
+        from_snapshot = from_snapshot or bool(snapshot_scan_id)
     signals = payload.get("signals", [])
 
     # Apply filters BEFORE re-paginating so client-side filtering
@@ -396,6 +529,10 @@ async def get_scan(
         "frozen":               _CACHE.is_frozen,
         "consecutive_failures": _CACHE.consecutive_failures,
     }
+    # D.2 snapshot meta — additive; pre-D.2 clients ignore unknown keys.
+    response["meta"]["from_snapshot"] = from_snapshot
+    if snapshot_scan_id:
+        response["meta"]["scan_id"] = snapshot_scan_id
     if cache_warming:
         response["meta"]["warming_up"] = True
         warnings = list(response["meta"].get("warnings", []))
