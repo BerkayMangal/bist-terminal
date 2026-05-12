@@ -334,6 +334,45 @@ class ScanCoordinator:
                 },
             )
 
+            # Shared snapshot store (D.2.2) — additive: existing
+            # bb:snapshot:top10 still written above for backwards
+            # compatibility. The new store lets future module readers
+            # query the same ranked output via the generic API.
+            try:
+                from core.snapshot_store import get_default_store
+                scored = [
+                    (
+                        str(r.get("ticker", "")),
+                        float(r.get("overall") or 0),
+                        r,
+                    )
+                    for r in ranked
+                    if r.get("ticker")
+                ]
+                if scored:
+                    radar_scan_id = get_default_store().write_snapshot(
+                        "radar",
+                        scored,
+                        meta={
+                            "source_scan_id": scan_id,
+                            "universe_size": len(universe),
+                            "confidence_min": CONFIDENCE_MIN,
+                            "ranked_count": len(ranked),
+                        },
+                    )
+                    log.info(
+                        "radar snapshot persisted: %s (%d items)",
+                        radar_scan_id, len(scored),
+                        extra={"scan_id": scan_id},
+                    )
+            except Exception as exc:
+                # Best-effort — never let the new path break the existing one.
+                log.warning(
+                    "radar snapshot persist failed (legacy top10 unaffected): %r",
+                    exc,
+                    extra={"scan_id": scan_id},
+                )
+
             # ---- PHASE: cross signals (opsiyonel) ----
             if cross_fn is not None and history_map:
                 try:
