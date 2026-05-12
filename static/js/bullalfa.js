@@ -314,15 +314,44 @@
   }
 
   // ── Header ────────────────────────────────────────────────────
+  function snapshotBadge(meta) {
+    // Mirrors terminal.js `bwSnapshotBadge` for the BullAlpha header.
+    // Surfaces D.2.1 snapshot meta (from_snapshot, scan_id, age).
+    const asof = meta.cache_as_of || meta.generated_at;
+    if (!asof) return '';
+    const ageMs = Date.now() - new Date(asof).getTime();
+    if (!Number.isFinite(ageMs) || ageMs < 0) return '';
+    const mins = Math.round(ageMs / 60000);
+    const ageStr = mins < 1 ? 'az önce'
+                  : mins < 60 ? `${mins} dk önce`
+                  : `${Math.round(mins/60)} sa önce`;
+    const fromSnap = meta.from_snapshot === true;
+    const stale = mins > 30; // BullAlpha refresh cadence is 5min; >30 is stale
+    let color = 'var(--t4)';
+    let icon = '📸';
+    let label = `snapshot · ${ageStr}`;
+    if (!fromSnap) {
+      color = 'var(--ylw)';
+      icon = '⚡';
+      label = `canlı · ${ageStr}`;
+    } else if (stale) {
+      color = 'var(--orn)';
+      icon = '⏳';
+      label = `eski snapshot · ${ageStr}`;
+    }
+    return `<span style="font-size:10px;color:${color};margin-left:6px;font-family:'JetBrains Mono',monospace">${icon} ${label}</span>`;
+  }
+
   function renderHeader(meta, total) {
     const asof = meta.cache_as_of || meta.generated_at;
     const asofStr = asof ? new Date(asof).toLocaleString('tr-TR') : '<i style="color:var(--t4)">veri hazırlanıyor</i>';
     const cb = meta.circuit_breaker || {};
     const cbBadge = cb.frozen ? `<span class="pill p-red" style="font-size:10px;margin-left:8px">⛔ Veri Donmuş</span>` : '';
+    const snapBadge = snapshotBadge(meta);
     return `<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;flex-wrap:wrap;gap:12px">
       <div>
         <h2 style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-lg);color:var(--acc);margin:0">🎯 BullAlfa — BIST Tarayıcı ${cbBadge}</h2>
-        <p style="font-size:var(--fs-sm);color:var(--t3);margin-top:2px">Son güncelleme: ${asofStr} · ${total} hisse · evren BIST 100 · <span style="color:var(--t4)">5dk'da bir otomatik yenilenir</span></p>
+        <p style="font-size:var(--fs-sm);color:var(--t3);margin-top:2px">Son güncelleme: ${asofStr} ${snapBadge} · ${total} hisse · evren BIST 100 · <span style="color:var(--t4)">5dk'da bir otomatik yenilenir</span></p>
         <p style="font-size:11px;color:var(--t4);margin-top:4px;font-family:'JetBrains Mono',monospace">📅 Veri: son tamamlanmış işlem günü · 7-motor (Trend / Göreli Güç / Hacim / Kırılım / Pivot / Volatilite / Yorgunluk)</p>
       </div>
       <div style="display:flex;gap:6px">
