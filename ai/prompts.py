@@ -260,6 +260,110 @@ def trader_summary_prompt(r: dict, tech: Optional[dict] = None) -> str:
     )
 
 # ================================================================
+# KAP DISCLOSURE ANALYSIS PROMPT
+# ================================================================
+def kap_disclosure_prompt(disclosure: dict, metrics: Optional[dict] = None,
+                          analysis: Optional[dict] = None) -> str:
+    """Detailed Turkish analysis of a freshly-released balance sheet.
+
+    Inputs:
+      disclosure  KAP DisclosureRecord-as-dict
+      metrics     compute_metrics_v9 output for the ticker (post-Plan C
+                  invalidation, so this reflects the new bilanço)
+      analysis    analyze_symbol output (overall score, decision, ...)
+                  for the same ticker (optional)
+    """
+    ticker = disclosure.get("ticker") or "?"
+    name = disclosure.get("kap_title") or ticker
+    rule_type = disclosure.get("rule_type") or ""
+    year = disclosure.get("year")
+    period = disclosure.get("period")
+    publish = disclosure.get("publish_date_raw") or disclosure.get("publish_date") or ""
+
+    m = metrics or {}
+    a = analysis or {}
+
+    # Build the metric context — only include fields with values
+    def _fmt_pct(v, decimals=1):
+        if v is None:
+            return "?"
+        try:
+            return f"{float(v) * 100:.{decimals}f}%"
+        except Exception:
+            return "?"
+
+    def _fmt_num(v):
+        if v is None:
+            return "?"
+        try:
+            v = float(v)
+            if abs(v) >= 1e9:
+                return f"{v/1e9:.1f}B"
+            if abs(v) >= 1e6:
+                return f"{v/1e6:.1f}M"
+            return f"{v:,.0f}"
+        except Exception:
+            return "?"
+
+    fundamentals = (
+        f"Mevcut metrikler (Plan C: bilanço tazelendi sonrası):\n"
+        f"  Piyasa değeri: {_fmt_num(m.get('market_cap'))} TL\n"
+        f"  F/K: {m.get('pe') if m.get('pe') is not None else '?'}\n"
+        f"  PD/DD: {m.get('pb') if m.get('pb') is not None else '?'}\n"
+        f"  ROE: {_fmt_pct(m.get('roe'))}\n"
+        f"  Net marj: {_fmt_pct(m.get('net_margin'))}\n"
+        f"  Brüt marj: {_fmt_pct(m.get('gross_margin'))}\n"
+        f"  Borç/Özsermaye: {m.get('debt_equity') if m.get('debt_equity') is not None else '?'}\n"
+        f"  Altman Z: {m.get('altman_z') if m.get('altman_z') is not None else '?'}\n"
+        f"  Yıllık ciro büyüme: {_fmt_pct(m.get('revenue_growth'))}\n"
+        f"  Yıllık kar büyüme: {_fmt_pct(m.get('eps_growth'))}\n"
+    )
+    if m.get("quarterly_data_available"):
+        fundamentals += (
+            f"  Çeyreklik YoY ciro: {_fmt_pct(m.get('revenue_growth_yoy_q'))} "
+            f"(en son: {m.get('latest_quarter') or '?'})\n"
+            f"  Çeyreklik YoY net kar: {_fmt_pct(m.get('net_income_growth_yoy_q'))}\n"
+        )
+
+    score_ctx = ""
+    if a:
+        decision = a.get("decision") or "?"
+        overall = a.get("overall") or "?"
+        score_ctx = (
+            f"\nMevcut V13 saf değer skoru: {overall} ({decision}). "
+            f"Sektör: {a.get('sector') or '?'}.\n"
+        )
+
+    return (
+        "Sen kurumsal BIST analisti ve bilanço uzmanısın. 20 yıllık tecrüben var.\n"
+        "Bir şirket az önce KAP'a bilanço açıkladı. Aşağıdaki bağlama dayanarak "
+        "detaylı bir analiz hazırla. Türkçe yaz.\n"
+        "\n"
+        "KURALLAR:\n"
+        "- ASLA al/sat tavsiyesi VERME. Sadece analiz yap.\n"
+        "- YASAK KELİMELER: kesinlikle, garanti, mutlaka, uçacak, patlayacak, hemen al.\n"
+        "- Sadece verideki rakamlara dayan, hayalî veri uydurma.\n"
+        "- Her madde 1-2 cümle. Spesifik ol, rakam kullan.\n"
+        "\n"
+        f"AÇIKLAMA: {name} ({ticker})\n"
+        f"Dönem: {year} {rule_type} (period={period})\n"
+        f"Tarih: {publish}\n"
+        f"Konu: {disclosure.get('subject') or '?'}\n"
+        "\n"
+        f"{fundamentals}"
+        f"{score_ctx}"
+        "\n"
+        "Şu formatta yaz (her madde başlığıyla, başka HİÇBİR ŞEY yazma):\n"
+        "ÖZET: 1-2 cümle — bilançonun ana mesajı (büyüme mi, daralma mı, marj mı?).\n"
+        "POZİTİF: 1 cümle — en güçlü 1-2 olumlu gelişme (rakam ile).\n"
+        "NEGATİF: 1 cümle — en dikkat çekici 1-2 risk veya zayıflık (rakam ile).\n"
+        "DEĞİŞİM: 1 cümle — geçen döneme göre en önemli değişim (Y/Y veya Q/Q ile).\n"
+        "SEKTÖR: 1 cümle — bu sonuç sektör trendine uyuyor mu, ayrışıyor mu?\n"
+        "TAKİP: 1 cümle — bir sonraki çeyrekte/yıllıkta neyi izlemeli, kritik metrik?\n"
+    )
+
+
+# ================================================================
 # COMPARISON AI PROMPT — analyst-style, data-grounded
 # ================================================================
 def comparison_prompt(ai_context: str, deterministic_summary: str) -> str:

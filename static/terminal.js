@@ -88,18 +88,32 @@ const _API_TIMEOUTS = {
   '/api/agent':   20000,   // AI call
   '/api/ai-summary': 20000,
   '/api/bullwatch': 300000,  // first-run scan can take 1-3 min on cold cache (yfinance is slow)
+  '/api/kap/disclosure': 5000,    // disclosure detail is a single SQLite/Redis read
+  '/api/kap': 8000,                // generic KAP endpoints (recent / by-ticker / calendar)
 };
+// AI analyze endpoint takes longer (Grok call + analyze_symbol). Detect
+// the suffix and override.
+const _API_TIMEOUT_OVERRIDES = [
+  [/\/api\/kap\/disclosure\/\d+\/analyze$/, 45000],  // Grok + analyze_symbol
+];
 function _timeoutFor(path) {
+  for (const [rx, ms] of _API_TIMEOUT_OVERRIDES) {
+    if (rx.test(path)) return ms;
+  }
   for (const prefix of Object.keys(_API_TIMEOUTS)) {
     if (path.startsWith(prefix)) return _API_TIMEOUTS[prefix];
   }
   return 8000;  // default
 }
-async function api(p){
+async function api(p, opts){
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), _timeoutFor(p));
   try {
-    const r = await fetch(p, {signal: ctrl.signal});
+    const fopts = { signal: ctrl.signal };
+    if (opts && opts.method) fopts.method = opts.method;
+    if (opts && opts.body)   fopts.body   = opts.body;
+    if (opts && opts.headers) fopts.headers = opts.headers;
+    const r = await fetch(p, fopts);
     if (!r.ok) throw new Error(r.status);
     return r.json();
   } catch (e) {
@@ -686,17 +700,21 @@ function renderBilancolarPage(){
       const col = _kapItemColor(d);
       const lateBadge = d.is_late ? '<span class="pill p-red" style="font-size:9px;padding:1px 5px">geç</span>' : '';
       const ago = _kapTimeAgo(d.publish_date);
-      h += `<div class="clk" onclick="loadTicker('${esc(d.ticker)}')" style="padding:10px 14px;${i<filtered.length-1?'border-bottom:1px solid var(--bdr);':''}cursor:pointer;transition:background .1s" onmouseover="this.style.background='var(--bg3)'" onmouseout="this.style.background=''">
-        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+      const aiBadge = d.ai_summary ? '<span style="font-size:9px;color:var(--prp);font-weight:700;padding:1px 5px;background:rgba(186,104,200,.15);border-radius:3px;margin-left:6px">📖 AI</span>' : '';
+      h += `<div style="padding:10px 14px;${i<filtered.length-1?'border-bottom:1px solid var(--bdr);':''}transition:background .1s">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;cursor:pointer" onclick="loadTicker('${esc(d.ticker)}')" onmouseover="this.style.background='var(--bg3)'" onmouseout="this.style.background=''">
           <div style="flex:1;min-width:0">
             <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:3px">
               <span style="font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:700;color:var(--cyn)">${esc(d.ticker)}</span>
               <span style="font-size:11px;color:${col};font-weight:600">${esc(lbl)}</span>
-              ${lateBadge}
+              ${lateBadge}${aiBadge}
             </div>
             <div style="font-size:11px;color:var(--t3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(d.kap_title || '')} · ${esc(d.subject || '')}</div>
           </div>
           <div style="text-align:right;font-size:10px;color:var(--t4);font-family:'JetBrains Mono',monospace;flex-shrink:0">${ago}</div>
+        </div>
+        <div style="margin-top:6px;display:flex;gap:6px;justify-content:flex-end">
+          <button class="btn btn-sm" style="background:var(--bg3);color:var(--prp);font-size:10px;padding:2px 8px" onclick="event.stopPropagation();openKapAnalysis(${d.disclosure_index})">${d.ai_summary ? '📖 AI Yorumu' : '🤖 AI Analizi Üret'}</button>
         </div>
       </div>`;
     });
@@ -735,6 +753,100 @@ function renderBilancolarPage(){
   </div>`;
 
   pg.innerHTML = h;
+}
+
+// AI yorum modalı — disclosure card'daki 📖 buton'undan açılır.
+// İlk açılışta cached yorumu gösterir; yoksa async olarak analiz tetikler
+// ve hazır olunca aynı modalı doldurur.
+async function openKapAnalysis(disclosureIndex){
+  // Build modal shell first so user sees immediate feedback
+  const existing = document.getElementById('kapAnalysisOv');
+  if (existing) existing.remove();
+  const ov = document.createElement('div');
+  ov.id = 'kapAnalysisOv';
+  ov.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);z-index:9998;display:flex;align-items:center;justify-content:center;padding:20px';
+  ov.onclick = (e) => { if (e.target === ov) ov.remove(); };
+  ov.innerHTML = `<div style="background:var(--bg1);border:1px solid var(--bdr);border-radius:var(--rad2);max-width:680px;width:100%;max-height:80vh;overflow-y:auto;padding:24px;position:relative">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+      <h3 style="font-family:'JetBrains Mono',monospace;font-size:16px;color:var(--prp);margin:0">🤖 KAP Bilanço AI Analizi</h3>
+      <button onclick="document.getElementById('kapAnalysisOv').remove()" style="background:var(--bg3);color:var(--t2);border:1px solid var(--bdr);border-radius:var(--rad);padding:4px 10px;cursor:pointer;font-size:13px">Kapat</button>
+    </div>
+    <div id="kapAnalysisBody"><div class="ld"><div class="sp"></div><div class="ld-t">Disclosure yükleniyor...</div></div></div>
+    <p style="font-size:10px;color:var(--t4);margin-top:14px;line-height:1.6">⚠️ AI analizi geçmiş veri + mevcut bilanço metriklerine dayanır. Yatırım tavsiyesi değildir. Karar kullanıcıya aittir.</p>
+  </div>`;
+  document.body.appendChild(ov);
+
+  const body = document.getElementById('kapAnalysisBody');
+  // Fetch the disclosure detail; if ai_summary exists we render it, else trigger analysis
+  let disclosure = null;
+  try {
+    const r = await api(`/api/kap/disclosure/${disclosureIndex}`);
+    disclosure = r && r.disclosure;
+  } catch (e) {
+    body.innerHTML = '<div class="emp"><h3 style="color:var(--red);font-size:14px">Disclosure alınamadı</h3></div>';
+    return;
+  }
+  if (!disclosure) {
+    body.innerHTML = '<div class="emp"><h3 style="color:var(--red);font-size:14px">Disclosure bulunamadı</h3></div>';
+    return;
+  }
+
+  const header = `<div style="margin-bottom:14px;padding:12px;background:var(--bg3);border-radius:var(--rad);border-left:3px solid var(--prp)">
+    <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:4px">
+      <span style="font-family:'JetBrains Mono',monospace;font-size:18px;font-weight:700;color:var(--cyn)">${esc(disclosure.ticker)}</span>
+      <span style="font-size:12px;color:var(--t2)">${esc(disclosure.kap_title || '')}</span>
+    </div>
+    <div style="font-size:12px;color:var(--t2)">${esc(disclosure.year || '')} ${esc(disclosure.rule_type || '')} · ${esc(disclosure.subject || '')}</div>
+    <div style="font-size:10px;color:var(--t4);font-family:'JetBrains Mono',monospace;margin-top:4px">${esc(disclosure.publish_date_raw || disclosure.publish_date || '')}</div>
+  </div>`;
+
+  if (disclosure.ai_summary) {
+    body.innerHTML = header + _renderKapAiSummary(disclosure.ai_summary);
+    return;
+  }
+
+  // No cached AI summary — trigger generation
+  body.innerHTML = header + '<div class="ld"><div class="sp"></div><div class="ld-t">AI analizi üretiliyor… ~10-20 sn</div></div>';
+  try {
+    const r = await api(`/api/kap/disclosure/${disclosureIndex}/analyze`, { method: 'POST' });
+    if (r && r.ai_summary) {
+      body.innerHTML = header + _renderKapAiSummary(r.ai_summary);
+    } else {
+      body.innerHTML = header + '<div class="emp"><h3 style="color:var(--ylw);font-size:14px">AI analizi üretilemedi</h3><p style="font-size:11px;color:var(--t3)">Tekrar denemek için kapatıp tekrar açabilirsiniz.</p></div>';
+    }
+  } catch (e) {
+    body.innerHTML = header + `<div class="emp"><h3 style="color:var(--red);font-size:14px">AI servisi hata verdi</h3><p style="font-size:11px;color:var(--t3)">${esc(e.message || '')}</p></div>`;
+  }
+}
+
+// Render AI summary text into pretty sections (ÖZET / POZİTİF / ...)
+function _renderKapAiSummary(text){
+  const sections = [
+    { tag: 'ÖZET',    label: '🎯 Özet',           color: 'var(--cyn)' },
+    { tag: 'POZİTİF', label: '✓ Pozitif',         color: 'var(--grn)' },
+    { tag: 'NEGATİF', label: '⚠ Negatif',          color: 'var(--red)' },
+    { tag: 'DEĞİŞİM', label: '📊 Değişim',        color: 'var(--ylw)' },
+    { tag: 'SEKTÖR',  label: '🏢 Sektör Bağlamı', color: 'var(--blu)' },
+    { tag: 'TAKİP',   label: '👁 Takip Noktaları', color: 'var(--prp)' },
+  ];
+  let html = '';
+  let hadStructured = false;
+  sections.forEach(s => {
+    const re = new RegExp(`^\\s*${s.tag}\\s*:\\s*(.+?)(?=\\n\\s*(?:ÖZET|POZİTİF|NEGATİF|DEĞİŞİM|SEKTÖR|TAKİP)\\s*:|$)`, 'sm');
+    const m = text.match(re);
+    if (m) {
+      hadStructured = true;
+      html += `<div style="margin-bottom:10px;padding:10px 14px;background:var(--bg2);border-left:3px solid ${s.color};border-radius:var(--rad)">
+        <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:${s.color};text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">${s.label}</div>
+        <div style="font-size:13px;color:var(--t1);line-height:1.6">${esc(m[1].trim())}</div>
+      </div>`;
+    }
+  });
+  // If AI ignored the format, just show raw text
+  if (!hadStructured) {
+    html = `<div style="padding:12px;background:var(--bg2);border-radius:var(--rad);font-size:13px;color:var(--t1);line-height:1.7;white-space:pre-wrap">${esc(text)}</div>`;
+  }
+  return html;
 }
 
 // ===== MAKRO PAGE =====
