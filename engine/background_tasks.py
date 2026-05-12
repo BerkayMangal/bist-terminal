@@ -76,12 +76,18 @@ HEATMAP_REFRESH_INTERVAL: int = 1800  # OPT: 600→1800 (10dk→30dk, API yükü
 PAPER_TRADE_STARTUP_DELAY:    int = 90   # 1.5 minutes
 PAPER_TRADE_INTERVAL:          int = 300  # 5 minutes
 
-# BullWatch snapshot refresh: 240s startup delay (let heatmap run first to
-# avoid borsapy contention), then every 30 min. Single-tier in D.1;
-# D.3 will introduce hot/warm/cold tiered cadences.
-BULLWATCH_REFRESH_STARTUP_DELAY: int = 240
-BULLWATCH_REFRESH_INTERVAL:      int = 1800
+# BullWatch snapshot refresh — tiered cadence (D.3).
+#   Cold (full universe, ~437 tickers): every 30 min, the canonical source.
+#   Hot  (top 50 from cold snapshot):    every  5 min, subset re-scan.
+# Hot tier writes a separate `bullwatch_hot` snapshot consumed via
+# /api/bullwatch?tier=hot. Default endpoint behavior is unchanged.
+BULLWATCH_REFRESH_STARTUP_DELAY: int = 240   # cold tier startup delay
+BULLWATCH_REFRESH_INTERVAL:      int = 1800  # cold tier — 30 min
 BULLWATCH_RETRY_AFTER_ERROR:     int = 300
+
+BULLWATCH_HOT_STARTUP_DELAY:     int = 480   # ~8 min — wait for first cold scan
+BULLWATCH_HOT_INTERVAL:          int = 300   # hot tier — 5 min
+BULLWATCH_HOT_SIZE:              int = 50    # how many top tickers to refresh
 
 # ================================================================
 # DATA SOURCE IMPORTS — borsapy only
@@ -369,3 +375,92 @@ async def bullwatch_refresh_loop() -> None:
             sleep_for = BULLWATCH_RETRY_AFTER_ERROR
 
         await asyncio.sleep(sleep_for)
+
+
+# ================================================================
+# BULLWATCH HOT TIER LOOP (D.3, Tier 1)
+# ================================================================
+
+async def bullwatch_hot_tier_loop() -> None:
+    """Re-scan the top N tickers from the latest cold snapshot every
+    HOT_INTERVAL seconds and persist the result under module
+    `bullwatch_hot`.
+
+    Reads the canonical bullwatch snapshot, narrows the universe to the
+    top BULLWATCH_HOT_SIZE tickers, calls engine.bullwatch.scan on that
+    subset (with fundamental cache warm from the cold scan, this is
+    typically a 30–60 s job), and writes a separate snapshot. The
+    /api/bullwatch endpoint serves the hot snapshot when called with
+    `?tier=hot`; default behavior is unchanged.
+
+    Why a separate snapshot module: keeping cold and hot in separate
+    namespaces preserves the atomicity guarantees of SnapshotStore.
+    No partial-write merging across tiers, no scan_id mismatches.
+    """
+    log.info(
+        "BullWatch hot tier loop scheduled — first run in %ds, then every %ds (top %d)",
+        BULLWATCH_HOT_STARTUP_DELAY, BULLWATCH_HOT_INTERVAL, BULLWATCH_HOT_SIZE,
+    )
+    await asyncio.sleep(BULLWATCH_HOT_STARTUP_DELAY)
+
+    while True:
+        sleep_for = BULLWATCH_HOT_INTERVAL
+        try:
+            payload = await asyncio.to_thread(_run_bullwatch_hot_tier)
+            if payload is None:
+                # No cold snapshot to base on yet — back off briefly
+                sleep_for = BULLWATCH_RETRY_AFTER_ERROR
+        except asyncio.CancelledError:
+            log.info("BullWatch hot tier loop cancelled")
+            raise
+        except Exception as e:
+            log.warning("BullWatch hot tier loop tick failed: %r", e)
+            sleep_for = BULLWATCH_RETRY_AFTER_ERROR
+        await asyncio.sleep(sleep_for)
+
+
+def _run_bullwatch_hot_tier() -> Optional[dict]:
+    """Subset-scan the top N tickers and persist as `bullwatch_hot`.
+
+    Returns the new snapshot payload, None when no cold snapshot exists
+    yet (boot race) or there's nothing scoreable.
+    """
+    from core.snapshot_store import get_default_store
+    store = get_default_store()
+    top = store.read_top("bullwatch", BULLWATCH_HOT_SIZE)
+    if not top:
+        log.debug("hot tier: no cold snapshot yet, skipping")
+        return None
+    tickers = [t for t, _ in top]
+
+    from engine.bullwatch import scan as _bw_scan
+    results = _bw_scan(
+        tickers,
+        include_ineligible=True,
+        max_workers=8,
+    )
+    items = [r.to_dict() for r in results if r.eligible]
+    if not items:
+        log.info("hot tier: no eligible items in subset (universe=%d)", len(tickers))
+        return None
+
+    scored = [
+        (it.get("symbol"), float(it.get("score") or 0), it)
+        for it in items
+        if it.get("symbol")
+    ]
+    scan_id = store.write_snapshot(
+        "bullwatch_hot",
+        scored,
+        meta={
+            "universe_size": len(tickers),
+            "source_module": "bullwatch",
+            "tier": "hot",
+            "size_target": BULLWATCH_HOT_SIZE,
+        },
+    )
+    log.info(
+        "hot tier: wrote %d items as %s (subset of bullwatch top %d)",
+        len(items), scan_id, BULLWATCH_HOT_SIZE,
+    )
+    return {"scan_id": scan_id, "items": items}

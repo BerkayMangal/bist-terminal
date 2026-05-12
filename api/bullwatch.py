@@ -204,32 +204,38 @@ def _persist_snapshot(payload: dict) -> Optional[str]:
         return None
 
 
-def _read_snapshot_payload(limit: int = 200) -> Optional[dict]:
+def _read_snapshot_payload(
+    limit: int = 200,
+    module: str = SNAPSHOT_MODULE,
+) -> Optional[dict]:
     """Reconstruct a _run_scan-shaped payload from the latest snapshot.
 
     Returns None when no healthy snapshot is available. If the latest is
     corrupted, attempts a one-time fallback to `previous` automatically.
+
+    `module` defaults to SNAPSHOT_MODULE (`bullwatch`) — the canonical
+    cold snapshot. Pass `bullwatch_hot` to read the D.3 hot-tier subset.
     """
     try:
         store = get_default_store()
-        scan_id = store.read_latest_scan_id(SNAPSHOT_MODULE)
+        scan_id = store.read_latest_scan_id(module)
         if scan_id is None:
             return None
-        if not store.is_healthy(SNAPSHOT_MODULE, scan_id=scan_id):
+        if not store.is_healthy(module, scan_id=scan_id):
             log.warning("BullWatch snapshot %s corrupted — trying previous", scan_id)
-            if not store.fallback_to_previous(SNAPSHOT_MODULE):
+            if not store.fallback_to_previous(module):
                 return None
-            scan_id = store.read_latest_scan_id(SNAPSHOT_MODULE)
+            scan_id = store.read_latest_scan_id(module)
             if scan_id is None:
                 return None
-        meta = store.read_meta(SNAPSHOT_MODULE, scan_id=scan_id)
+        meta = store.read_meta(module, scan_id=scan_id)
         if meta is None:
             return None
-        top = store.read_top(SNAPSHOT_MODULE, limit, scan_id=scan_id)
+        top = store.read_top(module, limit, scan_id=scan_id)
         if not top:
             return None
         items_map = store.read_items(
-            SNAPSHOT_MODULE, [t for t, _ in top], scan_id=scan_id,
+            module, [t for t, _ in top], scan_id=scan_id,
         )
         items = [items_map[t] for t, _ in top if t in items_map]
         if not items:
@@ -350,6 +356,12 @@ async def api_bullwatch(
                                      description="Override float-mcap cap (TL). Default 250M."),
     diagnostic: bool = Query(False,
                              description="Include top 20 near-miss ineligible stocks"),
+    tier: Optional[str] = Query(None,
+                                description=(
+                                    "Snapshot tier: `hot` reads the 5-min "
+                                    "refreshed top-50 subset. Default reads "
+                                    "the 30-min full-universe snapshot."
+                                )),
 ):
     """
     Return ranked BullWatch candidates.
@@ -385,9 +397,19 @@ async def api_bullwatch(
             from_snapshot=False,
         )
 
-    # ── Build "current view" — snapshot first, in-memory _CACHE as fallback ──
-    view = _read_snapshot_payload(limit=200)
-    view_source: Optional[str] = "snapshot" if view is not None else None
+    # ── Pick the snapshot module based on the requested tier ───────
+    tier_norm = (tier or "").strip().lower()
+    if tier_norm == "hot":
+        # Try the hot tier first; fall back to cold so the user doesn't
+        # see an empty page during the first 8 min after boot when the
+        # hot loop hasn't run yet.
+        view = _read_snapshot_payload(limit=200, module="bullwatch_hot")
+        if view is None:
+            view = _read_snapshot_payload(limit=200, module=SNAPSHOT_MODULE)
+        view_source = "snapshot"
+    else:
+        view = _read_snapshot_payload(limit=200, module=SNAPSHOT_MODULE)
+        view_source: Optional[str] = "snapshot" if view is not None else None
     if view is None and _CACHE.get("items") is not None:
         view = _CACHE["items"]
         view_source = "memory"

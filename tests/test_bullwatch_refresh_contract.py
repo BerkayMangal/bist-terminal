@@ -89,6 +89,7 @@ async def _call(bw, **overrides) -> tuple[dict, dict]:
     kwargs = {
         "refresh": False, "min_score": 0.0, "zone": None,
         "limit": 50, "cap_tl": None, "diagnostic": False,
+        "tier": None,
     }
     kwargs.update(overrides)
     resp = await bw.api_bullwatch(**kwargs)

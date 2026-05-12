@@ -192,14 +192,22 @@ async def lifespan(application: FastAPI):
     # any other endpoint. Imported lazily so the optional module doesn't
     # block app startup if it has an import-time error.
     bullwatch_task = None
+    bullwatch_hot_task = None
     try:
         # BullWatch snapshot refresh — periodically scans the universe and
         # persists results into the shared snapshot store (core/snapshot_store).
         # Endpoint reads from the snapshot, never blocks on a live scan when
         # a snapshot exists. Replaces the previous in-memory warmup loop.
-        from engine.background_tasks import bullwatch_refresh_loop
+        from engine.background_tasks import (
+            bullwatch_refresh_loop,
+            bullwatch_hot_tier_loop,
+        )
         bullwatch_task = asyncio.create_task(bullwatch_refresh_loop())
         log.info("BullWatch refresh loop started")
+        # D.3 — hot tier loop refreshes the top-50 subset every 5 min
+        # so the most-watched names stay fresher than the full universe.
+        bullwatch_hot_task = asyncio.create_task(bullwatch_hot_tier_loop())
+        log.info("BullWatch hot tier loop started")
     except Exception as e:
         log.warning(f"BullWatch refresh loop not started: {e}")
     bullalfa_task = None
@@ -219,6 +227,8 @@ async def lifespan(application: FastAPI):
     task.cancel()
     if bullwatch_task is not None:
         bullwatch_task.cancel()
+    if bullwatch_hot_task is not None:
+        bullwatch_hot_task.cancel()
     if bullalfa_task is not None:
         bullalfa_task.cancel()
     redis_client.shutdown()
