@@ -181,11 +181,28 @@ def score_quality(m: dict, sector_group: Optional[str] = None) -> Optional[float
     ])
 
 
+def _best_growth(m: dict, q_key: str, annual_key: str) -> Optional[float]:
+    """Prefer quarterly YoY-Q growth when available (fresher signal —
+    updates on every quarterly report instead of waiting for year-end),
+    fall back to the annual field otherwise.
+
+    Plan B v2: this is the only behavioral change; thresholds and the
+    weight structure of score_growth stay identical.
+    """
+    if m.get("quarterly_data_available"):
+        v = m.get(q_key)
+        if v is not None:
+            return v
+    return m.get(annual_key)
+
+
 def score_growth(m: dict, sector_group: Optional[str] = None) -> Optional[float]:
     th_rg = get_threshold(sector_group, "revenue_growth")
+    rev_g = _best_growth(m, "revenue_growth_yoy_q", "revenue_growth")
+    eps_g = _best_growth(m, "net_income_growth_yoy_q", "eps_growth")
     return avg([
-        score_higher(m.get("revenue_growth"), *th_rg) if th_rg else None,
-        score_higher(m.get("eps_growth"), -0.10, 0.05, 0.15, 0.30),
+        score_higher(rev_g, *th_rg) if th_rg else None,
+        score_higher(eps_g, -0.10, 0.05, 0.15, 0.30),
         score_higher(m.get("ebitda_growth"), -0.05, 0.05, 0.12, 0.25),
         score_lower(m.get("peg"), 0.5, 1.0, 1.8, 3.0) if (m.get("peg") or 0) > 0 else None,
     ])
