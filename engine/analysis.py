@@ -30,10 +30,9 @@ from config import V11_FA_WEIGHTS, V13_OVERALL_FA_WEIGHT, V13_OVERALL_RISK_FACTO
 from engine.scoring import (
     map_sector, score_value, score_quality, score_growth,
     score_balance, score_earnings, score_moat, score_capital,
-    score_momentum, score_technical_break, score_institutional_flow,
-    compute_risk_penalties, compute_ivme,
-    detect_hype, confidence_score,
-    timing_label, quality_label, entry_quality_label,
+    compute_risk_penalties,
+    confidence_score,
+    quality_label, entry_quality_label,
     decision_engine, style_label, legendary_labels, drivers,
     compute_valuation_stretch,
 )
@@ -229,11 +228,13 @@ def analyze_symbol(symbol: str, scoring_version: Optional[str] = None) -> dict:
     m = validate_metrics(normalize_metrics(compute_metrics(symbol)))
     sector_group = map_sector(m.get("sector", ""))
 
-    tech = None
-    try:
-        tech = compute_technical(symbol)
-    except Exception as e:
-        log.debug(f"analyze_symbol tech for {symbol}: {e}")
+    # Radar is pure fundamental — momentum / tech_break / institutional flow
+    # were already excluded from v13_final (kept only as a sentiment badge).
+    # The badge layer has been removed to match the actual scoring contract:
+    # what users see should match what the score is computed from. BullAlpha
+    # remains the timing+fundamental hybrid; Cross Hunter handles technical
+    # signals; Radar is now a clean fundamental scanner. compute_technical
+    # is still used by those other modules; only this caller drops it.
 
     # ──────────────────────────────────────────────────
     # K1: 7 Boyutlu Temel Analiz — compute raw scores
@@ -350,28 +351,15 @@ def analyze_symbol(symbol: str, scoring_version: Optional[str] = None) -> dict:
     deger_score = v13_final  # V13: deger IS the final score
 
     # ──────────────────────────────────────────────────
-    # MOMENTUM — kept as separate sentiment badge (NOT in score)
+    # Labels & Decision — pure-FA only (no momentum/timing)
     # ──────────────────────────────────────────────────
-    mom = score_momentum(m, tech)
-    tb = score_technical_break(m, tech)
-    inst = score_institutional_flow(m, tech)
-    scores["momentum"] = round(mom, 1) if mom is not None else 50.0
-    scores["tech_break"] = round(tb, 1) if tb is not None else 50.0
-    scores["inst_flow"] = round(inst, 1) if inst is not None else 50.0
-    ivme_score = compute_ivme(scores)
-
-    # Hype detection (informational only — doesn't change score)
-    is_hype, hype_reason = detect_hype(tech, fa_pure)
-
-    # ──────────────────────────────────────────────────
-    # Labels & Decision (V13: decision based on FA+risk, not momentum)
-    # ──────────────────────────────────────────────────
-    t_label = timing_label(ivme_score)
+    # entry_quality_label and decision_engine still take an `ivme` argument
+    # for legacy reasons. We pass a neutral 50 so the momentum branch never
+    # fires — labels are decided purely on fa_pure + risk_penalty. This
+    # keeps the scoring.py functions reusable elsewhere without forking.
     q_label = quality_label(fa_pure)
-    e_label = entry_quality_label(fa_pure, ivme_score, risk_penalty)
-    if is_hype:
-        e_label = "SPEKÜLATİF"
-    decision = decision_engine(fa_pure, ivme_score, risk_penalty, e_label)
+    e_label = entry_quality_label(fa_pure, 50.0, risk_penalty)
+    decision = decision_engine(fa_pure, 50.0, risk_penalty, e_label)
 
     # Confidence — base score minus penalty for excluded dimensions
     confidence = confidence_score(m)
@@ -382,9 +370,6 @@ def analyze_symbol(symbol: str, scoring_version: Optional[str] = None) -> dict:
     style = style_label(scores)
     legends = legendary_labels(m, scores)
     pos, neg = drivers(scores, confidence, m, sector_group)
-
-    if is_hype and hype_reason:
-        neg.insert(0, f"⚠️ HYPE: {hype_reason}")
 
     if scores_imputed:
         neg.append(f"Veri eksik: {', '.join(scores_imputed)} boyutları hariç tutuldu")
@@ -412,24 +397,18 @@ def analyze_symbol(symbol: str, scoring_version: Optional[str] = None) -> dict:
             f"+ ValStr({val_stretch:+d}) + Risk({capped_risk}×{V13_OVERALL_RISK_FACTOR}) "
             f"= {v13_final:.1f}"
         ),
-        "sentiment": {
-            "ivme_score": ivme_score,
-            "momentum": scores.get("momentum", 50),
-            "tech_break": scores.get("tech_break", 50),
-            "inst_flow": scores.get("inst_flow", 50),
-            "timing": t_label,
-            "is_hype": is_hype,
-            "hype_reason": hype_reason,
-        },
+        # `sentiment` block intentionally removed — Radar is pure-fundamental.
+        # Timing / momentum signals live in BullAlpha (timing+FA hybrid) and
+        # Cross Hunter (technical), not here.
     }
 
     r = {
         "symbol": symbol, "ticker": base_ticker(symbol), "name": m["name"], "currency": m["currency"],
         "sector": m.get("sector", ""), "sector_group": sector_group, "industry": m.get("industry", ""),
         "metrics": m, "scores": scores, "overall": v13_final, "confidence": confidence,
-        "fa_score": fa_pure, "deger": deger_score, "ivme": ivme_score,
-        "risk_score": risk_score, "entry_label": e_label, "is_hype": is_hype,
-        "timing": t_label, "quality_tag": q_label, "decision": decision,
+        "fa_score": fa_pure, "deger": deger_score,
+        "risk_score": risk_score, "entry_label": e_label,
+        "quality_tag": q_label, "decision": decision,
         "risk_penalty": risk_penalty, "risk_reasons": risk_reasons,
         "style": style, "legendary": legends, "positives": pos, "negatives": neg,
         "applicability": applicability_flags,
@@ -447,7 +426,7 @@ def analyze_symbol(symbol: str, scoring_version: Optional[str] = None) -> dict:
         from engine.data_quality import assess_data_quality, build_decision_context
         r["data_health"] = assess_data_quality(m, scores_imputed)
         r["data_context"] = r["data_health"]
-        r["decision_context"] = build_decision_context(r["data_health"], confidence, is_hype, scores_imputed)
+        r["decision_context"] = build_decision_context(r["data_health"], confidence, False, scores_imputed)
     except Exception as e:
         log.debug(f"Data quality skipped for {symbol}: {e}")
 

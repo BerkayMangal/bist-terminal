@@ -178,16 +178,17 @@ function renderDiscovery(q){
     });
     h+=`</div>`;
 
-    // 3. Strong momentum picks
-    const topMom=[...sc.items].sort((a,b)=>(b.ivme||0)-(a.ivme||0)).slice(0,4);
-    h+=`<div class="disc-section"><div class="disc-label">⚡ Güçlü Fiyat Trendi</div>`;
-    topMom.forEach(it=>{
-      const iv=(it.ivme||0).toFixed(0);
+    // 3. Strong quality picks (was: momentum/ivme picks; Plan A switched
+    // Radar to pure-fundamental so we surface a quality leaderboard here).
+    const topQual=[...sc.items].sort((a,b)=>((b.scores||{}).quality||0)-((a.scores||{}).quality||0)).slice(0,4);
+    h+=`<div class="disc-section"><div class="disc-label">⭐ Güçlü Şirket Kalitesi</div>`;
+    topQual.forEach(it=>{
+      const qv=(((it.scores||{}).quality)||0).toFixed(0);
       h+=`<div class="disc-row" onmousedown="event.preventDefault();pickStock('${esc(it.ticker)}')">
         <span class="disc-ticker">${esc(it.ticker)}</span>
         <span class="disc-name">${esc(it.sector||'')}</span>
-        <span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--t3)">Trend</span>
-        <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--blu);font-weight:700">${iv}</span>
+        <span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--t3)">Kalite</span>
+        <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--blu);font-weight:700">${qv}</span>
       </div>`;
     });
     h+=`</div>`;
@@ -414,10 +415,13 @@ if(hr){
   h+=`<div class="hmc opp" style="border-left-color:var(--grn)"><div style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-xs);color:var(--grn);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">🏛️ Değer Liderleri</div>`;
   if(hr.deger_leaders&&hr.deger_leaders.length){hr.deger_leaders.forEach((dl,i)=>{h+=`<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;${i<hr.deger_leaders.length-1?'border-bottom:1px solid var(--bdr)':''}"><span class="clk-t" style="font-size:var(--fs-md)" onclick="loadTicker('${esc(dl.ticker)}')">${esc(dl.ticker)}</span><div style="text-align:right"><span style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-lg);font-weight:700;color:var(--grn)">${dl.deger}</span><span style="font-size:var(--fs-xs);color:var(--t3);margin-left:4px">D</span></div></div>`;});}else{h+=`<div class="hmc-desc" style="color:var(--t3)">Tarama sonrası görünür</div>`;}
   h+=`<div style="font-size:var(--fs-xs);color:var(--t4);margin-top:8px;font-style:italic">Uzun vade · Haftalık güncellenir</div></div>`;
-  // İVME LİDERLERİ
-  h+=`<div class="hmc opp" style="border-left-color:var(--blu)"><div style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-xs);color:var(--blu);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">⚡ İvme Liderleri</div>`;
-  if(hr.ivme_leaders&&hr.ivme_leaders.length){hr.ivme_leaders.forEach((dl,i)=>{h+=`<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;${i<hr.ivme_leaders.length-1?'border-bottom:1px solid var(--bdr)':''}"><span class="clk-t" style="font-size:var(--fs-md)" onclick="loadTicker('${esc(dl.ticker)}')">${esc(dl.ticker)}</span><div style="text-align:right"><span style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-lg);font-weight:700;color:var(--blu)">${dl.ivme}</span><span style="font-size:var(--fs-xs);color:var(--t3);margin-left:4px">I</span></div></div>`;});}else{h+=`<div class="hmc-desc" style="color:var(--t3)">Tarama sonrası görünür</div>`;}
-  h+=`<div style="font-size:var(--fs-xs);color:var(--t4);margin-top:8px;font-style:italic">Kısa vade · Günlük güncellenir</div></div>`;
+  // KALİTE LİDERLERİ — replaces the old "İvme Liderleri" panel. Radar is
+  // pure fundamental after Plan A; we surface a second FA dimension here
+  // (quality: ROE, margin stability, ROIC) instead of momentum.
+  h+=`<div class="hmc opp" style="border-left-color:var(--blu)"><div style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-xs);color:var(--blu);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">⭐ Kalite Liderleri</div>`;
+  const _qLead=hr.quality_leaders||hr.ivme_leaders;  // legacy field fallback
+  if(_qLead&&_qLead.length){_qLead.forEach((dl,i)=>{h+=`<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;${i<_qLead.length-1?'border-bottom:1px solid var(--bdr)':''}"><span class="clk-t" style="font-size:var(--fs-md)" onclick="loadTicker('${esc(dl.ticker)}')">${esc(dl.ticker)}</span><div style="text-align:right"><span style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-lg);font-weight:700;color:var(--blu)">${dl.quality!=null?dl.quality.toFixed(0):'—'}</span><span style="font-size:var(--fs-xs);color:var(--t3);margin-left:4px">K</span></div></div>`;});}else{h+=`<div class="hmc-desc" style="color:var(--t3)">Tarama sonrası görünür</div>`;}
+  h+=`<div style="font-size:var(--fs-xs);color:var(--t4);margin-top:8px;font-style:italic">ROE · marj stabilitesi · ROIC</div></div>`;
   h+=`</div>`;
   // Risk + Bot + Watch
   h+=`<div class="g3" style="margin-bottom:18px">`;
@@ -428,13 +432,16 @@ if(hr){
   // BUGÜN NE YAPMALI — aksiyon odaklı özet
   if(hasSc){
     const best=sc.items[0];const worst=sc.items[sc.items.length-1];
-    const topIvme=sc.items.reduce((a,b)=>(b.ivme||0)>(a.ivme||0)?b:a,sc.items[0]);
+    // Plan A: removed topIvme spotlight — Radar is fundamental-only now.
+    // The "quality leader" is surfaced as a second pick by sorting on the
+    // quality dimension instead of momentum.
+    const topQ=sc.items.reduce((a,b)=>((b.scores||{}).quality||0)>((a.scores||{}).quality||0)?b:a,sc.items[0]);
     h+=`<div style="margin-bottom:18px;padding:16px;background:linear-gradient(135deg,rgba(255,179,0,.06),rgba(100,181,246,.04));border:1px solid rgba(255,179,0,.2);border-radius:var(--rad)">`;
     h+=`<div style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-xs);color:var(--acc);text-transform:uppercase;letter-spacing:1px;margin-bottom:12px">📋 Bugün Ne Yapmalı?</div>`;
     h+=`<div id="homeActionText" style="font-size:var(--fs-base);color:var(--t1);line-height:1.7;margin-bottom:12px"><span style="color:var(--t3)">Makro analiz yükleniyor...</span></div>`;
     h+=`<div style="display:flex;flex-direction:column;gap:10px;font-size:var(--fs-base);line-height:1.6">`;
     h+=`<div style="display:flex;gap:8px;align-items:flex-start"><span style="color:var(--grn);font-weight:700;flex-shrink:0">✓</span><span style="color:var(--t1)"><span class="clk-t" onclick="loadTicker('${esc(best.ticker)}')">${esc(best.ticker)}</span> değer skoru <b style="color:var(--grn)">${(best.deger||best.overall).toFixed(0)}</b> ile en güçlü — takip et</span></div>`;
-    if(topIvme.ticker!==best.ticker){h+=`<div style="display:flex;gap:8px;align-items:flex-start"><span style="color:var(--blu);font-weight:700;flex-shrink:0">⚡</span><span style="color:var(--t1)"><span class="clk-t" onclick="loadTicker('${esc(topIvme.ticker)}')">${esc(topIvme.ticker)}</span> ivme skoru <b style="color:var(--blu)">${(topIvme.ivme||50).toFixed(0)}</b> — momentum güçlü</span></div>`;}
+    if(topQ.ticker!==best.ticker){h+=`<div style="display:flex;gap:8px;align-items:flex-start"><span style="color:var(--blu);font-weight:700;flex-shrink:0">⭐</span><span style="color:var(--t1)"><span class="clk-t" onclick="loadTicker('${esc(topQ.ticker)}')">${esc(topQ.ticker)}</span> kalite skoru <b style="color:var(--blu)">${(((topQ.scores||{}).quality)||50).toFixed(0)}</b> — şirket kalitesi güçlü</span></div>`;}
     h+=`<div style="display:flex;gap:8px;align-items:flex-start"><span style="color:var(--red);font-weight:700;flex-shrink:0">✗</span><span style="color:var(--t2)"><span class="clk-t" onclick="loadTicker('${esc(worst.ticker)}')">${esc(worst.ticker)}</span> değer skoru <b style="color:var(--red)">${(worst.deger||worst.overall).toFixed(0)}</b> — dikkatli ol</span></div>`;
     h+=`</div></div>`;
   }
@@ -1675,8 +1682,12 @@ const cpL=v11.ciro_pd_label;const eqL=v11l.earnings_quality||{};const caL=v11l.c
 const dc=r.decision||'';const dCol=vColor(dc);
 const dcBg=vBg(dc);
 const dcDesc=VERDICT_DESC[dc]||'';
-const tmDesc=r.timing==='ERKEN'?'Henüz kimse fark etmedi — potansiyel erken fırsat.':r.timing==='GELİŞİYOR'?'Sinyaller oluşuyor, dikkatle takip et.':r.timing==='TEYİTLİ'?'Trend başladı, giriş penceresi açık.':r.timing==='GEÇ'?'Fiyatlanmış olabilir — geç kaldın.':'Aşırı hareket — düzeltme riski yüksek.';
-const el=r.entry_label||'';const elCol=el==='TEYİTLİ'?'var(--grn)':el==='ERKEN'?'var(--blu)':el==='FIRSAT'?'var(--cyn)':el==='GEÇ'?'var(--ylw)':el==='SPEKÜLATİF'?'var(--red)':'var(--t3)';const elBg=el==='TEYİTLİ'?'var(--grnd)':el==='SPEKÜLATİF'?'rgba(239,83,80,.15)':'var(--bg3)';const elDesc=el==='TEYİTLİ'?'Güçlü temel + momentum başlamış görünüyor — uygun giriş noktası olabilir.':el==='ERKEN'?'Temel güçlü ama momentum henüz yok. Sabırlı yatırımcı için ilginç.':el==='FIRSAT'?'Orta temel + uygun momentum. İzlenmeye değer.':el==='GEÇ'?'Temel iyi ama fiyat çoktan yükselmiş görünüyor. Dikkatli ol.':el==='SPEKÜLATİF'?'⚠️ DİKKAT: Temel zayıf ama fiyat hızla yükseliyor. Hype riski olabilir.':el==='KAÇIN'?'Zayıf temel + yüksek risk görünüyor. Dikkatli ol.':'Beklemede — net sinyal yok.';
+// Radar is pure fundamental now — timing description was dead code (unused
+// after Plan A removed r.timing) so it's been removed. Entry-label
+// descriptions updated to FA-only language; the underlying classifier
+// still runs but with a neutral momentum input, so SPEKÜLATİF / GEÇ /
+// ERKEN branches no longer fire in practice.
+const el=r.entry_label||'';const elCol=el==='TEYİTLİ'?'var(--grn)':el==='ERKEN'?'var(--blu)':el==='FIRSAT'?'var(--cyn)':el==='GEÇ'?'var(--ylw)':el==='SPEKÜLATİF'?'var(--red)':'var(--t3)';const elBg=el==='TEYİTLİ'?'var(--grnd)':el==='SPEKÜLATİF'?'rgba(239,83,80,.15)':'var(--bg3)';const elDesc=el==='TEYİTLİ'?'Güçlü temel + düşük risk — uygun giriş noktası olabilir.':el==='ERKEN'?'Temel güçlü, sabırlı yatırımcı için ilginç.':el==='FIRSAT'?'Orta temel — izlenmeye değer.':el==='GEÇ'?'Temel iyi, dikkatli olun.':el==='SPEKÜLATİF'?'⚠️ DİKKAT: Temel zayıf — spekülasyon riski yüksek.':el==='KAÇIN'?'Zayıf temel veya yüksek risk.':'Beklemede — net sinyal yok.';
 const faScore=r.fa_score||r.deger||r.overall;const riskScore=r.risk_score||0;
 $('dp').innerHTML=`<div class="dp-h" style="background:linear-gradient(135deg,var(--bg1),var(--bg2))">
 <div style="flex:1">
@@ -1748,9 +1759,8 @@ $('dp').innerHTML=`<div class="dp-h" style="background:linear-gradient(135deg,va
   <!-- 3 RING SCORES + KEY METRICS -->
   <div class="g2" style="margin-bottom:14px">
     <div>
-      <div style="display:flex;justify-content:center;gap:12px;margin-bottom:12px">
+      <div style="display:flex;justify-content:center;gap:18px;margin-bottom:12px">
         <div style="text-align:center">${ring(faScore,'TEMEL',90)}<div style="font-size:9px;color:var(--grn);margin-top:2px">Temel Analiz Skoru</div><div style="font-size:8px;color:var(--t4)">(Şirket kalitesi)</div></div>
-        <div style="text-align:center"><div style="width:80px;height:80px;border-radius:12px;border:2px dashed ${sC(r.ivme||50)}40;display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--bg3)"><span style="font-family:'JetBrains Mono',monospace;font-size:22px;font-weight:700;color:${sC(r.ivme||50)}">${(r.ivme||50).toFixed(0)}</span><span style="font-size:8px;color:var(--t3);text-transform:uppercase">Duyarlılık</span></div><div style="font-size:9px;color:var(--t3);margin-top:4px">Piyasa Duyarlılığı</div><div style="font-size:8px;color:var(--red)">(Skora ETKİSİ YOK)</div></div>
         <div style="text-align:center">${ring(r.overall,'KARAR',90)}<div style="font-size:9px;color:var(--prp);margin-top:2px">V13 Değer</div><div style="font-size:8px;color:var(--t4)">(Saf temel)</div></div>
       </div>
       <div class="mg" style="grid-template-columns:repeat(2,1fr)">
@@ -1803,9 +1813,7 @@ $('dp').innerHTML=`<div class="dp-h" style="background:linear-gradient(135deg,va
 <div class="ds" id="ds-sc">
   <div style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-xs);color:var(--grn);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">🏛️ Temel Analiz Boyutları — Şirket Kalitesi</div>
   <div class="g4" style="margin-bottom:14px">${[['value','DEĞERLEME','Hisse ucuz mu pahalı mı?'],['quality','ŞİRKET KALİTESİ','Kârlılık ve verimlilik'],['growth','BÜYÜME','Gelir ve kâr artışı'],['balance','FİNANSAL SAĞLIK','Borç ve nakit dengesi'],['earnings','KÂR KALİTESİ','Nakit gerçekten geliyor mu?'],['moat','REKABET AVANTAJI','Rakiplere karşı üstünlük'],['capital','PARAYIZYI KULLANIYOR','Yönetim kararları']].map(([k,l,d])=>`<div style="text-align:center" title="${d}">${ring(s[k],l,76)}</div>`).join('')}</div>
-  <div style="border-top:2px dashed var(--bdr);margin:14px 0 10px;padding-top:10px"><div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><span style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-xs);color:var(--orn);text-transform:uppercase;letter-spacing:1px">📡 Piyasa Duyarlılığı</span><span style="font-size:7px;padding:2px 6px;border-radius:3px;background:rgba(239,83,80,.1);color:var(--red);font-family:'JetBrains Mono',monospace;font-weight:700">SKORA ETKİSİ YOK</span></div></div>
-  <div class="g4" style="margin-bottom:14px">${[['momentum','FİYAT TRENDİ','Fiyat yukarı mı gidiyor?'],['tech_break','TEKNİK KIRILIM','Seviyeler kırılıyor mu?'],['inst_flow','KURUM AKIŞI','Kurumlar alıyor mu?']].map(([k,l,d])=>`<div style="text-align:center" title="${d}">${ring(s[k],l,76)}</div>`).join('')}</div>
-  <div style="font-size:11px;color:var(--t4);text-align:center">0-100 arası skor · 70+ güçlü · 50+ orta · 50 altı zayıf</div>
+  <div style="font-size:11px;color:var(--t4);text-align:center">0-100 arası skor · 70+ güçlü · 50+ orta · 50 altı zayıf · momentum/teknik için → <b>BullAlfa</b> ya da <b>Cross Hunter</b></div>
 </div>
 
 <!-- TAB: DEĞERLEME -->
