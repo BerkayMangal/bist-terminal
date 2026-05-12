@@ -1271,6 +1271,43 @@ function _bwBannerSnapshotFallback(){
   return `<div style="background:linear-gradient(90deg,rgba(255,167,38,.12),rgba(255,167,38,.04));border:1px solid rgba(255,167,38,.35);border-radius:var(--rad);padding:10px 14px;margin-bottom:14px;font-size:12px;color:var(--orn);font-family:'JetBrains Mono',monospace">📦 Canlı veri alınamadı — son kayıtlı snapshot gösteriliyor.</div>`;
 }
 
+// Inline badge appended to the "Son başarılı tarama" line. Surfaces
+// the D.1+ snapshot meta so users can tell at a glance whether the
+// view comes from a snapshot, how old it is, and whether the server
+// has already kicked a background refresh.
+function bwSnapshotBadge(bw){
+  const m = bw && bw._meta;
+  if(!m) return '';
+  const asofIso = m.as_of || bw.asof;
+  if(!asofIso) return '';
+  const ageMs = Date.now() - new Date(asofIso).getTime();
+  if(!Number.isFinite(ageMs) || ageMs < 0) return '';
+  const mins = Math.round(ageMs / 60000);
+  const ageStr = mins < 1 ? 'az önce' :
+                 mins < 60 ? `${mins} dk önce` :
+                 `${Math.round(mins/60)} sa önce`;
+  // Stale band: served from snapshot AND meta flagged stale, OR
+  // age beyond 60 min regardless of flag (defensive — if the server
+  // forgets the flag, the user still sees a hint).
+  const stale = m.stale === true || mins > 60;
+  const liveScan = m.from_snapshot === false;
+  const refreshing = m.refresh_scheduled === true;
+  let color = 'var(--t4)';     // default subtle grey
+  let icon = '📸';
+  let label = `snapshot · ${ageStr}`;
+  if(liveScan){
+    color = 'var(--ylw)';
+    icon = '⚡';
+    label = `canlı tarama · ${ageStr}`;
+  } else if(stale){
+    color = 'var(--orn)';
+    icon = '⏳';
+    label = `eski snapshot · ${ageStr}`;
+  }
+  if(refreshing) label += ' · yenileniyor';
+  return `<span style="font-size:10px;color:${color};margin-left:6px;font-family:'JetBrains Mono',monospace" title="${m.from_snapshot===false?'Veri canlı taramadan geldi':'Veri snapshot katmanından alındı'}${refreshing?'; arka planda yeni tarama başladı':''}">${icon} ${label}</span>`;
+}
+
 function renderBullwatchPage(){
   const pg=$('pg-bullwatch');
   // Initial load — auto-trigger on first visit. Snapshot fallback handled
@@ -1323,6 +1360,10 @@ function renderBullwatchPage(){
   const capTl=bw?.cap_tl||250e6;
   const capStr=`${(capTl/1e6).toFixed(0)}M TL`;
   const nearMisses=bw?.near_misses||[];
+  // Snapshot meta badge — surfaces D.1+ meta fields so users can tell
+  // at-a-glance whether they're seeing a snapshot or a live scan and
+  // how old it is. Pure presentation, no behavior change.
+  const snapBadge=bwSnapshotBadge(bw);
   // Phase A.10 Step 2-A.2 — UX safety banners (additive, above header)
   let bannersHtml = '';
   if(S.bwIsSnapshotFallback) bannersHtml += _bwBannerSnapshotFallback();
@@ -1333,7 +1374,7 @@ function renderBullwatchPage(){
   let h=bannersHtml+`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px">
     <div>
       <h2 style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-lg);color:var(--acc)">🐂 BullWatch — Sessiz Birikim Radarı</h2>
-      <p style="font-size:var(--fs-sm);color:var(--t3);margin-top:2px">Son başarılı tarama: ${asof?new Date(asof).toLocaleString('tr-TR'):'<i style="color:var(--t4)">veri hazırlanıyor</i>'} · ${scanned} hisse tarandı · ${eligible} eleğe takıldı · float ≤${capStr}</p>
+      <p style="font-size:var(--fs-sm);color:var(--t3);margin-top:2px">Son başarılı tarama: ${asof?new Date(asof).toLocaleString('tr-TR'):'<i style="color:var(--t4)">veri hazırlanıyor</i>'} ${snapBadge} · ${scanned} hisse tarandı · ${eligible} eleğe takıldı · float ≤${capStr}</p>
       <p style="font-size:11px;color:var(--t3);margin-top:4px;font-family:'JetBrains Mono',monospace">📊 Aktif sinyal: <b style="color:var(--grn)">${counts.CONVICTION||0} conviction</b> · <b style="color:var(--ylw)">${counts.CONFIRMED||0} confirmed</b> · <b style="color:var(--blu)">${counts.EARLY||0} early</b></p>
       <p style="font-size:10px;color:var(--t4);margin-top:2px;font-family:'JetBrains Mono',monospace">📅 Veri: son tamamlanmış işlem günü (intraday partial bar dışlandı — gün içinde sonuçlar tutarlı)</p>
     </div>
