@@ -3,7 +3,7 @@
 // ===== STATE =====
 const S={page:'home',scan:null,cross:null,macro:null,dash:null,takas:null,social:null,hero:null,quote:null,book:null,wl:JSON.parse(localStorage.getItem('bb_wl')||'[]'),seen:JSON.parse(localStorage.getItem('bb_seen')||'[]'),_alerts:[]};
 const QT=['ASELS','THYAO','BIMAS','KCHOL','TUPRS','AKBNK','GARAN','FROTO','TOASO','PGSUS'];
-const PAGES=[{id:'nasil',label:'Nasıl?',icon:'❓'},{id:'home',label:'Ana Sayfa',icon:'🏠'},{id:'radar',label:'Radar',icon:'📡'},{id:'bullwatch',label:'BullWatch',icon:'🐂'},{id:'bullalfa',label:'BullAlfa',icon:'🎯'},{id:'cross',label:'Sinyaller',icon:'⚡'},{id:'makro',label:'Makro',icon:'🌍'},{id:'portfoy',label:'Portföy',icon:'💼'}];
+const PAGES=[{id:'nasil',label:'Nasıl?',icon:'❓'},{id:'home',label:'Ana Sayfa',icon:'🏠'},{id:'radar',label:'Radar',icon:'📡'},{id:'bullwatch',label:'BullWatch',icon:'🐂'},{id:'bullalfa',label:'BullAlfa',icon:'🎯'},{id:'bilancolar',label:'Bilançolar',icon:'📰'},{id:'cross',label:'Sinyaller',icon:'⚡'},{id:'makro',label:'Makro',icon:'🌍'},{id:'portfoy',label:'Portföy',icon:'💼'}];
 const $=s=>document.getElementById(s);
 
 // ===== XSS SANITIZER =====
@@ -137,7 +137,42 @@ setInterval(()=>{$('clk').textContent=new Date().toLocaleTimeString('tr-TR',{hou
 
 // ===== NAVIGATION =====
 const nav=$('nav');const mobNav=$('mobNav');PAGES.forEach(p=>{const b=document.createElement('button');b.className='nav-b'+(p.id==='home'?' on':'');b.textContent=p.label;b.dataset.p=p.id;b.onclick=()=>goPage(p.id);nav.appendChild(b);if(mobNav){const mb=document.createElement('button');mb.className='mob-bnav-item'+(p.id==='home'?' on':'');mb.dataset.p=p.id;mb.onclick=()=>goPage(p.id);mb.innerHTML=`<span class="ico" aria-hidden="true">${p.icon||'•'}</span><span>${esc(p.label)}</span>`;mobNav.appendChild(mb);}});
-function goPage(id){S.page=id;nav.querySelectorAll('.nav-b').forEach(b=>b.classList.toggle('on',b.dataset.p===id));if(mobNav)mobNav.querySelectorAll('.mob-bnav-item').forEach(b=>b.classList.toggle('on',b.dataset.p===id));document.querySelectorAll('.page').forEach(p=>p.classList.toggle('on',p.dataset.page===id));if(id==='home')renderHome();if(id==='radar')renderRadarPage();if(id==='cross')renderCrossPage();if(id==='bullwatch')renderBullwatchPage();if(id==='bullalfa')renderBullalfaPage();if(id==='makro')renderMakroPage();if(id==='nasil')renderNasilPage();if(id==='takas')renderTakasPage();if(id==='sosyal')renderSosyalPage();if(id==='portfoy')renderPortfoyPage();}
+
+// Unread badge for the Bilançolar tab — polls /api/kap/recent every 2
+// min and compares the latest disclosure_index against the last one the
+// user saw (tracked in localStorage). Adds a red dot to the NAV button.
+async function _updateBilancoBadge(){
+  try {
+    const r = await api('/api/kap/recent?limit=1');
+    const it = (r && (r.items || [])[0]);
+    if (!it) return;
+    const lastSeen = parseInt(localStorage.getItem('bb_kap_last_seen') || '0', 10);
+    const hasUnread = (it.disclosure_index || 0) > lastSeen;
+    const setDot = (sel) => {
+      const btn = document.querySelector(sel);
+      if (!btn) return;
+      // Idempotent: strip any existing dot first, then re-add if needed
+      btn.textContent = btn.textContent.replace(' ●', '');
+      const mobLabel = btn.querySelector && btn.querySelector('span:nth-child(2)');
+      if (mobLabel) mobLabel.textContent = mobLabel.textContent.replace(' ●', '');
+      if (hasUnread) {
+        if (mobLabel) mobLabel.textContent = mobLabel.textContent + ' ●';
+        else btn.textContent = btn.textContent + ' ●';
+        btn.style.color = 'var(--red)';
+      } else {
+        btn.style.color = '';
+      }
+    };
+    setDot('.nav-b[data-p="bilancolar"]');
+    setDot('.mob-bnav-item[data-p="bilancolar"]');
+  } catch (e) {
+    // Silent — badge is decorative
+  }
+}
+setTimeout(_updateBilancoBadge, 5000);
+setInterval(_updateBilancoBadge, 120000);
+
+function goPage(id){S.page=id;nav.querySelectorAll('.nav-b').forEach(b=>b.classList.toggle('on',b.dataset.p===id));if(mobNav)mobNav.querySelectorAll('.mob-bnav-item').forEach(b=>b.classList.toggle('on',b.dataset.p===id));document.querySelectorAll('.page').forEach(p=>p.classList.toggle('on',p.dataset.page===id));if(id==='home')renderHome();if(id==='radar')renderRadarPage();if(id==='cross')renderCrossPage();if(id==='bullwatch')renderBullwatchPage();if(id==='bullalfa')renderBullalfaPage();if(id==='bilancolar')renderBilancolarPage();if(id==='makro')renderMakroPage();if(id==='nasil')renderNasilPage();if(id==='takas')renderTakasPage();if(id==='sosyal')renderSosyalPage();if(id==='portfoy')renderPortfoyPage();}
 
 // ===== QUICK TICKERS =====
 // ===== QUICK TICKERS =====
@@ -537,6 +572,170 @@ async function loadBook(){try{S.book=await api('/api/book');}catch(e){}}
 async function loadMarketStatus(){try{S.marketStatus=await api('/api/market-status');}catch(e){}}
 async function loadMacro(){try{S.macro=await cachedApi('/api/macro');const el=$('macMini');if(el)el.innerHTML=renderMacMini(S.macro.items||[]);const ng=$('nabGrid');if(ng)ng.innerHTML=renderNabiz(S.macro.items||[]);renderTickerBar(S.macro.items||[]);loadHomeAction();}catch(e){console.error('macro:',e);}}
 function renderTickerBar(items){const tb=$('tbar');const inner=items.map(m=>`<div class="tbar-i"><span style="color:var(--t2);font-weight:600">${esc(m.flag||'')} ${esc(m.key||m.name)}</span><span style="color:var(--t1)">${fN(m.price,m.key?.includes('TRY')?4:2)}</span><span style="color:${cC(m.change_pct)};font-size:10px">${cS(m.change_pct)}%</span></div>`).join('');tb.innerHTML=`<div class="tbar-inner">${inner}${inner}</div>`;}
+
+// ===== BİLANÇOLAR (KAP DISCLOSURE FEED) =====
+// Faz 2 — Alert sayfası + bilanço takvimi. Two-pane layout: recent
+// disclosures from /api/kap/recent on the left, watchlist-specific
+// expected disclosures (calendar) on the right.
+async function loadBilancolar(force){
+  if (S.kap && !force) return S.kap;
+  let recent = []; let calendar = {};
+  try {
+    const r = await api('/api/kap/recent?limit=100');
+    recent = (r && (r.items || r.value)) || [];
+  } catch (e) {
+    console.warn('KAP recent fetch failed', e);
+  }
+  // Calendar — only fetch for the user's watchlist (otherwise it's 437 calls)
+  const wl = (S.wl || []).slice(0, 30);  // safety cap
+  if (wl.length) {
+    const results = await Promise.all(
+      wl.map(t => api('/api/kap/calendar/' + encodeURIComponent(t)).catch(() => null))
+    );
+    results.forEach((r, i) => {
+      if (r && r.items) calendar[wl[i]] = r.items;
+    });
+  }
+  S.kap = { recent, calendar, fetched_at: Date.now() };
+  // Mark "seen" — clear unread badge after the user opens this page
+  if (recent.length) {
+    const newestIdx = Math.max(...recent.map(d => d.disclosure_index || 0));
+    if (newestIdx > 0) localStorage.setItem('bb_kap_last_seen', String(newestIdx));
+  }
+  return S.kap;
+}
+
+function _kapItemLabel(d){
+  const rt = d.rule_type || '';
+  const yr = d.year || '';
+  const tag = rt && yr ? `${yr} ${rt}` : (d.subject || '');
+  return tag;
+}
+
+function _kapItemColor(d){
+  // Type-based color: FR (balance sheet) = primary, others = muted
+  if ((d.disclosure_type || '') === 'FR') return 'var(--grn)';
+  return 'var(--t3)';
+}
+
+function _kapTimeAgo(iso){
+  if (!iso) return '';
+  const dt = new Date(iso);
+  if (isNaN(dt.getTime())) return '';
+  const ms = Date.now() - dt.getTime();
+  const min = Math.round(ms / 60000);
+  if (min < 1) return 'az önce';
+  if (min < 60) return `${min} dk önce`;
+  const hr = Math.round(min / 60);
+  if (hr < 24) return `${hr} sa önce`;
+  return `${Math.round(hr / 24)} gün önce`;
+}
+
+function renderBilancolarPage(){
+  const pg = $('pg-bilancolar');
+  if (!S.kap) {
+    pg.innerHTML = '<div class="ld"><div class="sp"></div><div class="ld-t">Bilanço akışı yükleniyor...</div></div>';
+    loadBilancolar().then(() => renderBilancolarPage());
+    return;
+  }
+  const recent = S.kap.recent || [];
+  const calendar = S.kap.calendar || {};
+  const filt = S._kapFilter || 'all';
+  const filtered = filt === 'wl'
+    ? recent.filter(d => (S.wl || []).includes(d.ticker))
+    : filt === 'today'
+      ? recent.filter(d => {
+          const t = new Date(d.publish_date).getTime();
+          return Date.now() - t < 24 * 3600 * 1000;
+        })
+      : filt === 'week'
+        ? recent.filter(d => {
+            const t = new Date(d.publish_date).getTime();
+            return Date.now() - t < 7 * 24 * 3600 * 1000;
+          })
+        : recent;
+
+  let h = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px">
+    <div>
+      <h2 style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-lg);color:var(--acc)">📰 Bilanço Akışı — KAP</h2>
+      <p style="font-size:var(--fs-sm);color:var(--t3);margin-top:2px">Son ${recent.length} açıklama · Watchlist: ${(S.wl||[]).length} hisse takvimde</p>
+    </div>
+    <button class="btn btn-grn" onclick="loadBilancolar(true).then(()=>renderBilancolarPage())">🔄</button>
+  </div>`;
+
+  // Filter chips
+  const chips = [
+    ['all',   `Tümü (${recent.length})`,                    'var(--acc)'],
+    ['wl',    `Watchlist (${recent.filter(d=>(S.wl||[]).includes(d.ticker)).length})`, 'var(--blu)'],
+    ['today', `Bugün (${recent.filter(d=>(Date.now()-new Date(d.publish_date).getTime())<24*3600*1000).length})`, 'var(--grn)'],
+    ['week',  `Bu Hafta (${recent.filter(d=>(Date.now()-new Date(d.publish_date).getTime())<7*24*3600*1000).length})`, 'var(--cyn)'],
+  ];
+  h += `<div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap">${chips.map(([k,l,c])=>`<button class="btn btn-sm ${filt===k?'':''}" style="${filt===k?`background:${c}20;border:1px solid ${c};color:${c}`:'background:var(--bg3);color:var(--t2)'}" onclick="S._kapFilter='${k}';renderBilancolarPage()">${l}</button>`).join('')}</div>`;
+
+  // Two-pane layout
+  h += '<div class="g2" style="gap:14px">';
+
+  // LEFT: Recent disclosures feed
+  h += '<div><div style="font-family:\'JetBrains Mono\',monospace;font-size:var(--fs-xs);color:var(--grn);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">📥 Son Açıklamalar</div>';
+  if (!filtered.length) {
+    h += '<div class="emp"><h3 style="color:var(--t3);font-size:14px">Bu filtrede açıklama yok</h3></div>';
+  } else {
+    h += '<div class="card"><div class="card-b" style="max-height:680px;overflow-y:auto;padding:0">';
+    filtered.forEach((d, i) => {
+      const lbl = _kapItemLabel(d);
+      const col = _kapItemColor(d);
+      const lateBadge = d.is_late ? '<span class="pill p-red" style="font-size:9px;padding:1px 5px">geç</span>' : '';
+      const ago = _kapTimeAgo(d.publish_date);
+      h += `<div class="clk" onclick="loadTicker('${esc(d.ticker)}')" style="padding:10px 14px;${i<filtered.length-1?'border-bottom:1px solid var(--bdr);':''}cursor:pointer;transition:background .1s" onmouseover="this.style.background='var(--bg3)'" onmouseout="this.style.background=''">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+          <div style="flex:1;min-width:0">
+            <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:3px">
+              <span style="font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:700;color:var(--cyn)">${esc(d.ticker)}</span>
+              <span style="font-size:11px;color:${col};font-weight:600">${esc(lbl)}</span>
+              ${lateBadge}
+            </div>
+            <div style="font-size:11px;color:var(--t3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(d.kap_title || '')} · ${esc(d.subject || '')}</div>
+          </div>
+          <div style="text-align:right;font-size:10px;color:var(--t4);font-family:'JetBrains Mono',monospace;flex-shrink:0">${ago}</div>
+        </div>
+      </div>`;
+    });
+    h += '</div></div>';
+  }
+  h += '</div>';
+
+  // RIGHT: Upcoming calendar (watchlist)
+  h += '<div><div style="font-family:\'JetBrains Mono\',monospace;font-size:var(--fs-xs);color:var(--blu);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">📅 Yaklaşan Açıklamalar (Watchlist)</div>';
+  const wlTickers = Object.keys(calendar);
+  if (!wlTickers.length) {
+    h += '<div class="emp" style="padding:30px 20px"><h3 style="color:var(--t3);font-size:13px;margin-bottom:6px">Watchlist boş</h3><p style="color:var(--t4);font-size:11px;line-height:1.6">Bir hisseyi watchlist\'e ekle, sıradaki bilanço açıklamasını burada gör.</p></div>';
+  } else {
+    // Flatten + group by ticker
+    h += '<div class="card"><div class="card-b" style="max-height:680px;overflow-y:auto;padding:0">';
+    wlTickers.forEach((tk, tIdx) => {
+      const entries = (calendar[tk] || []).filter(e => e.subject && e.subject.toLowerCase().includes('finansal'));
+      if (!entries.length) return;
+      h += `<div style="padding:8px 14px;${tIdx<wlTickers.length-1?'border-bottom:1px solid var(--bdr);':''}">
+        <div style="font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700;color:var(--cyn);margin-bottom:4px;cursor:pointer" onclick="loadTicker('${esc(tk)}')">${esc(tk)}</div>`;
+      entries.slice(0, 3).forEach(e => {
+        h += `<div style="font-size:10px;color:var(--t3);padding:2px 0">${esc(e.ruleTypeTerm || '')} · ${esc(e.subject || '')} · <span style="color:var(--t2)">${esc(e.startDate || '')}–${esc(e.endDate || '')}</span></div>`;
+      });
+      h += '</div>';
+    });
+    h += '</div></div>';
+  }
+  h += '</div>';
+
+  h += '</div>'; // close .g2
+
+  // Help footer
+  h += `<div style="margin-top:14px;padding:10px 14px;background:var(--bg3);border-radius:var(--rad);font-size:11px;color:var(--t3);line-height:1.6">
+    📡 <b style="color:var(--t2)">Veri kaynağı:</b> KAP (Kamuyu Aydınlatma Platformu) · 5 dk peak / 30 dk off-hours güncellenir.
+    Yeni bilanço açıklaması → ilgili hissenin <b>skoru otomatik tazelenir</b> (Plan C). Tıkla → hisse detayı.
+  </div>`;
+
+  pg.innerHTML = h;
+}
 
 // ===== MAKRO PAGE =====
 function renderMakroPage(){const pg=$('pg-makro');if(!S.macro){pg.innerHTML='<div class="ld"><div class="sp"></div><div class="ld-t">Makro verileri yükleniyor...</div></div>';loadMacro().then(()=>renderMakroPage());return;}const items=S.macro.items||[];if(!items.length){pg.innerHTML='<div class="emp"><h3 style="color:var(--t2)">Makro veri alınamadı</h3></div>';return;}const cats={turkiye:[],em:[],global:[],emtia:[]};items.forEach(m=>cats[m.category]?.push(m));const emSorted=[...cats.em,...cats.turkiye.filter(m=>m.key==='XU030'||m.key==='XU100')].sort((a,b)=>(b.ytd_pct||0)-(a.ytd_pct||0));let h='<div id="macroDecisionBlock"><div class="ld"><div class="sp"></div><div class="ld-t">Karar motoru hesaplanıyor...</div></div></div>';
