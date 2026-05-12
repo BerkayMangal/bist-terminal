@@ -290,6 +290,61 @@ def get_by_ticker(ticker: str, limit: int = 20) -> list[dict[str, Any]]:
         return []
 
 
+def save_ai_summary(disclosure_index: int, summary_text: str) -> bool:
+    """Persist the AI-generated analysis for one disclosure. Faz 3 calls
+    this from engine.kap_dispatcher after a successful Grok run.
+
+    Also mirrors the summary into the Redis hot entry so reads from
+    /api/kap/recent return the AI text without an extra SQLite hop.
+    """
+    if not summary_text:
+        return False
+    ts = _now_iso()
+    ok_sql = False
+    try:
+        c = _conn()
+        cur = c.execute(
+            "UPDATE kap_disclosures SET ai_summary = ?, ai_analyzed_at = ? "
+            "WHERE disclosure_index = ?",
+            (summary_text, ts, int(disclosure_index)),
+        )
+        c.commit()
+        ok_sql = cur.rowcount > 0
+    except Exception as exc:
+        log.warning("save_ai_summary sqlite %s: %r", disclosure_index, exc)
+
+    # Redis mirror — patch the JSON in place so /api/kap/recent picks it up
+    client = redis_client.get_client()
+    if client is not None:
+        key = KEY_DISCLOSURE.format(disclosure_index)
+        try:
+            raw = client.get(key)
+            if raw:
+                obj = json.loads(raw)
+                obj["ai_summary"] = summary_text
+                obj["ai_analyzed_at"] = ts
+                client.set(key, json.dumps(obj, ensure_ascii=False, default=str),
+                           ex=DISCLOSURE_TTL_SEC)
+        except Exception as exc:
+            log.warning("save_ai_summary redis %s: %r", disclosure_index, exc)
+    return ok_sql
+
+
+def get_by_index(disclosure_index: int) -> Optional[dict[str, Any]]:
+    """Fetch one disclosure by index — used by the detail endpoint."""
+    try:
+        c = _conn()
+        row = c.execute(
+            "SELECT * FROM kap_disclosures WHERE disclosure_index = ?",
+            (int(disclosure_index),),
+        ).fetchone()
+        if row:
+            return dict(row)
+    except Exception as exc:
+        log.warning("get_by_index %s: %r", disclosure_index, exc)
+    return None
+
+
 def get_stats() -> dict[str, Any]:
     """Lightweight feed-health summary — used by the /api/kap/health
     endpoint and surfaced in the admin UI later."""

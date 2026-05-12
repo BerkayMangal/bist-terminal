@@ -110,13 +110,66 @@ def _invalidate_caches_for_ticker(ticker: str) -> None:
     log.info("Plan C: invalidated %d cache layers for %s", n_dropped, sym)
 
 
-# ── Faz 3 hook: AI analysis queue ───────────────────────────────────
+# ── Faz 3: AI analysis pipeline ─────────────────────────────────────
 
 
 def _queue_ai_analysis(rec: DisclosureRecord) -> None:
-    """Faz 3 wires this to the Grok-3-mini-fast pipeline. For now we
-    log so the integration point is visible end-to-end."""
+    """Schedule an AI analysis for a freshly-detected balance sheet.
+
+    Runs in a daemon thread so the feed loop never blocks waiting for
+    Grok. Failures are logged; the disclosure stays in the DB without
+    an `ai_summary` and the next manual /api/kap/disclosure/{idx}/analyze
+    POST can retry on demand.
+    """
+    import threading
+    t = threading.Thread(
+        target=_run_ai_analysis,
+        args=(rec,),
+        daemon=True,
+        name=f"kap-ai-{rec.disclosure_index}",
+    )
+    t.start()
     log.info(
-        "AI queue (Faz 3 stub): %s/%s → analyze",
+        "KAP AI: queued for %s/%s",
         rec.ticker, rec.disclosure_index,
     )
+
+
+def _run_ai_analysis(rec: DisclosureRecord) -> None:
+    """Actually call the AI and persist the result. Sync; expected to
+    run in a daemon thread launched by _queue_ai_analysis."""
+    try:
+        from ai.service import generate_kap_disclosure_analysis
+        from infra import kap_storage
+
+        # Pull fresh metrics + scoring for richer context. Plan C just
+        # invalidated the caches for this ticker, so analyze_symbol will
+        # re-fetch the new balance sheet.
+        metrics: dict = {}
+        analysis: dict = {}
+        try:
+            from engine.analysis import analyze_symbol
+            analysis = analyze_symbol(rec.ticker) or {}
+            metrics = analysis.get("metrics") or {}
+        except Exception as exc:
+            log.debug("KAP AI %s: analyze_symbol unavailable: %r", rec.ticker, exc)
+
+        text = generate_kap_disclosure_analysis(
+            rec.to_dict(), metrics=metrics, analysis=analysis,
+        )
+        if not text:
+            log.info(
+                "KAP AI: no analysis produced for %s/%s",
+                rec.ticker, rec.disclosure_index,
+            )
+            return
+        kap_storage.save_ai_summary(rec.disclosure_index, text)
+        log.info(
+            "KAP AI: persisted analysis for %s/%s (%d chars)",
+            rec.ticker, rec.disclosure_index, len(text),
+        )
+    except Exception as exc:
+        log.warning(
+            "KAP AI: pipeline failed for %s/%s: %r",
+            rec.ticker, rec.disclosure_index, exc,
+        )

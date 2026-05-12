@@ -77,6 +77,44 @@ def generate_trader_summary(r: dict, tech: Optional[dict] = None) -> dict:
 
 
 # ================================================================
+# KAP DISCLOSURE ANALYSIS — per-bilanço detailed commentary
+# ================================================================
+def generate_kap_disclosure_analysis(disclosure: dict,
+                                     metrics: Optional[dict] = None,
+                                     analysis: Optional[dict] = None) -> Optional[str]:
+    """Run Grok-3-mini-fast (or whichever AI provider is wired first) on
+    a freshly-released KAP disclosure. Returns the analysis text on
+    success, None on any failure path (caller decides whether to
+    surface a placeholder).
+
+    No caching here — caller (engine.kap_dispatcher) persists the
+    result to SQLite's `kap_disclosures.ai_summary` column once and
+    we never re-run for the same disclosure_index.
+    """
+    if not AI_AVAILABLE:
+        return None
+    try:
+        from ai.prompts import kap_disclosure_prompt
+        from ai.safety import validate_ai_output
+        prompt = kap_disclosure_prompt(disclosure, metrics=metrics, analysis=analysis)
+        text = ai_call(prompt, max_tokens=600)
+        if not text:
+            return None
+        result = validate_ai_output(text, "interpreter")
+        if not result.ok:
+            log.info(
+                "KAP AI analysis rejected for %s/%s: %s",
+                disclosure.get("ticker"), disclosure.get("disclosure_index"),
+                result.reason,
+            )
+            return None
+        return result.text
+    except Exception as exc:
+        log.warning("KAP AI analysis failed: %r", exc)
+        return None
+
+
+# ================================================================
 # HERO STORY — market narrative for hero section
 # ================================================================
 def generate_hero_story(
