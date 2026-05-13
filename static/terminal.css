@@ -201,6 +201,16 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg0);color:var(
 }
 
 /* ===== KAP / BİLANÇOLAR MOBILE POLISH ===== */
+/* Each disclosure row uses `.kap-row` (assigned in renderBilancolarPage).
+   Subject line gets line-clamp on phones so long titles don't push the
+   card to 5 lines; footer (reactions + AI button) wraps cleanly. */
+.kap-row-subj{
+  display:-webkit-box;
+  -webkit-line-clamp:2;
+  -webkit-box-orient:vertical;
+  overflow:hidden;
+  word-break:break-word;
+}
 @media(max-width:600px){
   /* Bilanço modali: full-screen on mobile so the 6-section AI summary
      has room to breathe and the iOS keyboard / nav-bar don't clip it. */
@@ -217,13 +227,23 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg0);color:var(
   }
   /* AI summary sections: tighter padding, smaller body text */
   #kapAnalysisOv h3{font-size:14px!important}
-  /* Bilançolar disclosure card: stack metadata on narrow screens.
-     Time-ago moves into the title row so the card body has full width. */
+  /* Bilançolar disclosure card: tighter padding, card body has full width. */
   #pg-bilancolar .card-b{padding:0!important}
-  /* Reaction pills row: smaller font, no horizontal scroll */
-  #pg-bilancolar .card-b > div > div:nth-child(2){flex-wrap:wrap}
-  /* Filter chips: wrap instead of overflow */
+  .kap-row{padding:9px 11px!important}
+  /* Subject clamp tighter on phone — 2 lines is enough */
+  .kap-row-subj{-webkit-line-clamp:2;font-size:11px!important;line-height:1.35!important}
+  /* Footer row stacks gracefully; pill font-size shrinks */
+  .kap-row-footer{gap:4px!important}
+  .kap-row-footer > div > span{font-size:9px!important;padding:1px 4px!important}
+  .kap-row-footer button{font-size:10px!important;padding:3px 7px!important}
+  /* Filter chips: horizontal scroll instead of wrap if too many */
   #pg-bilancolar > div:nth-child(2){overflow-x:auto;-webkit-overflow-scrolling:touch}
+}
+/* Even smaller phones */
+@media(max-width:380px){
+  .kap-row{padding:8px 10px!important}
+  .kap-row-subj{-webkit-line-clamp:2;font-size:10.5px!important}
+  .kap-row-footer button{font-size:9.5px!important}
 }
 
 /* ===== TICKER DETAIL MOBILE POLISH ===== */
