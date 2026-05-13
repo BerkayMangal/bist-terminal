@@ -245,6 +245,7 @@ async def lifespan(application: FastAPI):
     kap_feed_task = None
     kap_reactions_task = None
     bw_alerts_reactions_task = None
+    auto_refresh_task = None
     try:
         from engine.background_tasks import (
             kap_feed_loop, kap_reactions_loop, bw_alert_reactions_loop,
@@ -259,8 +260,19 @@ async def lifespan(application: FastAPI):
         log.info("BW alarm reactions loop started")
     except Exception as e:
         log.warning(f"KAP feed loop not started: {e}")
+    # Veri Tazeliği auto-refresh — periodically force-refreshes the worst
+    # stale tickers so the user doesn't have to click the manual button
+    # for the system to stay healthy.
+    try:
+        from engine.auto_refresh_stale import background_loop as _ar_loop
+        auto_refresh_task = asyncio.create_task(_ar_loop())
+        log.info("Auto-refresh stale loop started")
+    except Exception as e:
+        log.warning(f"Auto-refresh loop not started: {e}")
     yield
     task.cancel()
+    if auto_refresh_task is not None:
+        auto_refresh_task.cancel()
     if bullwatch_task is not None:
         bullwatch_task.cancel()
     if bullwatch_hot_task is not None:

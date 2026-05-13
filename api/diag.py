@@ -75,6 +75,30 @@ async def api_diag_fundamentals_summary(
     )
 
 
+@router.get("/api/diag/auto-refresh/status")
+async def api_diag_auto_refresh_status():
+    """Last cycle telemetry from engine.auto_refresh_stale.
+
+    The UI banner uses this to show "Auto-refresh çalışıyor mu, en son
+    ne zaman koştu, kaç ticker'ı geri getirdi, kaç skor değişti?"
+    """
+    from engine.auto_refresh_stale import (
+        get_last_cycle,
+        DEFAULT_INTERVAL_SEC,
+        DEFAULT_MAX_PER_CYCLE,
+    )
+    return success(
+        {
+            "last_cycle": get_last_cycle(),
+            "config": {
+                "interval_sec": DEFAULT_INTERVAL_SEC,
+                "max_per_cycle": DEFAULT_MAX_PER_CYCLE,
+            },
+        },
+        extra_meta={"endpoint": "diag.auto_refresh.status"},
+    )
+
+
 @router.get("/api/diag/stale")
 async def api_diag_stale(
     threshold: str = Query(
