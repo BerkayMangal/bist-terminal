@@ -80,6 +80,28 @@ async def api_bwa_one(alert_id: str):
                    extra_meta={"endpoint": "bullwatch.alerts.one"})
 
 
+@router.get("/api/bullwatch/alerts/backtest")
+async def api_bwa_backtest(
+    since_days: int = Query(90, ge=7, le=365),
+    win_threshold: float = Query(0.0, ge=-50.0, le=50.0),
+):
+    """Backtest dashboard data — win rate by horizon, score band, zone,
+    sector, pattern; fake-pump detector; 1d return histogram; BIST100
+    baseline. All derived from the immutable alarm history."""
+    try:
+        from engine.bullwatch_backtest import compute_backtest
+        data = await asyncio.to_thread(
+            compute_backtest, since_days, win_threshold
+        )
+    except Exception as exc:
+        log.exception("backtest failed: %r", exc)
+        return error(f"backtest failed: {exc}", status_code=500)
+    return success(
+        data,
+        extra_meta={"endpoint": "bullwatch.alerts.backtest"},
+    )
+
+
 @router.post("/api/bullwatch/alerts/refresh-reactions")
 async def api_bwa_refresh_reactions():
     """Manual trigger for the Faz 4 reaction backfill (1d / 1w / 1m).
