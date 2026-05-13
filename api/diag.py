@@ -87,3 +87,94 @@ async def api_diag_fundamentals_one(ticker: str):
         data,
         extra_meta={"endpoint": "diag.fundamentals.one"},
     )
+
+
+@router.post("/api/diag/fundamentals/{ticker}/refresh")
+async def api_diag_fundamentals_refresh(ticker: str):
+    """Force-refresh ONE ticker: invalidate every cache layer (raw,
+    analysis, tech, bullwatch) and re-fetch via analyze_symbol so the
+    next view shows freshly-pulled borsapy data.
+
+    Use case: user sees a "Stale" badge in the Radar, clicks the
+    "🔄 Şimdi Yenile" button on the modal, wants instant proof that
+    the cache CAN refresh and the score does/doesn't change."""
+    sym = (ticker or "").upper().strip().replace(".IS", "")
+    if not sym:
+        raise HTTPException(status_code=400, detail="empty ticker")
+
+    def _go():
+        from engine.kap_dispatcher import _invalidate_caches_for_ticker
+        from engine.analysis import analyze_symbol
+        from engine.diag_fundamentals import compute_data_freshness
+
+        before = compute_data_freshness(sym)
+        _invalidate_caches_for_ticker(sym)
+        # Re-fetch — this re-populates raw_cache + analysis_cache via
+        # the normal analyze path so the next Radar render sees fresh data.
+        analysis = None
+        try:
+            analysis = analyze_symbol(sym + ".IS")
+        except Exception as exc:
+            log.warning("force-refresh analyze failed for %s: %r", sym, exc)
+        after = compute_data_freshness(sym)
+        return {
+            "ticker": sym,
+            "before": before,
+            "after": after,
+            "analysis_ok": analysis is not None,
+            "new_score": (analysis or {}).get("score"),
+            "new_decision": (analysis or {}).get("decision"),
+        }
+
+    try:
+        data = await asyncio.to_thread(_go)
+    except Exception as exc:
+        log.exception("refresh %s failed: %r", sym, exc)
+        return error(f"refresh failed: {exc}", status_code=500)
+    return success(
+        data,
+        extra_meta={"endpoint": "diag.fundamentals.refresh"},
+    )
+
+
+@router.get("/api/diag/score-history/{ticker}")
+async def api_diag_score_history(
+    ticker: str,
+    days: int = Query(30, ge=1, le=365),
+):
+    """Per-ticker score history for the Radar sparkline.
+
+    Reads the `score_history` table — each row is one daily snapshot
+    written by the background scanner. Empty list means the ticker has
+    no snapshots yet (just-installed instance, or a ticker that's
+    perpetually rejected by universe filters)."""
+    sym = (ticker or "").upper().strip().replace(".IS", "")
+    if not sym:
+        raise HTTPException(status_code=400, detail="empty ticker")
+
+    def _go():
+        try:
+            from infra.storage import _get_conn
+            c = _get_conn()
+            rows = c.execute(
+                "SELECT snap_date, score, fa_score, decision "
+                "FROM score_history "
+                "WHERE symbol = ? AND scoring_version = 'v13_handpicked' "
+                "ORDER BY snap_date DESC LIMIT ?",
+                (sym, int(days)),
+            ).fetchall()
+            return [
+                {"snap_date": r[0], "score": r[1],
+                 "fa_score": r[2], "decision": r[3]}
+                for r in rows
+            ]
+        except Exception as exc:
+            log.debug("score_history lookup %s: %r", sym, exc)
+            return []
+
+    items = await asyncio.to_thread(_go)
+    items.reverse()  # oldest-first for sparkline rendering
+    return success(
+        {"ticker": sym, "days": days, "items": items, "count": len(items)},
+        extra_meta={"endpoint": "diag.score_history"},
+    )
