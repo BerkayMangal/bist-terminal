@@ -73,10 +73,11 @@ def detect_changes(
     events: list[dict[str, Any]] = []
 
     def _eid(ticker: str, kind: str) -> str:
-        # scan_id makes this uniquely identifiable per scan;
-        # without one, fall back to the timestamp so re-running the same
-        # diff doesn't double-insert.
-        suffix = scan_id or ts.replace(":", "").replace("-", "")[:14]
+        # scan_id makes this uniquely identifiable per scan; without one,
+        # fall back to the FULL timestamp (incl. microseconds) so two
+        # detections in the same wall-clock second on different retries
+        # don't collide and silently get dropped by INSERT OR IGNORE.
+        suffix = scan_id or ts.replace(":", "").replace("-", "").replace(".", "")
         return f"{ticker}:{suffix}:{kind}"
 
     # ENTRY — in new, not in prev

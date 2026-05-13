@@ -389,6 +389,11 @@
     // Sinyaller (formerly the Cross tab) — render the technical signals
     // view in-place. Re-uses renderCrossPage from terminal.js. Mode tabs
     // stay visible so the user can switch back to BullAlfa modes.
+    //
+    // Audit fix: bump a token before kicking off startCross so a rapid
+    // mode-switch (e.g. user clicks Sinyaller → HIZLI within 500ms) can
+    // discard the now-stale fetch result instead of clobbering the new
+    // view's DOM when it finally returns.
     if (BA.filters.mode === '__SIGNALS__') {
       const meta = (BA.scan && BA.scan.meta) || {};
       const total = ((BA.scan && BA.scan.signals) || []).length;
@@ -396,16 +401,26 @@
       let shell = renderModeTabs(byMode, total);
       shell += '<div id="ba-signals-host"></div>';
       rootEl.innerHTML = shell;
-      // Ensure cross data is loaded and rendered into the host div
-      if (typeof window.S !== 'undefined' && !window.S.cross) {
-        if (typeof window.startCross === 'function') {
-          window.startCross('ba-signals-host');
+      const myToken = (BA._signalsToken = (BA._signalsToken || 0) + 1);
+      // startCross() loads /api/cross AND calls renderCrossPage internally.
+      // If we already have data, just re-render synchronously.
+      if (typeof window.S !== 'undefined' && window.S.cross) {
+        if (typeof window.renderCrossPage === 'function') {
+          window.renderCrossPage('ba-signals-host');
         }
-      } else if (typeof window.renderCrossPage === 'function') {
-        window.renderCrossPage('ba-signals-host');
+      } else if (typeof window.startCross === 'function') {
+        // Fire-and-forget; startCross writes to ba-signals-host. If the
+        // user switches mode before the fetch returns, the host div is
+        // gone and startCross's innerHTML write is a no-op. The token
+        // guard below is belt-and-suspenders for any future code that
+        // tries to render after startCross resolves.
+        window.startCross('ba-signals-host');
       }
       return;
     }
+    // When user switches OUT of signals mode, bump the token so any
+    // in-flight startCross() from the previous render is ignored.
+    BA._signalsToken = (BA._signalsToken || 0) + 1;
 
     // First render — loading spinner
     if (!BA.scan) rootEl.innerHTML = renderLoading();

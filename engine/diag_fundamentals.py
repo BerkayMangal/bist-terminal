@@ -57,6 +57,11 @@ def _hours_since(iso: Optional[str]) -> Optional[float]:
 def _age_status(hours: Optional[float]) -> str:
     if hours is None:
         return "unknown"
+    # Future-dated _fetched_at (clock skew, bad data) → don't silently
+    # report as "fresh". Surface it as unknown so the diag UI shows "?"
+    # instead of a misleading green ✓.
+    if hours < 0:
+        return "unknown"
     if hours <= _AGE_FRESH_HRS:
         return "fresh"
     if hours <= _AGE_STALE_HRS:

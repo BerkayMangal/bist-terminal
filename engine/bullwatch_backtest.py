@@ -323,8 +323,12 @@ def compute_backtest(
     }
 
     # ---- Histogram for 1d returns --------------------------------
-    bins = [(-100, -10), (-10, -5), (-5, -2), (-2, 0),
-            (0, 2), (2, 5), (5, 10), (10, 100)]
+    # Outer bins use ±inf so extreme returns (>100% pumps, <-100% halts)
+    # don't silently vanish. lo <= v < hi semantics; the topmost edge is
+    # exclusive but inf catches it.
+    import math as _math
+    bins = [(-_math.inf, -10), (-10, -5), (-5, -2), (-2, 0),
+            (0, 2), (2, 5), (5, 10), (10, _math.inf)]
     bin_labels = [
         "<-10%", "-10..-5%", "-5..-2%", "-2..0%",
         "0..2%", "2..5%", "5..10%", ">10%",

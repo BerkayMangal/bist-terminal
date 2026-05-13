@@ -12,17 +12,25 @@ from typing import Dict, Iterable, Optional, Set
 
 # Group name -> set of tickers (without .IS suffix).
 HOLDING_GROUPS: Dict[str, Set[str]] = {
+    # Each ticker belongs to AT MOST ONE group — disjoint guarantee is
+    # asserted at import time (see _assert_groups_disjoint below) and
+    # tested in test_bullwatch_group_activity.py. When a ticker is jointly
+    # owned (e.g. YKBNK as Koç+UniCredit JV), pick the dominant family —
+    # otherwise the reverse-index would silently last-wins and peers from
+    # the wrong family would fire.
     "yildiz": {"BIMAS", "ULKER", "TBORG"},
     "koc": {"KCHOL", "ARCLK", "FROTO", "TUPRS", "TOASO", "AYGAZ",
             "MGROS", "OTKAR", "TATGD", "YKBNK"},
-    "sabanci": {"SAHOL", "AKBNK", "AKSA", "AKSEN", "AKCNS", "BRSAN",
+    # AKSA → akkök; BRSAN → borusan (both removed from sabanci below)
+    "sabanci": {"SAHOL", "AKBNK", "AKSEN", "AKCNS",
                 "ENJSA", "CIMSA", "KORDS"},
     "eczacibasi": {"ECILC", "ESEN", "ECZYT", "IPEKE"},
     "dogan": {"DOHOL", "DGGYO", "DOAS", "HURGZ"},
     "anadolu": {"AGHOL", "AEFES", "CCOLA", "ANSGR", "ANHYT"},
     "bera": {"BERA", "BJKAS"},
     "cukurova": {"CUKUR", "BTCIM", "EDIP", "YATAS"},
-    "yapikredi": {"YKBNK", "KCHOL"},
+    # yapikredi group removed — it was {"YKBNK", "KCHOL"} which is just
+    # Koç family duplicates. YKBNK + KCHOL now live in "koc" only.
     "fiba": {"FIBAH", "AKFGY", "FIBAB"},
     "ihlas": {"IHLAS", "IHGZT", "IHEVA", "IHLGM"},
     "tav": {"TAVHL", "ASTOR"},
@@ -34,6 +42,25 @@ HOLDING_GROUPS: Dict[str, Set[str]] = {
     "kibar": {"KARSN", "KATMR"},
     "yasar": {"DYOBY", "PNSUT", "VKING"},
 }
+
+
+def _assert_groups_disjoint() -> None:
+    """Fail loudly at import time if two groups share a ticker. Catches
+    config-drift bugs that the silent reverse-index last-wins would
+    otherwise mask (the symptom: peer alerts fire for the wrong group)."""
+    seen: Dict[str, str] = {}
+    for grp, members in HOLDING_GROUPS.items():
+        for t in members:
+            u = t.upper()
+            if u in seen and seen[u] != grp:
+                raise RuntimeError(
+                    f"HOLDING_GROUPS overlap: {u} appears in both "
+                    f"{seen[u]!r} and {grp!r}"
+                )
+            seen[u] = grp
+
+
+_assert_groups_disjoint()
 
 # Pre-build reverse index ticker -> group name for O(1) lookup.
 _TICKER_TO_GROUP: Dict[str, str] = {}
