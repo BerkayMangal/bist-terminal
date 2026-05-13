@@ -1455,7 +1455,11 @@ function _radarFreshBanner(){
   const th = S.diagFreshThresholds || {};
   const pct = (n) => s.total ? `${Math.round(n*100/s.total)}%` : '—';
   const dot = (col, ic, lbl, n) => `<span style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:var(--rad);background:${col}15;color:${col};font-family:'JetBrains Mono',monospace;font-size:var(--fs-xs);font-weight:700"><span>${ic}</span>${esc(lbl)} <b style="margin-left:2px">${n}</b> <span style="opacity:.7;font-weight:400">(${pct(n)})</span></span>`;
-  const warn = (s.stale + s.unknown) > Math.max(2, s.total*0.2) ? '<span style="margin-left:8px;color:var(--orn);font-size:var(--fs-xs)">⚠️ Veri pipeline\'ı kontrol et</span>' : '';
+  const staleN = (s.stale||0) + (s.unknown||0);
+  const warn = staleN > Math.max(2, s.total*0.2) ? '<span style="margin-left:8px;color:var(--orn);font-size:var(--fs-xs)">⚠️ Veri pipeline\'ı kontrol et</span>' : '';
+  const stalePanel = staleN > 0
+    ? `<button class="btn btn-sm" style="background:rgba(239,83,80,.15);border:1px solid var(--red);color:var(--red);font-size:11px;padding:4px 10px;min-height:28px" onclick="showStalePanel()">⚠️ ${staleN} ticker stale → İncele</button>`
+    : '';
   return `<div style="margin-bottom:14px;padding:12px 14px;background:var(--bg2);border:1px solid var(--bdr);border-left:3px solid var(--cyn);border-radius:0 var(--rad) var(--rad) 0">
     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:var(--fs-sm);color:var(--t2)">
       <span style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-xs);color:var(--t4);text-transform:uppercase;letter-spacing:.5px;margin-right:6px">📅 Veri Tazeliği</span>
@@ -1463,7 +1467,8 @@ function _radarFreshBanner(){
       ${dot('var(--ylw)','◷','Old',   s.old||0)}
       ${dot('var(--red)','✕','Stale', s.stale||0)}
       ${dot('var(--t4)','?','Bilinmiyor', s.unknown||0)}
-      <button class="btn btn-sm" style="background:var(--bg3);color:var(--t2);font-size:10px;padding:3px 8px;min-height:24px;margin-left:auto" onclick="loadRadarFreshness(true)">🔄 Yenile</button>
+      ${stalePanel}
+      <button class="btn btn-sm" style="background:var(--bg3);color:var(--t2);font-size:10px;padding:3px 8px;min-height:24px" onclick="loadRadarFreshness(true)">🔄 Yenile</button>
     </div>
     <div style="font-size:var(--fs-xs);color:var(--t4);margin-top:6px">Fresh = borsapy son ${th.fresh_hours||26}sa içinde fetch · Stale = ${th.stale_hours||72}sa+ ${warn}</div>
     ${_radarKapHealthBanner()}
@@ -1624,6 +1629,139 @@ async function loadFreshSparkline(ticker){
       </div>`;
   } catch(e) {
     console.warn('sparkline fetch failed', e);
+  }
+}
+
+// Stale tickers panel — large modal showing every ticker that needs
+// attention, sortable, with a one-click "Tümünü Yenile" batch action.
+// The batch endpoint refreshes up to 30 at a time (server-capped) with
+// bounded parallelism so we don't hammer borsapy.
+async function showStalePanel(){
+  const ov = document.createElement('div');
+  ov.className = 'mov';
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(4px)';
+  ov.onclick = (e) => { if (e.target === ov) ov.remove(); };
+  ov.innerHTML = `<div id="stalePanelBody" style="background:var(--bg1);border:1px solid var(--bdr);border-radius:var(--rad);max-width:840px;width:100%;max-height:90vh;overflow-y:auto;padding:20px"><div style="text-align:center;color:var(--t3);padding:30px"><div class="sp" style="margin:0 auto 10px"></div>Stale ticker listesi yükleniyor…</div></div>`;
+  document.body.appendChild(ov);
+
+  let data = null;
+  try {
+    const r = await api('/api/diag/stale?threshold=stale&limit=60');
+    data = (r && (r.value || r)) || null;
+  } catch(e) {
+    document.getElementById('stalePanelBody').innerHTML = `<div style="color:var(--red);padding:20px;text-align:center">Yüklenemedi: ${esc(String(e.message||e))}</div><div style="text-align:center"><button class="btn btn-sm" onclick="this.closest('.mov').remove()">Kapat</button></div>`;
+    return;
+  }
+  if (!data) { ov.remove(); return; }
+  _renderStalePanel(data);
+}
+
+function _renderStalePanel(data){
+  const body = document.getElementById('stalePanelBody');
+  if (!body) return;
+  const items = data.items || [];
+  const s = data.summary || {};
+  const th = data.thresholds || {};
+  let h = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px">
+    <div>
+      <h3 style="font-family:'JetBrains Mono',monospace;color:var(--red);font-size:18px">⚠️ Stale / Unknown Ticker Listesi</h3>
+      <div style="font-size:11px;color:var(--t3);margin-top:2px">${s.matched||0} / ${s.universe_size||0} ticker · Threshold: ${esc(s.threshold||'stale')}</div>
+    </div>
+    <button class="btn btn-sm" style="background:var(--bg3);color:var(--t2)" onclick="this.closest('.mov').remove()">✕ Kapat</button>
+  </div>`;
+
+  h += `<div style="padding:10px 14px;background:var(--bg3);border-radius:var(--rad);margin-bottom:12px;font-size:11px;color:var(--t2);line-height:1.55">
+    💡 <b style="color:var(--cyn)">Stale</b> = borsapy son ${th.stale_hours||72}sa içinde refresh edilmemiş. <b>Unknown</b> = cache'te hiç giriş yok.<br>
+    "Tümünü Yenile" cache'leri kırar ve borsapy'i tekrar çağırır — yaklaşık <b>${Math.max(15, Math.round((items.length||1)*4))}s</b> sürer (rate-limit + retry payı).
+  </div>`;
+
+  if (!items.length) {
+    h += `<div class="emp" style="padding:30px 20px;text-align:center"><h4 style="color:var(--grn)">✓ Stale ticker yok</h4><p style="color:var(--t4);font-size:11px;margin-top:6px">Universe'in tümü fresh — pipeline sağlıklı.</p></div>`;
+    body.innerHTML = h;
+    return;
+  }
+
+  const tickerCsv = items.slice(0, 30).map(i => i.ticker).join(',');
+  h += `<div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+    <button id="staleBatchBtn" class="btn btn-sm btn-grn" onclick="batchRefreshStale('${esc(tickerCsv)}', this)" style="flex:1;min-width:200px">🔄 İlk ${Math.min(items.length, 30)} ticker'ı yenile</button>
+    <button class="btn btn-sm" style="background:var(--bg3);color:var(--t2)" onclick="showStalePanel()">↻ Listeyi Yeniden Yükle</button>
+  </div>
+  <div id="staleBatchProgress" style="margin-bottom:10px;font-size:11px;color:var(--t3)"></div>`;
+
+  h += `<div style="overflow-x:auto"><table class="dtb" style="width:100%;font-size:12px">
+    <thead><tr>
+      <th style="width:24px">#</th>
+      <th>Hisse</th>
+      <th>Durum</th>
+      <th>Borsapy Yaş</th>
+      <th>KAP Yaş</th>
+      <th>Gap</th>
+      <th>Latest Q</th>
+      <th>Uyarılar</th>
+    </tr></thead><tbody>`;
+  items.forEach((it, i) => {
+    const stCol = it.age_status === 'stale' ? 'var(--red)' : it.age_status === 'unknown' ? 'var(--t4)' : it.age_status === 'old' ? 'var(--ylw)' : 'var(--grn)';
+    const ageStr = it.age_hours != null ? (it.age_hours > 48 ? `${(it.age_hours/24).toFixed(0)}g` : `${it.age_hours.toFixed(0)}sa`) : '—';
+    const kapStr = it.kap_age_days != null ? `${it.kap_age_days.toFixed(0)}g` : '—';
+    const gapStr = it.gap_days != null
+      ? (it.gap_days > 1
+          ? `<span style="color:var(--red);font-weight:700">+${it.gap_days.toFixed(0)}g ⚠</span>`
+          : `<span style="color:var(--grn)">${it.gap_days.toFixed(0)}g</span>`)
+      : '—';
+    const warns = (it.warnings||[]).length;
+    h += `<tr>
+      <td style="color:var(--t4)">${i+1}</td>
+      <td><span class="clk-t" onclick="event.stopPropagation();showFreshModal('${esc(it.ticker)}')" style="font-family:'JetBrains Mono',monospace;color:var(--cyn);font-weight:700">${esc(it.ticker)}</span></td>
+      <td><span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:${stCol};font-weight:700;text-transform:uppercase">${esc(it.age_status||'?')}</span></td>
+      <td style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--t2)">${ageStr}</td>
+      <td style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--t3)">${kapStr}</td>
+      <td style="font-family:'JetBrains Mono',monospace;font-size:11px">${gapStr}</td>
+      <td style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--t3)">${esc(it.latest_quarter||'—')}</td>
+      <td style="font-size:11px;color:var(--orn)">${warns ? `<span title="${esc((it.warnings||[]).join(' · '))}">${warns} uyarı</span>` : '—'}</td>
+    </tr>`;
+  });
+  h += '</tbody></table></div>';
+  body.innerHTML = h;
+}
+
+async function batchRefreshStale(csv, btn){
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Yenileniyor… bekleyin'; }
+  const prog = document.getElementById('staleBatchProgress');
+  if (prog) prog.innerHTML = '<span style="color:var(--t4)">Borsapy çağrılıyor (bounded parallelism, ~4-30s/ticker)…</span>';
+  try {
+    const r = await fetch('/api/diag/fundamentals/batch-refresh?tickers=' + encodeURIComponent(csv) + '&max_concurrency=4', {method:'POST'});
+    const j = await r.json();
+    const v = j.value || j;
+    const s = v.summary || {};
+    const rows = v.items || [];
+    let html = `<div style="padding:10px 14px;background:rgba(38,194,129,.10);border-left:3px solid var(--grn);border-radius:0 var(--rad) var(--rad) 0;margin-bottom:10px"><b style="color:var(--grn)">✓ Batch tamamlandı.</b> ${s.succeeded}/${s.requested} başarılı, ${s.failed} hata.</div>`;
+    if (rows.length) {
+      html += '<div style="font-size:11px;color:var(--t3);margin-bottom:6px">Sonuçlar:</div>';
+      html += '<div style="display:flex;flex-direction:column;gap:4px;max-height:240px;overflow-y:auto">';
+      rows.forEach(row => {
+        const col = row.ok ? 'var(--grn)' : 'var(--red)';
+        const ic = row.ok ? '✓' : '✕';
+        const lq = row.new_latest_quarter ? ` · ${row.new_latest_quarter}` : '';
+        const age = row.new_age_hours != null ? `${row.new_age_hours.toFixed(1)}sa` : '?';
+        const errMsg = row.error ? ` — ${row.error}` : '';
+        html += `<div style="display:flex;gap:8px;align-items:center;font-size:11px;font-family:'JetBrains Mono',monospace;padding:4px 8px;background:var(--bg3);border-radius:3px">
+          <span style="color:${col};font-weight:700">${ic}</span>
+          <span style="color:var(--cyn);min-width:60px">${esc(row.ticker)}</span>
+          <span style="color:var(--t2)">→ ${esc(age)}${esc(lq)}</span>
+          <span style="color:var(--t4);flex:1;text-align:right">${esc(errMsg)}</span>
+        </div>`;
+      });
+      html += '</div>';
+    }
+    if (prog) prog.innerHTML = html;
+    // Invalidate cached freshness summary so next load shows updated state
+    S.diagFresh = null; S.diagFreshSummary = null; S.diagFreshFetchedAt = 0;
+    // Auto-reload main freshness for the Radar banner
+    setTimeout(() => loadRadarFreshness(true), 1000);
+  } catch(e) {
+    if (prog) prog.innerHTML = `<span style="color:var(--red)">Hata: ${esc(String(e.message||e))}</span>`;
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '🔄 Tekrar Yenile'; }
   }
 }
 
