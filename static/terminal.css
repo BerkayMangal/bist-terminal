@@ -183,6 +183,59 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg0);color:var(
   .hero-wrap{padding:12px}
   .nav-b{padding:8px 12px}
 }
+
+/* ===== KAP / BİLANÇOLAR MOBILE POLISH ===== */
+@media(max-width:600px){
+  /* Bilanço modali: full-screen on mobile so the 6-section AI summary
+     has room to breathe and the iOS keyboard / nav-bar don't clip it. */
+  #kapAnalysisOv{padding:0!important;align-items:flex-start!important}
+  #kapAnalysisOv > div{
+    max-width:100%!important;
+    width:100%!important;
+    max-height:100vh!important;
+    max-height:100dvh!important;
+    min-height:100vh;
+    min-height:100dvh;
+    border-radius:0!important;
+    padding:16px 14px!important;
+  }
+  /* AI summary sections: tighter padding, smaller body text */
+  #kapAnalysisOv h3{font-size:14px!important}
+  /* Bilançolar disclosure card: stack metadata on narrow screens.
+     Time-ago moves into the title row so the card body has full width. */
+  #pg-bilancolar .card-b{padding:0!important}
+  /* Reaction pills row: smaller font, no horizontal scroll */
+  #pg-bilancolar .card-b > div > div:nth-child(2){flex-wrap:wrap}
+  /* Filter chips: wrap instead of overflow */
+  #pg-bilancolar > div:nth-child(2){overflow-x:auto;-webkit-overflow-scrolling:touch}
+}
+
+/* ===== TICKER DETAIL MOBILE POLISH ===== */
+@media(max-width:600px){
+  /* The 3-ring header (TEMEL / V13 DEĞER after Plan A) reads better
+     in a single row on narrow screens. Reduce ring size + gap. */
+  .dp-h .ring{transform:scale(.85);transform-origin:center}
+  /* Metric box grid: 2 cols on phones (was already 1fr 1fr in dp-h block) */
+  .dp-h .mg{gap:6px}
+  /* Detail page typography: tighten body */
+  .dp-body{padding:12px 10px!important}
+  .dp{border-radius:0!important}
+}
+
+/* ===== HEADER LOGO + NAV ===== */
+@media(max-width:480px){
+  /* Logo small text already hidden ≤480; trim main padding too */
+  .hdr{padding:6px 10px}
+  .main{padding:10px 10px 80px}  /* extra bottom padding so the last card
+                                     clears safe-area / browser chrome */
+}
+
+/* ===== TOOLTIP REPOSITION (touch devices) ===== */
+@media(hover:none){
+  /* Suppress the desktop-only hover tooltip — on touch it lingers and
+     blocks taps. The same info lives in the modal / card detail. */
+  #bbTip{display:none!important}
+}
 /* ===== PHASE 5.1.1 — HEATMAP SKELETON SHIMMER ===== */
 .heat-skel-wrap{padding:8px;background:var(--bg2);border:1px solid var(--bdr);border-radius:var(--rad)}
 .heat-skel-grid{display:flex;flex-wrap:wrap;gap:4px;width:100%;max-width:750px;margin-bottom:8px}
