@@ -234,6 +234,22 @@ def compute_data_freshness(ticker: str) -> dict[str, Any]:
             "quarterly data missing — scoring falls back to annual (slower signal)"
         )
 
+    # ---- score velocity (30-day) ---------------------------------
+    # Surfaces "score is frozen for a month despite cache turning over"
+    # — exactly the FORTE/LOGO complaint that started this whole tool.
+    try:
+        vel = compute_score_velocity(sym, days=30)
+        out["velocity"] = vel
+        if vel.get("frozen"):
+            out["warnings"].append(
+                f"score frozen {vel.get('n_snapshots',0)} gündür "
+                f"(max günlük değişim {vel.get('max_jump',0)}) — "
+                "fundamentals değişmiyor mu, yoksa pipeline tıkalı mı?"
+            )
+    except Exception as exc:
+        log.debug("velocity %s: %r", sym, exc)
+        out["velocity"] = None
+
     return out
 
 
@@ -271,6 +287,72 @@ def filter_stale_rows(
         )
     )
     return matched
+
+
+def compute_score_velocity(
+    ticker: str,
+    days: int = 30,
+    frozen_max_delta: float = 1.0,
+) -> dict[str, Any]:
+    """Pull `days` of score history and characterize movement.
+
+    Output:
+        {
+            "n_snapshots": int,
+            "score_first": float | None,
+            "score_last":  float | None,
+            "delta": float | None,
+            "max_jump": float | None,    # largest single-day move
+            "abs_mean_jump": float | None,
+            "frozen": bool,              # n≥5 and ALL daily moves < frozen_max_delta
+            "lookback_days": int,
+        }
+
+    The 'frozen' verdict is what answers "FORTE 1 aydır donmuş":
+    enough snapshots, but no daily change ≥ 1 point — a strong signal
+    that something upstream isn't updating.
+    """
+    sym = _norm(ticker)
+    out: dict[str, Any] = {
+        "n_snapshots": 0,
+        "score_first": None,
+        "score_last": None,
+        "delta": None,
+        "max_jump": None,
+        "abs_mean_jump": None,
+        "frozen": False,
+        "lookback_days": days,
+    }
+    if not sym:
+        return out
+    try:
+        from infra.storage import _get_conn
+        c = _get_conn()
+        rows = c.execute(
+            "SELECT score FROM score_history "
+            "WHERE symbol = ? AND scoring_version = 'v13_handpicked' "
+            "ORDER BY snap_date ASC LIMIT ?",
+            (sym, int(days)),
+        ).fetchall()
+    except Exception as exc:
+        log.debug("score_velocity %s: %r", sym, exc)
+        return out
+    scores = [r[0] for r in rows if r[0] is not None]
+    out["n_snapshots"] = len(scores)
+    if len(scores) < 2:
+        return out
+    out["score_first"] = round(float(scores[0]), 2)
+    out["score_last"] = round(float(scores[-1]), 2)
+    out["delta"] = round(out["score_last"] - out["score_first"], 2)
+    jumps = [abs(scores[i] - scores[i - 1]) for i in range(1, len(scores))]
+    out["max_jump"] = round(max(jumps), 2)
+    out["abs_mean_jump"] = round(sum(jumps) / len(jumps), 2)
+    # Frozen verdict: need at least 5 snapshots, AND every single-day
+    # jump must be below the threshold. Both conditions together rule
+    # out "small dataset" false positives.
+    if len(scores) >= 5 and out["max_jump"] < frozen_max_delta:
+        out["frozen"] = True
+    return out
 
 
 def compute_summary(

@@ -1472,6 +1472,7 @@ function _radarFreshBanner(){
     </div>
     <div style="font-size:var(--fs-xs);color:var(--t4);margin-top:6px">Fresh = borsapy son ${th.fresh_hours||26}sa içinde fetch · Stale = ${th.stale_hours||72}sa+ ${warn}</div>
     ${_radarKapHealthBanner()}
+    ${_radarAutoRefreshBanner()}
   </div>`;
 }
 
@@ -1516,10 +1517,64 @@ async function loadKapHealth(){
   }
 }
 
+// Auto-refresh background loop telemetry — pasif sağlık satırı.
+async function loadAutoRefreshStatus(){
+  try {
+    const r = await api('/api/diag/auto-refresh/status');
+    S.autoRefresh = (r && (r.value || r)) || null;
+    if (S.page === 'radar') renderRadarPage();
+  } catch(e) {
+    console.warn('auto-refresh status fetch failed', e);
+  }
+}
+
+function _radarAutoRefreshBanner(){
+  const ar = S.autoRefresh;
+  if (!ar) return '';
+  const lc = ar.last_cycle;
+  const cfg = ar.config || {};
+  const intervalHrs = cfg.interval_sec ? (cfg.interval_sec/3600).toFixed(0) : '?';
+  let col = 'var(--t4)', ic = '?', verdict = 'Background loop henüz çalışmadı';
+  let detail = `Her ${intervalHrs}sa\'te bir tetiklenir (max ${cfg.max_per_cycle||'?'} ticker/cycle)`;
+  if (lc) {
+    const ageMin = lc.finished_at ? Math.round((Date.now()/1000 - lc.finished_at)/60) : null;
+    const ageStr = ageMin == null ? '?' : ageMin < 60 ? `${ageMin}dk önce` : ageMin < 1440 ? `${Math.round(ageMin/60)}sa önce` : `${Math.round(ageMin/1440)}g önce`;
+    if (lc.failed > 0 && lc.succeeded === 0) {
+      col = 'var(--red)'; ic = '✕'; verdict = `Son cycle başarısız (${lc.failed} hata)`;
+    } else if (lc.attempted === 0) {
+      col = 'var(--grn)'; ic = '✓'; verdict = `Aktif · ${ageStr} · refresh\'e gerek yoktu (0 stale)`;
+    } else {
+      col = 'var(--grn)'; ic = '✓'; verdict = `Aktif · ${ageStr}`;
+    }
+    detail = `Son: ${lc.attempted} ticker · ${lc.succeeded} başarılı · ${lc.failed} hata · ${lc.score_change_count||0} skor değişti${lc.avg_abs_delta?` (ortalama Δ ${lc.avg_abs_delta})`:''}`;
+  }
+  // Score changes liste — sadece anlamlı değişimler
+  let changes = '';
+  if (lc && lc.score_changes && lc.score_changes.length) {
+    const top = lc.score_changes.slice(0, 5);
+    changes = '<div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:6px">';
+    top.forEach(c => {
+      const dCol = c.delta > 0 ? 'var(--grn)' : 'var(--red)';
+      const sign = c.delta > 0 ? '+' : '';
+      changes += `<span class="clk-t" onclick="showFreshModal('${esc(c.ticker)}')" style="font-family:'JetBrains Mono',monospace;font-size:10px;padding:2px 6px;background:${dCol}15;color:${dCol};border-radius:3px;cursor:pointer">${esc(c.ticker)} ${c.before}→${c.after} <b>${sign}${c.delta}</b></span>`;
+    });
+    changes += '</div>';
+  }
+  return `<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--bdr);font-size:var(--fs-xs)">
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+      <span style="font-family:'JetBrains Mono',monospace;color:var(--t4);text-transform:uppercase;letter-spacing:.5px">🔄 Auto-Refresh</span>
+      <span style="display:inline-flex;align-items:center;gap:4px;color:${col};font-weight:700"><span>${ic}</span>${esc(verdict)}</span>
+      <span style="color:var(--t3)">${esc(detail)}</span>
+    </div>
+    ${changes}
+  </div>`;
+}
+
 function renderRadarPage(){const pg=$('pg-radar');const sc=S.scan;if(!sc||!sc.items||!sc.items.length){pg.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px"><h2 style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-lg);color:var(--cyn)">🏛️ Temel Analiz Radar</h2><button class="btn btn-grn" onclick="startScan()">▶ SCAN</button></div><div class="emp"><h3 style="color:var(--t2)">Henüz taranmadı</h3></div>`;return;}
   // Veri tazeliği — sayfa açıldıkça otomatik fetch (5dk cached)
   if (!S.diagFresh) { loadRadarFreshness(); }
   if (!S.kapHealth) { loadKapHealth(); }
+  if (!S.autoRefresh) { loadAutoRefreshStatus(); }
   const sort=S._radarSort||'deger';pg.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px"><div><h2 style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-lg);color:var(--cyn)">🏛️ V13 Saf Değerleme Radar — ${sc.items.length} Hisse</h2><p style="font-size:var(--fs-sm);color:var(--t3);margin-top:2px">${sc.asof?new Date(sc.asof).toLocaleString('tr-TR'):''}</p></div><button class="btn btn-grn" onclick="startScan()">🔄</button></div>${_radarFreshBanner()}<div style="padding:12px 16px;background:var(--bg3);border-radius:var(--rad);margin-bottom:14px;font-size:var(--fs-base);color:var(--t2);line-height:1.6"><b style="color:var(--cyn)">V13 Saf Değerleme nasıl çalışır?</b> Uzun vadeli değer tarayıcı. ${sc.items.length} BIST hissesi 7 temel boyutta analiz edilir: Değerleme (F/K, PD/DD, FD/FAVÖK), Kalite (ROE, marjlar), Büyüme, Bilanço sağlamlığı (Altman Z, borç), Kâr Kalitesi (Beneish, nakit akış), Sermaye Tahsisi ve Hendek (marj stabilitesi). <span style="color:var(--ylw)">Kısa vadeli momentum ve teknik sinyaller için → Cross Hunter.</span></div><div class="card"><div class="card-b" style="overflow-x:auto">${renderRadarTbl(sc.items,sort)}</div></div>`;}
 
 // Veri Tazeliği detay modal'ı — bir hissenin tüm freshness bundle'ını
@@ -1575,6 +1630,14 @@ async function showFreshModal(ticker){
     h += '<div style="margin-bottom:8px;padding:10px 14px;background:rgba(255,167,38,.08);border-left:3px solid var(--orn);border-radius:0 var(--rad) var(--rad) 0"><div style="font-family:\'JetBrains Mono\',monospace;font-size:10px;color:var(--orn);letter-spacing:.5px;margin-bottom:6px">⚠️ UYARILAR</div>';
     data.warnings.forEach(w => { h += `<div style="font-size:var(--fs-sm);color:var(--t2);padding:3px 0">• ${esc(w)}</div>`; });
     h += '</div>';
+  }
+  // Score velocity — frozen verdict + 30-day stats
+  const v = data.velocity;
+  if (v && v.n_snapshots >= 2) {
+    const frozenBar = v.frozen
+      ? `<div style="margin-bottom:10px;padding:10px 14px;background:rgba(33,150,243,.10);border-left:3px solid var(--blu);border-radius:0 var(--rad) var(--rad) 0;font-size:var(--fs-sm)"><b style="color:var(--blu)">🧊 Skor donmuş</b> — son ${v.n_snapshots} snapshot, max günlük değişim ${v.max_jump}. Bu hisse için fundamentals gerçekten sabit mi, yoksa pipeline tıkalı mı? "🔄 Şimdi Yenile" ile test et.</div>`
+      : '';
+    h += frozenBar;
   }
   // 30-day score history sparkline — "skor gerçekten değişiyor mu?"
   h += `<div id="fmHist" style="margin-bottom:12px"></div>`;
