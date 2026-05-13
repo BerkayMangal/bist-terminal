@@ -348,6 +348,12 @@ try:
     app.include_router(bwa_router)
 except Exception as _e:
     log.warning(f"BullWatch alarm router not mounted: {_e}")
+# Veri Tazeliği diagnostic — per-ticker freshness for Radar.
+try:
+    from api.diag import router as diag_router
+    app.include_router(diag_router)
+except Exception as _e:
+    log.warning(f"Diag router not mounted: {_e}")
 
 @app.exception_handler(RateLimitExceeded)
 async def _rate_limit_handler(request: Request, exc: RateLimitExceeded):
