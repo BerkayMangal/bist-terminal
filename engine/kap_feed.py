@@ -110,10 +110,14 @@ def run_one_cycle(universe: Optional[list[str]] = None) -> CycleStats:
     )
 
     # Per-ticker fetch in parallel. pykap calls are independent so a
-    # straight ThreadPoolExecutor scales well.
+    # straight ThreadPoolExecutor scales well. We pull BOTH financial
+    # reports (FR) and general announcements (ODA) — the latter is
+    # where operator signals (insider trades, KAP warnings, M&A) live.
     def _fetch_one(sym: str) -> tuple[str, list, Optional[Exception]]:
         try:
-            return sym, kap_client.list_disclosures(sym, days=LOOKBACK_DAYS), None
+            fr = kap_client.list_disclosures(sym, days=LOOKBACK_DAYS) or []
+            oda = kap_client.list_general_announcements(sym, days=LOOKBACK_DAYS) or []
+            return sym, list(fr) + list(oda), None
         except Exception as exc:
             return sym, [], exc
 

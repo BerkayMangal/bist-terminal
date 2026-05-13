@@ -272,6 +272,10 @@ class TestFeedCycle:
 
         import data.kap_client as kc
         monkeypatch.setattr(kc, "list_disclosures", fake_list)
+        # Tahtacı PR A: feed now also fetches ODA general announcements;
+        # mock it to empty so this test isolates FR behavior.
+        monkeypatch.setattr(kc, "list_general_announcements",
+                            lambda ticker, days=14: [])
 
         # Tiny universe
         import engine.kap_feed as feed
@@ -297,6 +301,8 @@ class TestFeedCycle:
 
         import data.kap_client as kc
         monkeypatch.setattr(kc, "list_disclosures", fake_list)
+        monkeypatch.setattr(kc, "list_general_announcements",
+                            lambda ticker, days=14: [])
         import engine.kap_feed as feed
 
         # First cycle persists
@@ -318,6 +324,8 @@ class TestFeedCycle:
 
         import data.kap_client as kc
         monkeypatch.setattr(kc, "list_disclosures", flaky)
+        monkeypatch.setattr(kc, "list_general_announcements",
+                            lambda ticker, days=14: [])
         import engine.kap_feed as feed
         stats = feed.run_one_cycle(universe=["BAD", "ARCLK", "EMPTY"])
         # ARCLK still got persisted despite BAD blowing up

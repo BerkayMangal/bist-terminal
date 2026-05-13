@@ -186,6 +186,110 @@ def list_disclosures(
     return out
 
 
+# ── Operator signal classification (Tahtacı PR A1) ─────────────────
+#
+# KAP "Özel Durum Açıklaması" tipinin subject metinleri serbest, ama
+# operatör imzası taşıyan iyi tanımlı bir alt-küme var. Tahtacı (BIST
+# operatör) tracking için bu sinyalleri kategorize edip BullWatch'a
+# besleriz.
+#
+# Tag → açıklama → tipik skor boost önerisi (engine.bullwatch_kap_boost'ta uygulanır):
+#   INSIDER          Pay Alım/Satım Bildirimi, Pay Sahipliği Bildirimi  → +15
+#   KAP_ALERT        Olağan Dışı Fiyat ve Miktar Hareketleri              → +10
+#   BUYBACK          Pay Geri Alım Programı                                → +12
+#   MNA              Finansal Duran Varlık Edinimi, Birleşme, Devralma   → +12
+#   CAPITAL_CHANGE   Sermaye Artırımı (bedelsiz pozitif, bedelli karışık) → +5
+#   MGMT_CHANGE      Yönetim Kurulu Kararı / Yönetici Değişikliği          → +3
+#   GENERAL          Özel Durum Açıklaması (Genel) — serbest metin         → 0 (sınıflandırma yok)
+OPERATOR_SIGNAL_PATTERNS: dict[str, tuple[str, ...]] = {
+    "INSIDER":        ("pay alım satım bildirim", "pay sahipliği bildirim",
+                       "değişen pay sahipliği", "yönetim kurulu üyesi pay"),
+    "KAP_ALERT":      ("olağan dışı fiyat", "olağandışı fiyat",
+                       "olağan dışı miktar"),
+    "BUYBACK":        ("pay geri alım", "geri alım program", "pay alımı programı"),
+    "MNA":            ("finansal duran varlık edinim", "birleşme",
+                       "devralma", "bağlı ortaklık devri", "satın alma"),
+    "CAPITAL_CHANGE": ("sermaye artırım", "bedelsiz sermaye",
+                       "bedelli sermaye", "sermaye azaltım"),
+    "MGMT_CHANGE":    ("yönetim kurulu", "yönetici atama",
+                       "genel müdür", "yönetici değişiklik"),
+}
+
+
+def classify_operator_signal(subject: str) -> Optional[str]:
+    """Map a free-text KAP subject to one of the OPERATOR_SIGNAL_PATTERNS
+    tags, or None if no operator-relevant pattern matches.
+
+    Used by:
+      - engine.kap_dispatcher to decide AI queue priority
+      - engine.bullwatch_kap_boost to compute the per-ticker score lift
+    """
+    if not subject:
+        return None
+    s = subject.lower().strip()
+    for tag, needles in OPERATOR_SIGNAL_PATTERNS.items():
+        for needle in needles:
+            if needle in s:
+                return tag
+    return None
+
+
+def list_general_announcements(
+    ticker: str,
+    *,
+    days: int = 14,
+) -> list[DisclosureRecord]:
+    """Pull ALL Özel Durum (ODA) announcements for one ticker over the
+    past `days`, bypassing pykap's whitelist-restricted subject filter.
+
+    Implementation: call the same `/api/disclosure/members/byCriteria`
+    endpoint pykap uses internally, but with no subject filter and
+    `disclosureClass='ODA'`. Discovered via pykap source code reading
+    + KAP recon.
+
+    Errors are logged and swallowed — empty list on any failure path
+    so the dispatcher never crashes on a flaky KAP server.
+    """
+    sym = (ticker or "").upper().strip().replace(".IS", "")
+    if not sym:
+        return []
+    try:
+        from pykap.bist import BISTCompany
+        import requests
+        import datetime as _dt
+        comp = BISTCompany(ticker=sym)
+        end = _dt.date.today()
+        start = end - _dt.timedelta(days=max(1, days))
+        body = {
+            "fromDate":   str(start),
+            "toDate":     str(end),
+            "disclosureClass":  "ODA",
+            "subjectList":      [],
+            "mkkMemberOidList": [comp.company_id],
+            "inactiveMkkMemberOidList": [],
+            "bdkMemberOidList": [],
+            "fromSrc":          False,
+            "disclosureIndexList": [],
+        }
+        r = requests.post(
+            "https://www.kap.org.tr/tr/api/disclosure/members/byCriteria",
+            json=body, timeout=20,
+        )
+        r.raise_for_status()
+        rows = r.json() or []
+    except Exception as exc:
+        log.debug("KAP general announcements %s: %r", sym, exc)
+        return []
+
+    out: list[DisclosureRecord] = []
+    for row in rows:
+        rec = _normalize_disclosure(row, fallback_ticker=sym)
+        if rec is not None:
+            out.append(rec)
+    out.sort(key=lambda r: r.disclosure_index, reverse=True)
+    return out
+
+
 def list_expected_disclosures(ticker: str) -> list[dict[str, Any]]:
     """Forward-looking calendar — what disclosures are expected for a
     ticker over the upcoming reporting periods. Phase-2 (calendar UI)
