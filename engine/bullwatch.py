@@ -1261,6 +1261,56 @@ def _pattern_label(active_engines: list[str], patterns: dict,
     return " + ".join(out[:4])
 
 
+def _build_ownership_from_kap(ticker: str,
+                              lookback_days: int = 90) -> Optional[dict]:
+    """Construct an OwnershipSnapshot dict (the schema expected by
+    features.bullwatch_features.ownership_signal) from the KAP
+    disclosure store. Only the insider_buys_90d channel is populated;
+    fund / institutional channels need paid feeds we don't have.
+
+    Returns:
+        dict matching the snapshot schema, or None when storage is
+        unreachable / ticker has zero history.
+    """
+    sym = (ticker or "").upper().strip().replace(".IS", "")
+    if not sym:
+        return None
+    try:
+        from infra import kap_storage
+        from data.kap_client import classify_operator_signal
+        rows = kap_storage.get_by_ticker(sym, limit=200)
+    except Exception:
+        return None
+    if not rows:
+        return None
+    import datetime as _dt
+    cutoff = _dt.datetime.now(_dt.timezone.utc) - _dt.timedelta(days=lookback_days)
+    insider_n = 0
+    for row in rows:
+        publish = row.get("publish_date")
+        if not publish:
+            continue
+        try:
+            pub_dt = _dt.datetime.fromisoformat(str(publish))
+            if pub_dt.tzinfo is None:
+                pub_dt = pub_dt.replace(tzinfo=_dt.timezone.utc)
+        except Exception:
+            continue
+        if pub_dt < cutoff:
+            continue
+        if classify_operator_signal(row.get("subject") or "") == "INSIDER":
+            insider_n += 1
+    if insider_n == 0:
+        return None
+    return {
+        "institutional_buys_30d": 0,
+        "repeated_institutions":  0,
+        "insider_buys_90d":       insider_n,
+        "fund_increases":         0,
+        "as_of": _dt.datetime.now(_dt.timezone.utc).isoformat(),
+    }
+
+
 def _diagnostic_fields(metrics: dict) -> dict:
     """Phase A.10 Step 2-A: extract diagnostic kwargs for BullWatchResult.
 
@@ -1398,6 +1448,19 @@ def score_symbol(metrics: dict,
     atr_r = atr_compression_ratio(df)
     bb_r = bb_width_compression_ratio(df)
     patterns = detect_price_action_patterns(df)
+
+    # Tahtacı PR A3 — when no ownership snapshot was provided, build a
+    # minimal one from KAP insider disclosures. We can only populate
+    # the insider_buys_90d channel from KAP (fund / institutional /
+    # broker data still requires paid feeds), but that's enough to
+    # take the engine from coverage='none' to 'partial' on tickers
+    # where insiders are actively trading.
+    if ownership is None:
+        try:
+            ownership = _build_ownership_from_kap(symbol)
+        except Exception as _exc:
+            log.debug("ownership-from-kap %s: %r", symbol, _exc)
+            ownership = None
 
     # ---- Engine sub-scores (each in [0,1] or None if no data) ----
     s_fp, r_fp = _engine_float_pressure(fp)
