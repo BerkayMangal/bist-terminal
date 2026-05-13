@@ -1653,45 +1653,69 @@ async function showFreshModal(ticker){
 
 async function loadFreshSparkline(ticker){
   try {
-    const r = await api('/api/diag/score-history/' + encodeURIComponent(ticker) + '?days=30');
+    const r = await api('/api/diag/timeline/' + encodeURIComponent(ticker) + '?days=60');
     const v = (r && (r.value || r)) || {};
-    const items = v.items || [];
+    const scoreEvents = v.score_events || [];
+    const kapEvents = v.kap_events || [];
     const el = document.getElementById('fmHist');
     if (!el) return;
-    if (!items.length) {
-      el.innerHTML = `<div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--t4);letter-spacing:.5px;margin-bottom:4px">📈 30 GÜNLÜK SKOR TARİHÇESİ</div>
-        <div style="padding:12px;background:var(--bg3);border-radius:var(--rad);font-size:11px;color:var(--t4);text-align:center">Henüz snapshot yok — score_history boş.</div>`;
+    if (!scoreEvents.length && !kapEvents.length) {
+      el.innerHTML = `<div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--t4);letter-spacing:.5px;margin-bottom:4px">📈 60 GÜNLÜK ZAMAN ÇİZGİSİ</div>
+        <div style="padding:12px;background:var(--bg3);border-radius:var(--rad);font-size:11px;color:var(--t4);text-align:center">Henüz snapshot ya da KAP olayı yok.</div>`;
       return;
     }
-    const scores = items.map(i => i.score).filter(s => s != null);
-    if (!scores.length) { el.innerHTML = ''; return; }
-    const min = Math.min(...scores), max = Math.max(...scores);
-    const range = Math.max(1, max - min);
-    const first = scores[0], last = scores[scores.length - 1];
-    const delta = last - first;
-    const dCol = delta > 1 ? 'var(--grn)' : delta < -1 ? 'var(--red)' : 'var(--t3)';
-    const dSign = delta > 0 ? '+' : '';
-    // SVG sparkline
-    const w = 480, hgt = 64, pad = 4;
-    const pts = items.map((it, i) => {
-      const x = pad + (i / Math.max(1, items.length-1)) * (w - 2*pad);
-      const y = it.score == null ? null : (hgt - pad - ((it.score - min) / range) * (hgt - 2*pad));
-      return y == null ? null : `${x.toFixed(1)},${y.toFixed(1)}`;
-    }).filter(Boolean).join(' ');
-    el.innerHTML = `<div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--cyn);letter-spacing:.5px;margin-bottom:4px">📈 30 GÜNLÜK SKOR TARİHÇESİ · ${items.length} snapshot</div>
+    // x-axis: unified by date. Build a chronologically-anchored time range.
+    const allDates = [...scoreEvents.map(e=>e.date), ...kapEvents.map(e=>new Date(e.date).toISOString().slice(0,10))];
+    const dStart = new Date(Math.min(...allDates.map(d=>new Date(d).getTime())));
+    const dEnd = new Date(Math.max(...allDates.map(d=>new Date(d).getTime())));
+    const spanMs = Math.max(1, dEnd.getTime() - dStart.getTime());
+    const dayMs = 24*3600*1000;
+    const w = 540, hgt = 80, pad = 6;
+    const xFor = (date) => pad + ((new Date(date).getTime() - dStart.getTime()) / spanMs) * (w - 2*pad);
+    let svg = '';
+    let summaryLine = '';
+    if (scoreEvents.length) {
+      const scores = scoreEvents.map(e=>e.score).filter(s=>s!=null);
+      const min = Math.min(...scores), max = Math.max(...scores);
+      const range = Math.max(1, max - min);
+      const first = scores[0], last = scores[scores.length-1];
+      const delta = last - first;
+      const dCol = delta > 1 ? 'var(--grn)' : delta < -1 ? 'var(--red)' : 'var(--t3)';
+      const dSign = delta > 0 ? '+' : '';
+      const pts = scoreEvents.filter(e=>e.score!=null).map(e => {
+        const x = xFor(e.date);
+        const y = hgt - pad - ((e.score - min) / range) * (hgt - 2*pad);
+        return `${x.toFixed(1)},${y.toFixed(1)}`;
+      }).join(' ');
+      svg = `<polyline fill="none" stroke="${dCol}" stroke-width="2" points="${pts}" />`;
+      summaryLine = `<div style="display:flex;justify-content:space-between;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--t4);margin-top:4px"><span>${esc(scoreEvents[0].date)} · ${first.toFixed(0)}</span><span style="color:${dCol};font-weight:700">${dSign}${delta.toFixed(1)} puan</span><span>${esc(scoreEvents[scoreEvents.length-1].date)} · ${last.toFixed(0)}</span></div><div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--t4);margin-top:2px">min ${min.toFixed(0)} · max ${max.toFixed(0)} · range ${range.toFixed(0)} · ${scoreEvents.length} snapshot</div>`;
+    }
+    // KAP event vertical markers — orange dashed lines
+    let kapMarkers = '';
+    kapEvents.forEach(e => {
+      const x = xFor(e.date);
+      kapMarkers += `<line x1="${x.toFixed(1)}" y1="${pad}" x2="${x.toFixed(1)}" y2="${hgt-pad}" stroke="var(--orn)" stroke-width="1" stroke-dasharray="3 2" opacity=".8" />`;
+      kapMarkers += `<circle cx="${x.toFixed(1)}" cy="${pad+2}" r="3" fill="var(--orn)" />`;
+    });
+    let html = `<div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--cyn);letter-spacing:.5px;margin-bottom:4px">📈 60 GÜNLÜK ZAMAN ÇİZGİSİ · ${scoreEvents.length} skor + ${kapEvents.length} KAP olayı</div>
       <div style="padding:8px 12px;background:var(--bg3);border-radius:var(--rad)">
-        <svg width="100%" viewBox="0 0 ${w} ${hgt}" preserveAspectRatio="none" style="display:block">
-          <polyline fill="none" stroke="${dCol}" stroke-width="2" points="${pts}" />
-        </svg>
-        <div style="display:flex;justify-content:space-between;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--t4);margin-top:4px">
-          <span>${esc(items[0].snap_date)} · ${first.toFixed(0)}</span>
-          <span style="color:${dCol};font-weight:700">${dSign}${delta.toFixed(1)} puan</span>
-          <span>${esc(items[items.length-1].snap_date)} · ${last.toFixed(0)}</span>
-        </div>
-        <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--t4);margin-top:2px">min ${min.toFixed(0)} · max ${max.toFixed(0)} · range ${range.toFixed(0)}</div>
-      </div>`;
+        <svg width="100%" viewBox="0 0 ${w} ${hgt}" preserveAspectRatio="none" style="display:block">${kapMarkers}${svg}</svg>
+        ${summaryLine || ''}`;
+    // KAP events textual list — clickable, opens disclosure detail
+    if (kapEvents.length) {
+      html += '<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--bdr)"><div style="font-family:\'JetBrains Mono\',monospace;font-size:10px;color:var(--orn);letter-spacing:.5px;margin-bottom:6px">📰 KAP FİNANSAL RAPORLAR (zaman çizgisinde turuncu noktalar)</div>';
+      kapEvents.slice().reverse().forEach(e => {
+        const d = new Date(e.date);
+        const dStr = d.toLocaleDateString('tr-TR', {day:'numeric',month:'short',year:'numeric'});
+        const pq = e.period && e.year ? `Q${e.period} ${e.year}` : (e.year || '—');
+        html += `<div style="display:flex;justify-content:space-between;font-size:11px;padding:3px 0;border-bottom:1px dashed var(--bdr)"><span style="color:var(--t3)">${esc(dStr)}</span><span style="color:var(--t2)">${esc(e.rule_type||'—')} · ${esc(pq)}</span></div>`;
+      });
+      html += '</div>';
+    }
+    html += '</div>';
+    el.innerHTML = html;
   } catch(e) {
-    console.warn('sparkline fetch failed', e);
+    console.warn('timeline fetch failed', e);
   }
 }
 
