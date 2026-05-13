@@ -292,13 +292,33 @@ def list_general_announcements(
 
 def list_expected_disclosures(ticker: str) -> list[dict[str, Any]]:
     """Forward-looking calendar — what disclosures are expected for a
-    ticker over the upcoming reporting periods. Phase-2 (calendar UI)
-    consumes this directly; left as a raw dict because the schema
-    differs from historical (no `disclosureIndex` / `publishDate`).
+    ticker over the upcoming reporting periods.
+
+    Cached in Redis with a 12-hour TTL. KAP's expected-disclosure schedule
+    updates at most once a day (when the company publishes its yearly
+    plan), so re-fetching on every Bilançolar page open was 30+ pykap
+    HTTP calls per visit. The cache turns the second-and-later visits
+    into single-Redis-roundtrip operations.
     """
     sym = (ticker or "").upper().strip().replace(".IS", "")
     if not sym:
         return []
+    # Try Redis cache first
+    cache_key = f"bb:kap:calendar:{sym}"
+    try:
+        from core import redis_client
+        import json as _json
+        client = redis_client.get_client()
+        if client is not None:
+            raw = client.get(cache_key)
+            if raw:
+                try:
+                    return _json.loads(raw)
+                except (_json.JSONDecodeError, TypeError):
+                    pass  # corrupted cache entry → re-fetch
+    except Exception as exc:
+        log.debug("KAP calendar cache read %s: %r", sym, exc)
+    # Cache miss — fetch from KAP and persist
     try:
         from pykap.bist import BISTCompany
         comp = BISTCompany(ticker=sym)
@@ -306,4 +326,19 @@ def list_expected_disclosures(ticker: str) -> list[dict[str, Any]]:
     except Exception as exc:
         log.debug("KAP list_expected_disclosures %s: %r", sym, exc)
         return []
-    return list(rows)
+    rows = list(rows)
+    # Write through to cache (12h TTL — calendar updates yearly, but we
+    # want a buffer for occasional plan revisions).
+    try:
+        from core import redis_client
+        import json as _json
+        client = redis_client.get_client()
+        if client is not None and rows:
+            client.set(
+                cache_key,
+                _json.dumps(rows, ensure_ascii=False, default=str),
+                ex=12 * 3600,
+            )
+    except Exception as exc:
+        log.debug("KAP calendar cache write %s: %r", sym, exc)
+    return rows
