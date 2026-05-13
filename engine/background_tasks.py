@@ -553,3 +553,29 @@ async def kap_reactions_loop() -> None:
         except Exception as exc:
             log.warning("KAP reactions cycle raised: %r", exc)
         await asyncio.sleep(KAP_REACTIONS_INTERVAL)
+
+
+# ================================================================
+# BULLWATCH ALARM REACTION REFRESH LOOP (BW Alarm Faz 4)
+# ================================================================
+
+
+async def bw_alert_reactions_loop() -> None:
+    """Daily backfill of 1d/1w/1m post-alarm price reactions on
+    BullWatchAlert rows. Mirrors kap_reactions_loop structure."""
+    log.info(
+        "BW alarm reactions loop scheduled — first run in %ds, then daily",
+        KAP_REACTIONS_STARTUP_DELAY + 600,  # +10 min after KAP loop
+    )
+    await asyncio.sleep(KAP_REACTIONS_STARTUP_DELAY + 600)
+    while True:
+        try:
+            from engine.bullwatch_alert_reactions import refresh_alert_reactions
+            stats = await asyncio.to_thread(refresh_alert_reactions, 200)
+            log.info("BW alarm reactions tick stats: %s", stats)
+        except asyncio.CancelledError:
+            log.info("BW alarm reactions loop cancelled")
+            raise
+        except Exception as exc:
+            log.warning("BW alarm reactions cycle raised: %r", exc)
+        await asyncio.sleep(KAP_REACTIONS_INTERVAL)
