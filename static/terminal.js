@@ -1802,6 +1802,45 @@ function _bwShortlistRow(item, isWarning){
   </div>`;
 }
 
+// BW Alarm Faz 3 — persistence badge.
+// Looks up the ticker in S.alarmlar.recent (loaded lazily on bullwatch page
+// entry) and returns a small chip:
+//   🆕 (<24h): alarm just fired — first-look
+//   ⏳ (1–7d): fresh alarm still in window
+//   🔥 (7–30d): persisted! still in BullWatch list days later — the high-
+//               conviction signal that survived multiple scans
+function _bwAlarmBadge(ticker){
+  const alarms = S.alarmlar && S.alarmlar.recent;
+  if (!alarms || !alarms.length) return '';
+  const sym = (ticker || '').toUpperCase().replace('.IS','');
+  // Find the most recent alarm for this ticker
+  let latest = null;
+  for (const a of alarms) {
+    if ((a.ticker || '').toUpperCase() === sym) {
+      if (!latest || new Date(a.alarmed_at) > new Date(latest.alarmed_at)) {
+        latest = a;
+      }
+    }
+  }
+  if (!latest) return '';
+  const ageMs = Date.now() - new Date(latest.alarmed_at).getTime();
+  const days = ageMs / (24 * 3600 * 1000);
+  let icon, label, col, bg, title;
+  if (days < 1) {
+    icon = '🆕'; label = 'YENİ ALARM'; col = 'var(--blu)'; bg = 'var(--blud)';
+    title = `BullWatch ${Math.round(ageMs/3600000)}sa önce alarm verdi`;
+  } else if (days < 7) {
+    icon = '⏳'; label = `${Math.round(days)}G ALARM`; col = 'var(--orn)'; bg = 'rgba(255,167,38,.15)';
+    title = `${Math.round(days)} gün önce alarm verildi, hala listede`;
+  } else if (days < 30) {
+    icon = '🔥'; label = `KALICI ${Math.round(days)}G`; col = 'var(--red)'; bg = 'var(--redd)';
+    title = `${Math.round(days)} gün önce alarm verildi ve HALA listede — yüksek güven sinyali`;
+  } else {
+    return '';
+  }
+  return `<span title="${esc(title)}" style="display:inline-flex;align-items:center;gap:4px;background:${bg};color:${col};font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;padding:3px 8px;border-radius:4px;letter-spacing:.4px">${icon} ${esc(label)}</span>`;
+}
+
 function _bwCard(item){
   const z = _bwZoneStyle(item.zone);
   const score = (item.score||0).toFixed(0);
@@ -1826,6 +1865,7 @@ function _bwCard(item){
         </div>
         <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;align-items:center">
           <span class="pill ${z.pill}">${z.icon} ${z.label}</span>
+          ${_bwAlarmBadge(item.symbol)}
           ${_bwCycleBadge(item)}
           ${_bwReadinessBadge(item)}
           <span style="display:inline-flex;align-items:center;gap:4px;background:${ss.bg};color:${ss.col};font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:600;padding:3px 8px;border-radius:4px;text-transform:uppercase;letter-spacing:.4px">${ss.ico} ${esc(sec)}</span>
@@ -2111,6 +2151,15 @@ function renderBullwatchPage(){
     loadBullwatch();
     return;
   }
+  // Lazy-load alarm history so cards can show 🆕/⏳/🔥 persistence badges.
+  // Cheap: 30-day window, cached in S.alarmlar (also shared with Alarmlar tab).
+  if (!S.alarmlar && !S._alarmsLoading) {
+    S._alarmsLoading = true;
+    loadAlarmlar().then(() => {
+      S._alarmsLoading = false;
+      renderBullwatchPage();
+    }).catch(() => { S._alarmsLoading = false; });
+  }
   const bw=S.bullwatch;
   // Empty / error state — but ONLY if we have NO usable cards at all.
   // (If we have current results AND a refresh error, we keep the cards
@@ -2133,9 +2182,20 @@ function renderBullwatchPage(){
   });
   const filt=S._bwZone||'all';
   const sectFilt=S._bwSector||'all';
-  // Apply both filters: zone first, then sector
+  const alarmOnly=!!S._bwAlarmOnly;
+  // Build alarm ticker set once per render (cheap; ≤500 alarms)
+  const _alarmTickerSet = new Set();
+  if (S.alarmlar && S.alarmlar.recent) {
+    S.alarmlar.recent.forEach(a => {
+      const t = (a.ticker || '').toUpperCase().replace('.IS','');
+      const ageMs = Date.now() - new Date(a.alarmed_at).getTime();
+      if (ageMs < 30 * 24 * 3600 * 1000) _alarmTickerSet.add(t);
+    });
+  }
+  // Apply filters: zone first, then sector, then alarm-only
   let filtered=filt==='all'?sortedItems:sortedItems.filter(i=>i.zone===filt);
   if(sectFilt!=='all') filtered=filtered.filter(i=>(i.sector_tr||'Diğer')===sectFilt);
+  if(alarmOnly) filtered=filtered.filter(i=>_alarmTickerSet.has((i.symbol||'').toUpperCase()));
   const counts={
     all:items.length,
     EARLY:items.filter(i=>i.zone==='EARLY').length,
@@ -2185,6 +2245,7 @@ function renderBullwatchPage(){
     <button class="btn btn-sm ${filt==='CONVICTION'?'btn-grn':''}" style="${filt!=='CONVICTION'?'background:var(--bg3);color:var(--grn)':''}" onclick="S._bwZone='CONVICTION';renderBullwatchPage()">🟢 Conviction (${counts.CONVICTION})</button>
     <button class="btn btn-sm ${filt==='CONFIRMED'?'btn-grn':''}" style="${filt!=='CONFIRMED'?'background:var(--bg3);color:var(--ylw)':''}" onclick="S._bwZone='CONFIRMED';renderBullwatchPage()">🟡 Confirmed (${counts.CONFIRMED})</button>
     <button class="btn btn-sm ${filt==='EARLY'?'btn-grn':''}" style="${filt!=='EARLY'?'background:var(--bg3);color:var(--blu)':''}" onclick="S._bwZone='EARLY';renderBullwatchPage()">🔵 Early (${counts.EARLY})</button>
+    ${_alarmTickerSet.size ? `<button class="btn btn-sm" style="${alarmOnly?'background:rgba(239,83,80,.2);border:1px solid var(--red);color:var(--red)':'background:var(--bg3);color:var(--red)'}" onclick="S._bwAlarmOnly=${!alarmOnly};renderBullwatchPage()" title="Sadece son 30 günde alarm verilmiş hisseleri göster">🚨 Alarmlı (${_alarmTickerSet.size})</button>` : ''}
   </div>
   ${visibleSects.length>1?`<div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap;align-items:center">
     <span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--t4);text-transform:uppercase;letter-spacing:.5px;margin-right:4px">SEKTÖR</span>
