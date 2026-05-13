@@ -464,6 +464,42 @@ def detect_walk_up_accumulation(df, lookback: int = 10) -> bool:
     return recent_vol >= 1.10 * prior_vol
 
 
+def consecutive_high_close_days(df, lookback: int = 15) -> int:
+    """Count consecutive "high close" days from the most recent bar
+    backwards.
+
+    "High close" definition: close is in the top 30% of the day's
+    range (i.e. close >= low + 0.7 * (high - low)). This is the
+    classic markup-phase footprint — operators close the day near the
+    high to plant a higher reference for tomorrow.
+
+    5+ days = sustained walk-up pattern. 7-10+ = aggressive markup.
+
+    Returns 0 if the dataframe is too small or no recent bars qualify.
+    """
+    if not _PANDAS or df is None or len(df) < 2:
+        return 0
+    try:
+        sub = df.tail(lookback).astype(float)
+        highs = sub["High"].values
+        lows = sub["Low"].values
+        closes = sub["Close"].values
+    except Exception:
+        return 0
+    # Iterate from the most recent bar backwards
+    streak = 0
+    for i in range(len(closes) - 1, -1, -1):
+        rng = highs[i] - lows[i]
+        if rng <= 0:
+            break
+        # Close in top 30% of the day's range
+        if closes[i] >= lows[i] + 0.7 * rng:
+            streak += 1
+        else:
+            break
+    return int(streak)
+
+
 def detect_price_action_patterns(df) -> dict:
     """
     Run all detectors. Returns a dict:
