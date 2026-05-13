@@ -319,8 +319,10 @@ def save_ai_summary(disclosure_index: int, summary_text: str) -> bool:
     """Persist the AI-generated analysis for one disclosure. Faz 3 calls
     this from engine.kap_dispatcher after a successful Grok run.
 
-    Also mirrors the summary into the Redis hot entry so reads from
-    /api/kap/recent return the AI text without an extra SQLite hop.
+    Returns True iff at least ONE of (SQLite, Redis) accepted the write.
+    On Railway the SQLite volume may not be writable, so Redis alone
+    is enough — the disclosure row is read back via get_by_index which
+    falls through to Redis when SQLite is empty.
     """
     if not summary_text:
         return False
@@ -339,6 +341,7 @@ def save_ai_summary(disclosure_index: int, summary_text: str) -> bool:
         log.warning("save_ai_summary sqlite %s: %r", disclosure_index, exc)
 
     # Redis mirror — patch the JSON in place so /api/kap/recent picks it up
+    ok_redis = False
     client = redis_client.get_client()
     if client is not None:
         key = KEY_DISCLOSURE.format(disclosure_index)
@@ -350,13 +353,16 @@ def save_ai_summary(disclosure_index: int, summary_text: str) -> bool:
                 obj["ai_analyzed_at"] = ts
                 client.set(key, json.dumps(obj, ensure_ascii=False, default=str),
                            ex=DISCLOSURE_TTL_SEC)
+                ok_redis = True
         except Exception as exc:
             log.warning("save_ai_summary redis %s: %r", disclosure_index, exc)
-    return ok_sql
+    return ok_sql or ok_redis
 
 
 def get_by_index(disclosure_index: int) -> Optional[dict[str, Any]]:
-    """Fetch one disclosure by index — used by the detail endpoint."""
+    """Fetch one disclosure by index. Tries SQLite first, falls back
+    to Redis. On Railway the SQLite volume isn't always writable, so
+    the Redis hot tier may be the only place the row landed."""
     try:
         c = _conn()
         row = c.execute(
@@ -367,6 +373,16 @@ def get_by_index(disclosure_index: int) -> Optional[dict[str, Any]]:
             return dict(row)
     except Exception as exc:
         log.warning("get_by_index %s: %r", disclosure_index, exc)
+    # Redis fallback — read the JSON we wrote in _save_redis
+    client = redis_client.get_client()
+    if client is not None:
+        try:
+            raw = client.get(KEY_DISCLOSURE.format(int(disclosure_index)))
+            if raw:
+                return json.loads(raw)
+        except Exception as exc:
+            log.debug("get_by_index redis fallback %s: %r",
+                      disclosure_index, exc)
     return None
 
 
