@@ -62,12 +62,17 @@ log = logging.getLogger("bistbull.bullwatch")
 # the other engines proportionally so a stock isn't unfairly capped.
 WEIGHTS_WITH_OWNERSHIP: dict[str, float] = {
     "float_pressure":      20.0,
-    "revenue_mispricing":  15.0,
-    "silent_volume":       15.0,
-    "price_action":        20.0,
-    "compression":         10.0,
-    "ownership":           15.0,
+    "revenue_mispricing":  12.0,
+    "silent_volume":       12.0,
+    "price_action":        18.0,
+    "compression":          8.0,
+    "ownership":           10.0,
     "fundamental_quality":  5.0,
+    # Tahtacı PR A2 — KAP-disclosed operator activity (insider buys,
+    # KAP alerts, buybacks, M&A...) is one of the strongest direct
+    # signals of operator presence. Gets 15 points by displacing
+    # weight from technical-only engines.
+    "kap_activity":        15.0,
 }
 
 # Fundamental quality thresholds (per spec: "avoid junk pumps")
@@ -1229,6 +1234,11 @@ def _pattern_label(active_engines: list[str], patterns: dict,
                    ownership_score: Optional[float]) -> str:
     """Build descriptive pattern string. NO buy/sell language."""
     parts: list[str] = []
+    # Tahtacı PR A2 — KAP-disclosed operator activity gets top billing.
+    # If insider buys or KAP alerts have hit recently, that's the lead
+    # story; the technical patterns become supporting evidence.
+    if "KAP Activity" in active_engines:
+        parts.append("Tahtacı KAP Aktivitesi")
     if "Float Pressure" in active_engines:
         parts.append("Float Squeeze")
     if "Compression" in active_engines and "Float Pressure" not in active_engines:
@@ -1397,6 +1407,16 @@ def score_symbol(metrics: dict,
     s_cm, r_cm = _engine_compression(atr_r, bb_r)
     s_ow, r_ow, ow_coverage = _engine_ownership(ownership)
     s_fq, r_fq = _engine_fundamental_quality(metrics)
+    # Tahtacı PR A2 — KAP operator-signal engine. Reads recent
+    # operator-classified disclosures from storage and emits a sub-score.
+    # Import is local so the engine remains testable without the storage
+    # module (existing tests construct dummy metrics dicts directly).
+    s_ka, r_ka = None, []
+    try:
+        from engine.bullwatch_kap_boost import compute_kap_boost
+        s_ka, r_ka, _ka_meta = compute_kap_boost(symbol)
+    except Exception as _exc:
+        log.debug("kap_boost failed for %s: %r", symbol, _exc)
 
     # Price calm acts as a small multiplier on the price-action engine —
     # we want to reward accumulation during quiet periods.
@@ -1411,6 +1431,7 @@ def score_symbol(metrics: dict,
         "compression":         s_cm,
         "ownership":           s_ow,
         "fundamental_quality": s_fq,
+        "kap_activity":        s_ka,
     }
 
     # ---- Weight redistribution: drop weights for engines with no data,
@@ -1455,12 +1476,18 @@ def score_symbol(metrics: dict,
     if s_sv is not None and s_sv >= THRESH: active.append("Silent Volume")
     if s_cm is not None and s_cm >= THRESH: active.append("Compression")
     if s_pa >= THRESH: active.append("Price Action")
+    # Tahtacı PR A2 — KAP activity counts as an active engine when at
+    # least one operator-signal tag fired in the past 14 days. This
+    # threshold (0.20) corresponds to roughly one MGMT_CHANGE or one
+    # CAPITAL_CHANGE — the lighter signals. Anything stronger pushes
+    # the sub-score past 0.2 naturally.
+    if s_ka is not None and s_ka >= 0.20: active.append("KAP Activity")
     pattern = _pattern_label(active, patterns, s_ow)
     zone = _classify_zone(score, fp, rvol, s_ow, patterns.get("count", 0), s_cm)
 
     # ---- Reasons (de-duped, capped) ----
     reasons: list[str] = []
-    for chunk in (r_fp, r_rev, r_sv, r_pa, r_cm, r_ow, r_fq):
+    for chunk in (r_fp, r_rev, r_sv, r_pa, r_cm, r_ow, r_fq, r_ka):
         for r in chunk:
             if r and r not in reasons:
                 reasons.append(r)
