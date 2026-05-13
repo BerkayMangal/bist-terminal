@@ -486,11 +486,31 @@ const bar=(d)=>{const v=sc[d.k],c=sC(v),g=gb(v);
 return`<div class="sb" style="margin-bottom:10px"><div class="sb-l" style="margin-bottom:4px"><span style="display:inline-flex;align-items:center;gap:4px"><span style="color:var(--t2);font-size:12px">${d.l}</span><span title="${d.desc}" style="cursor:help;color:var(--t4);font-size:9px;border:1px solid var(--bdr);border-radius:50%;width:13px;height:13px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0">?</span><span style="font-size:9px;color:var(--t4)">${d.w}%</span></span><div style="display:flex;align-items:center;gap:8px"><span style="font-size:10px;color:${g.c};font-weight:600">${g.t}</span><span class="v" style="color:${c};font-weight:700">${v!=null?v.toFixed(0):'?'}</span></div></div><div class="sb-bar"><div class="sb-fill" style="width:${v||0}%;background:linear-gradient(90deg,${c}99,${c})"></div></div></div>`;};
 return`<div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--grn);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">🏛️ Temel Analiz Boyutları</div>${dG.map(bar).join('')}<div style="border-top:2px dashed var(--bdr);margin:14px 0 10px;padding-top:10px"><div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><span style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--orn);text-transform:uppercase;letter-spacing:1px">📡 Piyasa Duyarlılığı</span><span style="font-size:7px;padding:2px 6px;border-radius:3px;background:rgba(239,83,80,.1);color:var(--red);font-family:'JetBrains Mono',monospace;font-weight:700">SKORA ETKİSİ YOK</span></div></div>${iG.map(bar).join('')}<div style="margin-top:8px;font-size:10px;color:var(--t4);font-style:italic">V13: Değer Skoru yalnızca temel analize dayanır. Momentum bilgi amaçlıdır.</div>`;}
 function mBox(l,v,tip){return`<div class="mi"${tip?` title="${tip}"`:""} style="${tip?'cursor:help':''}"><div class="mi-l">${l}</div><div class="mi-v">${esc(String(v))}</div></div>`;}
+// Veri Tazeliği — küçük renkli rozet, her satırda gösterilir.
+// "Fresh / Old / Stale / Unknown" durumunu age_hours üzerinden bantlara
+// ayırır. Tıklayınca modal açar ve /api/diag/fundamentals/{ticker}'i
+// yükler — borsapy fetch yaşı, son KAP finansal raporu, gap.
+function _radarFreshBadge(ticker){
+  const f = S.diagFresh && S.diagFresh[(ticker||'').toUpperCase()];
+  if (!f) {
+    return `<span class="clk-t" onclick="event.stopPropagation();showFreshModal('${esc(ticker)}')" title="Veri tazeliği — tıkla" style="display:inline-flex;align-items:center;font-family:'JetBrains Mono',monospace;font-size:9px;padding:2px 5px;background:var(--bg3);color:var(--t4);border-radius:3px">⋯</span>`;
+  }
+  const st = f.age_status || 'unknown';
+  const m = {
+    fresh:   {ic:'✓', col:'var(--grn)', bg:'rgba(38,194,129,.12)', lbl: f.age_hours!=null?`${f.age_hours.toFixed(0)}sa`:'fresh'},
+    old:     {ic:'◷', col:'var(--ylw)', bg:'rgba(255,193,7,.14)',  lbl: f.age_hours!=null?`${f.age_hours.toFixed(0)}sa`:'old'},
+    stale:   {ic:'✕', col:'var(--red)', bg:'rgba(239,83,80,.14)',  lbl: f.age_hours!=null?`${(f.age_hours/24).toFixed(0)}g`:'stale'},
+    unknown: {ic:'?', col:'var(--t4)',  bg:'var(--bg3)',           lbl:'—'},
+  }[st];
+  const tip = `${st.toUpperCase()} · borsapy ${f.age_hours!=null?f.age_hours.toFixed(0)+'sa':'?'} · KAP ${f.kap_age_days!=null?f.kap_age_days.toFixed(0)+'g':'?'}${f.gap_days!=null&&f.gap_days>1?' · gap +'+f.gap_days.toFixed(0)+'g ⚠':''}`;
+  return `<span class="clk-t" onclick="event.stopPropagation();showFreshModal('${esc(ticker)}')" title="${esc(tip)}" style="display:inline-flex;align-items:center;gap:3px;font-family:'JetBrains Mono',monospace;font-size:9px;padding:2px 5px;background:${m.bg};color:${m.col};border-radius:3px;cursor:pointer"><span>${m.ic}</span><b>${esc(m.lbl)}</b></span>`;
+}
+
 function renderRadarTbl(items,sortBy='deger'){
 const sorted=[...items].sort((a,b)=>sortBy==='piotroski'?((b.scores?.earnings||0)-(a.scores?.earnings||0)):sortBy==='balance'?((b.scores?.balance||0)-(a.scores?.balance||0)):sortBy==='quality'?((b.scores?.quality||0)-(a.scores?.quality||0)):sortBy==='roe'?((b.roe||0)-(a.roe||0)):sortBy==='ciro_pd'?((b.ciro_pd||0)-(a.ciro_pd||0)):(b.deger||b.overall||0)-(a.deger||a.overall||0));
 let h=`<div style="display:flex;gap:4px;margin-bottom:10px;flex-wrap:wrap"><button class="btn btn-sm ${sortBy==='deger'?'btn-grn':''}" style="${sortBy!=='deger'?'background:var(--bg3);color:var(--t2)':''}" onclick="S._radarSort='deger';renderRadarPage()">🏛️ Değer</button><button class="btn btn-sm ${sortBy==='quality'?'btn-grn':''}" style="${sortBy!=='quality'?'background:var(--bg3);color:var(--t2)':''}" onclick="S._radarSort='quality';renderRadarPage()">Kalite</button><button class="btn btn-sm ${sortBy==='balance'?'btn-grn':''}" style="${sortBy!=='balance'?'background:var(--bg3);color:var(--t2)':''}" onclick="S._radarSort='balance';renderRadarPage()">Bilanço</button><button class="btn btn-sm ${sortBy==='piotroski'?'btn-grn':''}" style="${sortBy!=='piotroski'?'background:var(--bg3);color:var(--t2)':''}" onclick="S._radarSort='piotroski';renderRadarPage()">Kâr Kalitesi</button><button class="btn btn-sm ${sortBy==='roe'?'btn-grn':''}" style="${sortBy!=='roe'?'background:var(--bg3);color:var(--t2)':''}" onclick="S._radarSort='roe';renderRadarPage()">ROE</button><button class="btn btn-sm ${sortBy==='ciro_pd'?'btn-grn':''}" style="${sortBy!=='ciro_pd'?'background:var(--bg3);color:var(--t2)':''}" onclick="S._radarSort='ciro_pd';renderRadarPage()">Ciro/PD</button></div>`;
-h+='<table class="dtb"><thead><tr><th>#</th><th>Hisse</th><th>Karar</th><th style="color:var(--grn)">Değer</th><th>Değ</th><th>Kal</th><th>Bil</th><th>ROE</th><th>F/K</th><th>Ciro/PD</th></tr></thead><tbody>';
-sorted.forEach((it,i)=>{const dc=it.decision;const dCol=vColor(dc);const dcLabel=vLabel(dc);const cpL=it.ciro_pd_label;const cpBadge=cpL?`<span style="font-family:'JetBrains Mono',monospace;font-size:8px;font-weight:700;padding:1px 5px;border-radius:3px;background:${cpL.color}18;color:${cpL.color}">${cpL.label}</span>`:'<span style="color:var(--t4);font-size:9px">—</span>';const roeVal=it.roe;const roePct=roeVal!=null?`<span style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-xs);color:${roeVal>=0.15?'var(--grn)':roeVal>=0.08?'var(--t1)':'var(--red)'};font-weight:${roeVal>=0.15?700:400}">${(roeVal*100).toFixed(0)}%</span>`:'<span style="color:var(--t4);font-size:9px">—</span>';const dqt=it.data_quality_tier||'full';const dqDot=dqt==='full'?'':'<span title="'+(dqt==='partial'?'Kısmi veri':'Sadece piyasa verisi')+'" style="font-size:7px;margin-left:2px">'+(dqt==='partial'?'🟡':'🔴')+'</span>';h+=`<tr${it.is_fatal?' style="opacity:0.5"':''}><td style="color:var(--t3)">${i+1}</td><td class="clk-t" onclick="loadTicker('${esc(it.ticker)}')">${esc(it.ticker)}${dqDot}${it.is_fatal?'<span style="color:var(--red);font-size:8px"> ⛔</span>':''}</td><td><span style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-xs);font-weight:700;color:${dCol};padding:2px 6px;background:${dCol}15;border-radius:3px">${dcLabel||'—'}</span></td><td><span style="font-weight:700;color:var(--grn)">${(it.deger||it.overall||0).toFixed(0)}</span></td><td>${sPill(it.scores?.value)}</td><td>${sPill(it.scores?.quality)}</td><td>${sPill(it.scores?.balance)}</td><td>${roePct}</td><td style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-xs);color:var(--t1)">${it.pe?it.pe.toFixed(1):'—'}</td><td>${cpBadge}</td></tr>`;});
+h+='<table class="dtb"><thead><tr><th>#</th><th>Hisse</th><th title="Veri tazeliği — borsapy fetch yaşı + KAP son finansal rapor">📅 Veri</th><th>Karar</th><th style="color:var(--grn)">Değer</th><th>Değ</th><th>Kal</th><th>Bil</th><th>ROE</th><th>F/K</th><th>Ciro/PD</th></tr></thead><tbody>';
+sorted.forEach((it,i)=>{const dc=it.decision;const dCol=vColor(dc);const dcLabel=vLabel(dc);const cpL=it.ciro_pd_label;const cpBadge=cpL?`<span style="font-family:'JetBrains Mono',monospace;font-size:8px;font-weight:700;padding:1px 5px;border-radius:3px;background:${cpL.color}18;color:${cpL.color}">${cpL.label}</span>`:'<span style="color:var(--t4);font-size:9px">—</span>';const roeVal=it.roe;const roePct=roeVal!=null?`<span style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-xs);color:${roeVal>=0.15?'var(--grn)':roeVal>=0.08?'var(--t1)':'var(--red)'};font-weight:${roeVal>=0.15?700:400}">${(roeVal*100).toFixed(0)}%</span>`:'<span style="color:var(--t4);font-size:9px">—</span>';const dqt=it.data_quality_tier||'full';const dqDot=dqt==='full'?'':'<span title="'+(dqt==='partial'?'Kısmi veri':'Sadece piyasa verisi')+'" style="font-size:7px;margin-left:2px">'+(dqt==='partial'?'🟡':'🔴')+'</span>';h+=`<tr${it.is_fatal?' style="opacity:0.5"':''}><td style="color:var(--t3)">${i+1}</td><td class="clk-t" onclick="loadTicker('${esc(it.ticker)}')">${esc(it.ticker)}${dqDot}${it.is_fatal?'<span style="color:var(--red);font-size:8px"> ⛔</span>':''}</td><td>${_radarFreshBadge(it.ticker)}</td><td><span style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-xs);font-weight:700;color:${dCol};padding:2px 6px;background:${dCol}15;border-radius:3px">${dcLabel||'—'}</span></td><td><span style="font-weight:700;color:var(--grn)">${(it.deger||it.overall||0).toFixed(0)}</span></td><td>${sPill(it.scores?.value)}</td><td>${sPill(it.scores?.quality)}</td><td>${sPill(it.scores?.balance)}</td><td>${roePct}</td><td style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-xs);color:var(--t1)">${it.pe?it.pe.toFixed(1):'—'}</td><td>${cpBadge}</td></tr>`;});
 return h+'</tbody></table>';}
 
 // ===== WELCOME + TRACKING =====
@@ -1406,7 +1426,111 @@ box.innerHTML=`<div style="margin-bottom:14px;padding:14px;background:var(--bg3)
 }catch(e){box.innerHTML='';console.error('brief:',e);}}
 
 // ===== RADAR PAGE =====
-function renderRadarPage(){const pg=$('pg-radar');const sc=S.scan;if(!sc||!sc.items||!sc.items.length){pg.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px"><h2 style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-lg);color:var(--cyn)">🏛️ Temel Analiz Radar</h2><button class="btn btn-grn" onclick="startScan()">▶ SCAN</button></div><div class="emp"><h3 style="color:var(--t2)">Henüz taranmadı</h3></div>`;return;}const sort=S._radarSort||'deger';pg.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px"><div><h2 style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-lg);color:var(--cyn)">🏛️ V13 Saf Değerleme Radar — ${sc.items.length} Hisse</h2><p style="font-size:var(--fs-sm);color:var(--t3);margin-top:2px">${sc.asof?new Date(sc.asof).toLocaleString('tr-TR'):''}</p></div><button class="btn btn-grn" onclick="startScan()">🔄</button></div><div style="padding:12px 16px;background:var(--bg3);border-radius:var(--rad);margin-bottom:14px;font-size:var(--fs-base);color:var(--t2);line-height:1.6"><b style="color:var(--cyn)">V13 Saf Değerleme nasıl çalışır?</b> Uzun vadeli değer tarayıcı. ${sc.items.length} BIST hissesi 7 temel boyutta analiz edilir: Değerleme (F/K, PD/DD, FD/FAVÖK), Kalite (ROE, marjlar), Büyüme, Bilanço sağlamlığı (Altman Z, borç), Kâr Kalitesi (Beneish, nakit akış), Sermaye Tahsisi ve Hendek (marj stabilitesi). <span style="color:var(--ylw)">Kısa vadeli momentum ve teknik sinyaller için → Cross Hunter.</span></div><div class="card"><div class="card-b" style="overflow-x:auto">${renderRadarTbl(sc.items,sort)}</div></div>`;}
+// Veri Tazeliği summary banner — Radar üstüne fresh/old/stale dağılımını
+// gösterir. compute_summary endpoint'ini tetikler ve sonucu S.diagFresh'e
+// yazar (her satırın rozeti buradan okur). 5 dk cache.
+async function loadRadarFreshness(force){
+  if (!force && S.diagFreshSummary && (Date.now() - (S.diagFreshFetchedAt||0)) < 5*60*1000) return;
+  const sc = S.scan;
+  if (!sc || !sc.items || !sc.items.length) return;
+  // En fazla 60 ticker — Radar zaten paged
+  const tickers = sc.items.slice(0, 60).map(i => i.ticker).join(',');
+  try {
+    const r = await api('/api/diag/fundamentals?tickers=' + encodeURIComponent(tickers) + '&limit=60');
+    const v = (r && (r.value || r)) || {};
+    S.diagFreshSummary = v.summary || {};
+    S.diagFreshThresholds = v.thresholds || {};
+    S.diagFresh = {};
+    (v.items || []).forEach(it => { S.diagFresh[(it.ticker||'').toUpperCase()] = it; });
+    S.diagFreshFetchedAt = Date.now();
+    if (S.page === 'radar') renderRadarPage();
+  } catch (e) {
+    console.warn('freshness fetch failed', e);
+  }
+}
+
+function _radarFreshBanner(){
+  const s = S.diagFreshSummary;
+  if (!s || !s.total) return '';
+  const th = S.diagFreshThresholds || {};
+  const pct = (n) => s.total ? `${Math.round(n*100/s.total)}%` : '—';
+  const dot = (col, ic, lbl, n) => `<span style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:var(--rad);background:${col}15;color:${col};font-family:'JetBrains Mono',monospace;font-size:var(--fs-xs);font-weight:700"><span>${ic}</span>${esc(lbl)} <b style="margin-left:2px">${n}</b> <span style="opacity:.7;font-weight:400">(${pct(n)})</span></span>`;
+  const warn = (s.stale + s.unknown) > Math.max(2, s.total*0.2) ? '<span style="margin-left:8px;color:var(--orn);font-size:var(--fs-xs)">⚠️ Veri pipeline\'ı kontrol et</span>' : '';
+  return `<div style="margin-bottom:14px;padding:12px 14px;background:var(--bg2);border:1px solid var(--bdr);border-left:3px solid var(--cyn);border-radius:0 var(--rad) var(--rad) 0">
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:var(--fs-sm);color:var(--t2)">
+      <span style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-xs);color:var(--t4);text-transform:uppercase;letter-spacing:.5px;margin-right:6px">📅 Veri Tazeliği</span>
+      ${dot('var(--grn)','✓','Fresh', s.fresh||0)}
+      ${dot('var(--ylw)','◷','Old',   s.old||0)}
+      ${dot('var(--red)','✕','Stale', s.stale||0)}
+      ${dot('var(--t4)','?','Bilinmiyor', s.unknown||0)}
+      <button class="btn btn-sm" style="background:var(--bg3);color:var(--t2);font-size:10px;padding:3px 8px;min-height:24px;margin-left:auto" onclick="loadRadarFreshness(true)">🔄 Yenile</button>
+    </div>
+    <div style="font-size:var(--fs-xs);color:var(--t4);margin-top:6px">Fresh = borsapy son ${th.fresh_hours||26}sa içinde fetch · Stale = ${th.stale_hours||72}sa+ ${warn}</div>
+  </div>`;
+}
+
+function renderRadarPage(){const pg=$('pg-radar');const sc=S.scan;if(!sc||!sc.items||!sc.items.length){pg.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px"><h2 style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-lg);color:var(--cyn)">🏛️ Temel Analiz Radar</h2><button class="btn btn-grn" onclick="startScan()">▶ SCAN</button></div><div class="emp"><h3 style="color:var(--t2)">Henüz taranmadı</h3></div>`;return;}
+  // Veri tazeliği — sayfa açıldıkça otomatik fetch (5dk cached)
+  if (!S.diagFresh) { loadRadarFreshness(); }
+  const sort=S._radarSort||'deger';pg.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px"><div><h2 style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-lg);color:var(--cyn)">🏛️ V13 Saf Değerleme Radar — ${sc.items.length} Hisse</h2><p style="font-size:var(--fs-sm);color:var(--t3);margin-top:2px">${sc.asof?new Date(sc.asof).toLocaleString('tr-TR'):''}</p></div><button class="btn btn-grn" onclick="startScan()">🔄</button></div>${_radarFreshBanner()}<div style="padding:12px 16px;background:var(--bg3);border-radius:var(--rad);margin-bottom:14px;font-size:var(--fs-base);color:var(--t2);line-height:1.6"><b style="color:var(--cyn)">V13 Saf Değerleme nasıl çalışır?</b> Uzun vadeli değer tarayıcı. ${sc.items.length} BIST hissesi 7 temel boyutta analiz edilir: Değerleme (F/K, PD/DD, FD/FAVÖK), Kalite (ROE, marjlar), Büyüme, Bilanço sağlamlığı (Altman Z, borç), Kâr Kalitesi (Beneish, nakit akış), Sermaye Tahsisi ve Hendek (marj stabilitesi). <span style="color:var(--ylw)">Kısa vadeli momentum ve teknik sinyaller için → Cross Hunter.</span></div><div class="card"><div class="card-b" style="overflow-x:auto">${renderRadarTbl(sc.items,sort)}</div></div>`;}
+
+// Veri Tazeliği detay modal'ı — bir hissenin tüm freshness bundle'ını
+// gösterir: borsapy fetch_at, latest_quarter, KAP son rapor, gap, uyarılar.
+async function showFreshModal(ticker){
+  const ov = document.createElement('div');
+  ov.className = 'mov';
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(4px)';
+  ov.onclick = (e) => { if (e.target === ov) ov.remove(); };
+  ov.innerHTML = `<div style="background:var(--bg1);border:1px solid var(--bdr);border-radius:var(--rad);max-width:560px;width:100%;max-height:90vh;overflow-y:auto;padding:20px"><div style="text-align:center;color:var(--t3);padding:20px"><div class="sp" style="margin:0 auto 10px"></div>Yükleniyor…</div></div>`;
+  document.body.appendChild(ov);
+  let data = null;
+  try {
+    const r = await api('/api/diag/fundamentals/' + encodeURIComponent(ticker));
+    data = (r && (r.value || r)) || null;
+  } catch(e) {
+    ov.querySelector('div > div').innerHTML = `<div style="color:var(--red);padding:20px;text-align:center">Yüklenemedi: ${esc(String(e.message||e))}</div><div style="text-align:center"><button class="btn btn-sm" onclick="this.closest('.mov').remove()">Kapat</button></div>`;
+    return;
+  }
+  if (!data) { ov.remove(); return; }
+  const b = data.borsapy || {};
+  const k = data.kap || {};
+  const st = data.age_status || 'unknown';
+  const stCol = {fresh:'var(--grn)',old:'var(--ylw)',stale:'var(--red)',unknown:'var(--t4)'}[st];
+  const row = (lbl, val, col) => `<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--bdr);font-size:var(--fs-sm)"><span style="color:var(--t3)">${esc(lbl)}</span><span style="font-family:'JetBrains Mono',monospace;color:${col||'var(--t1)'}">${val==null?'—':esc(String(val))}</span></div>`;
+  const fmtIso = (s) => s ? new Date(s).toLocaleString('tr-TR') : '—';
+  let h = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><div><h3 style="font-family:'JetBrains Mono',monospace;color:var(--cyn);font-size:18px">📅 ${esc(data.ticker)} · Veri Tazeliği</h3><div style="font-size:11px;color:${stCol};text-transform:uppercase;letter-spacing:.5px;font-weight:700;margin-top:2px">${st}</div></div><button class="btn btn-sm" style="background:var(--bg3);color:var(--t2)" onclick="this.closest('.mov').remove()">✕</button></div>`;
+  h += '<div style="margin-bottom:16px"><div style="font-family:\'JetBrains Mono\',monospace;font-size:10px;color:var(--cyn);letter-spacing:.5px;margin-bottom:6px">🐂 BORSAPY</div>';
+  h += row('Son fetch', fmtIso(b.fetched_at));
+  h += row('Yaş', b.age_hours!=null?`${b.age_hours.toFixed(1)} saat`:null, stCol);
+  h += row('Son çeyrek (latest_quarter)', b.latest_quarter || null);
+  h += row('Quarterly mevcut?', b.quarterly_available==null?null:(b.quarterly_available?'evet':'hayır'), b.quarterly_available?'var(--grn)':'var(--red)');
+  h += row('Banka?', b.is_bank==null?null:(b.is_bank?'evet':'hayır'));
+  h += row('Fetch attempts (son refresh)', b.fetch_attempts);
+  h += '</div>';
+  h += '<div style="margin-bottom:16px"><div style="font-family:\'JetBrains Mono\',monospace;font-size:10px;color:var(--ylw);letter-spacing:.5px;margin-bottom:6px">📰 KAP — SON FİNANSAL RAPOR</div>';
+  if (Object.keys(k).length === 0) {
+    h += '<div style="padding:12px;background:var(--bg3);border-radius:var(--rad);font-size:11px;color:var(--t3)">KAP storage\'da kayıt yok. (KAP feed loop running mu? <code>/api/kap/health</code>)</div>';
+  } else {
+    h += row('Yayın tarihi', fmtIso(k.publish_date));
+    h += row('Yaş', k.age_days!=null?`${k.age_days.toFixed(1)} gün`:null);
+    h += row('Tür', k.rule_type || null);
+    h += row('Çeyrek/yıl', k.period && k.year ? `Q${k.period} ${k.year}` : (k.year||null));
+    h += row('Konu', k.subject || null);
+  }
+  h += '</div>';
+  if (data.gap_days != null) {
+    const gapCol = data.gap_days > 1 ? 'var(--red)' : 'var(--grn)';
+    const gapLbl = data.gap_days > 1 ? `+${data.gap_days.toFixed(1)}g — KAP ileride, borsapy geride` : `${data.gap_days.toFixed(1)}g — borsapy güncel`;
+    h += `<div style="margin-bottom:16px;padding:10px 14px;background:${gapCol}10;border-left:3px solid ${gapCol};border-radius:0 var(--rad) var(--rad) 0;font-size:var(--fs-sm)"><b style="color:${gapCol}">Gap (KAP − borsapy):</b> <span style="font-family:'JetBrains Mono',monospace">${esc(gapLbl)}</span></div>`;
+  }
+  if (data.warnings && data.warnings.length) {
+    h += '<div style="margin-bottom:8px;padding:10px 14px;background:rgba(255,167,38,.08);border-left:3px solid var(--orn);border-radius:0 var(--rad) var(--rad) 0"><div style="font-family:\'JetBrains Mono\',monospace;font-size:10px;color:var(--orn);letter-spacing:.5px;margin-bottom:6px">⚠️ UYARILAR</div>';
+    data.warnings.forEach(w => { h += `<div style="font-size:var(--fs-sm);color:var(--t2);padding:3px 0">• ${esc(w)}</div>`; });
+    h += '</div>';
+  }
+  h += `<div style="text-align:right;margin-top:12px"><button class="btn btn-sm btn-blu" onclick="loadTicker('${esc(data.ticker)}');this.closest('.mov').remove()">Hisseyi Aç →</button></div>`;
+  ov.querySelector('div').innerHTML = h;
+}
 
 // ===== CROSS PAGE =====
 function renderCrossPage(){const pg=$('pg-cross');if(!S.cross){pg.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px"><h2 style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-lg);color:var(--orn)">⚡ Cross Hunter V2</h2><button class="btn btn-orn" onclick="startCross()">⚡ TARA</button></div><div style="padding:12px 16px;background:var(--bg3);border-radius:var(--rad);margin-bottom:14px;font-size:var(--fs-base);color:var(--t2);line-height:1.6"><b style="color:var(--orn)">Cross Hunter nasıl çalışır?</b> İki modda çalışır: <b style="color:var(--cyn)">Kırılımlar</b> = teknik kırılım sinyalleri (EMA cross, Ichimoku, VCP, destek/direnç). <b style="color:var(--blu)">Momentumlar</b> = trend gücü sinyalleri (MACD, RSI, Bollinger). Her sinyal ⭐1-5 güvenilirlik puanı alır.</div><div class="emp"><h3 style="color:var(--t2)">Taramak için butona basın</h3></div>`;return;}const sigs=S.cross.signals||[];const sm=S.cross.summary||{};const aiCom=S.cross.ai_commentary;const crossCat=S._crossCat||'all';let h=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px"><h2 style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-lg);color:var(--orn)">⚡ Cross Hunter V2</h2><button class="btn btn-orn" onclick="startCross()">⚡ YENIDEN</button></div><div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap"><span class="pill p-blu">${sm.total||0} sinyal</span><span class="pill p-grn">🟢 ${sm.bullish||0}</span><span class="pill p-red">🔴 ${sm.bearish||0}</span><span class="pill p-ylw">⭐ ${sm.total_stars||0} güç</span><span class="pill p-blu">✓ ${sm.vol_confirmed||0} teyitli</span>${sm.quality_a?`<span class="pill p-grn">🅰️ ${sm.quality_a} A-kalite</span>`:''}${sm.quality_b?`<span class="pill p-ylw">🅱️ ${sm.quality_b} B-kalite</span>`:''}</div>`;
