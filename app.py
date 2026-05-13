@@ -187,6 +187,12 @@ async def lifespan(application: FastAPI):
         _kap_init_db()
     except Exception as e:
         log.warning(f"KAP storage init skipped: {e}")
+    # BullWatch alarm storage — immutable high-conviction history.
+    try:
+        from infra.bullwatch_alerts_storage import init_db as _bwa_init_db
+        _bwa_init_db()
+    except Exception as e:
+        log.warning(f"BullWatch alarm storage init skipped: {e}")
     # Phase 1: refuse to boot without a real JWT_SECRET. Raises RuntimeError
     # (uvicorn will surface this as a startup failure) if the env var is
     # missing, too short, or still a placeholder string.
@@ -329,6 +335,12 @@ try:
     app.include_router(kap_router)
 except Exception as _e:
     log.warning(f"KAP router not mounted: {_e}")
+# BullWatch alarm endpoints — Faz 1.
+try:
+    from api.bullwatch_alerts import router as bwa_router
+    app.include_router(bwa_router)
+except Exception as _e:
+    log.warning(f"BullWatch alarm router not mounted: {_e}")
 
 @app.exception_handler(RateLimitExceeded)
 async def _rate_limit_handler(request: Request, exc: RateLimitExceeded):
