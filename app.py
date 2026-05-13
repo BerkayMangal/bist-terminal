@@ -372,6 +372,12 @@ try:
     app.include_router(diag_router)
 except Exception as _e:
     log.warning(f"Diag router not mounted: {_e}")
+# Unified activity feed — alarms + membership + KAP + score-change combined.
+try:
+    from api.activity import router as activity_router
+    app.include_router(activity_router)
+except Exception as _e:
+    log.warning(f"Activity router not mounted: {_e}")
 
 @app.exception_handler(RateLimitExceeded)
 async def _rate_limit_handler(request: Request, exc: RateLimitExceeded):
