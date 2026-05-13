@@ -280,6 +280,9 @@ async def _refresh_and_persist(min_score: float = 0.0) -> Optional[dict]:
     _SCAN_DONE = asyncio.Event()
     try:
         t0 = time.time()
+        # Snapshot the previous in-mem items BEFORE we overwrite them,
+        # so the membership detector can diff old-vs-new.
+        prev_items_for_diff = list(((_CACHE.get("items") or {}).get("items")) or [])
         payload = await asyncio.get_event_loop().run_in_executor(
             None, _run_scan, min_score, None, None, False,
         )
@@ -287,6 +290,19 @@ async def _refresh_and_persist(min_score: float = 0.0) -> Optional[dict]:
         _CACHE["items"] = payload
         _CACHE["as_of"] = payload["as_of"]
         _CACHE["stale_after"] = time.time() + _CACHE_TTL_SEC
+        # Membership events — detect entries/exits/zone changes vs prev.
+        # Only when we actually had a previous list to diff against.
+        if prev_items_for_diff:
+            try:
+                from engine.bullwatch_membership import detect_and_persist
+                await asyncio.to_thread(
+                    detect_and_persist,
+                    prev_items_for_diff,
+                    payload.get("items") or [],
+                    scan_id,
+                )
+            except Exception as _mexc:
+                log.warning("membership detect failed: %r", _mexc)
         log.info(
             "BullWatch refresh complete in %.1fs — %d eligible / %d scanned, snapshot=%s",
             time.time() - t0,

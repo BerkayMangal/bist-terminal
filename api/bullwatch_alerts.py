@@ -106,6 +106,62 @@ async def api_bwa_one(alert_id: str):
                    extra_meta={"endpoint": "bullwatch.alerts.one"})
 
 
+@router.get("/api/bullwatch/membership/recent")
+async def api_bwm_recent(
+    limit: int = Query(100, ge=1, le=500),
+    since_days: Optional[int] = Query(None, ge=1, le=365),
+    event_type: Optional[str] = Query(
+        None, description="ENTRY / EXIT / ZONE_UPGRADE / ZONE_DOWNGRADE",
+    ),
+    tickers: Optional[str] = Query(
+        None,
+        description="Comma-separated ticker list (e.g. watchlist filter)",
+    ),
+):
+    """Latest list-membership events — entries, exits, zone changes."""
+    from infra import bullwatch_membership_storage as st
+    sym_list = None
+    if tickers:
+        sym_list = [t.strip().upper() for t in tickers.split(",") if t.strip()]
+    items = st.get_recent(
+        limit=limit,
+        since_days=since_days,
+        event_type=event_type,
+        tickers=sym_list,
+    )
+    return success(
+        {"items": items, "count": len(items)},
+        extra_meta={"endpoint": "bullwatch.membership.recent"},
+    )
+
+
+@router.get("/api/bullwatch/membership/by-ticker/{ticker}")
+async def api_bwm_by_ticker(
+    ticker: str,
+    limit: int = Query(50, ge=1, le=200),
+):
+    """Per-ticker membership history — used by the freshness modal /
+    ticker-detail page to show 'this ticker entered N times in 90 days'."""
+    if not ticker or not ticker.strip():
+        raise HTTPException(status_code=400, detail="empty ticker")
+    from infra import bullwatch_membership_storage as st
+    items = st.get_by_ticker(ticker, limit=limit)
+    return success(
+        {"ticker": ticker.upper(), "items": items, "count": len(items)},
+        extra_meta={"endpoint": "bullwatch.membership.by_ticker"},
+    )
+
+
+@router.get("/api/bullwatch/membership/stats")
+async def api_bwm_stats():
+    """Counts by type for the Alarmlar UI chips."""
+    from infra import bullwatch_membership_storage as st
+    return success(
+        {"ok": True, "stats": st.get_stats()},
+        extra_meta={"endpoint": "bullwatch.membership.stats"},
+    )
+
+
 @router.post("/api/bullwatch/alerts/refresh-reactions")
 async def api_bwa_refresh_reactions():
     """Manual trigger for the Faz 4 reaction backfill (1d / 1w / 1m).

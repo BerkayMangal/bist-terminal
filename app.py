@@ -193,6 +193,12 @@ async def lifespan(application: FastAPI):
         _bwa_init_db()
     except Exception as e:
         log.warning(f"BullWatch alarm storage init skipped: {e}")
+    # BullWatch membership-events storage — list churn history.
+    try:
+        from infra.bullwatch_membership_storage import init_db as _bwm_init_db
+        _bwm_init_db()
+    except Exception as e:
+        log.warning(f"BullWatch membership storage init skipped: {e}")
     # Phase 1: refuse to boot without a real JWT_SECRET. Raises RuntimeError
     # (uvicorn will surface this as a startup failure) if the env var is
     # missing, too short, or still a placeholder string.
