@@ -38,10 +38,26 @@ def dispatch_new_disclosure(rec: DisclosureRecord) -> None:
         "KAP dispatch: %s [%s/%s] %s",
         rec.ticker, rec.disclosure_type, rec.rule_type, rec.subject,
     )
+    # Branch 1 — Financial report (balance sheet drop)
     if rec.is_financial_report():
         _invalidate_caches_for_ticker(rec.ticker)
         _queue_ai_analysis(rec)
         _capture_reaction_baseline(rec)
+        return
+    # Branch 2 — Operator signal (insider buy, KAP warning, M&A, buyback, …)
+    # These don't invalidate fundamental caches (no new balance sheet),
+    # but they ARE the tahtacı imzaları BullWatch should boost on, and
+    # they're juicy AI analysis fodder.
+    from data.kap_client import classify_operator_signal
+    op_tag = classify_operator_signal(rec.subject)
+    if op_tag is not None:
+        log.info(
+            "KAP operator signal: %s [%s] %s",
+            rec.ticker, op_tag, rec.subject,
+        )
+        # AI analyzes operator signals too — the prompt template
+        # already handles non-bilanço subjects gracefully.
+        _queue_ai_analysis(rec)
 
 
 # ── Faz 4: Reaction tracker baseline ────────────────────────────────

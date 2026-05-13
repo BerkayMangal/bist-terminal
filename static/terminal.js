@@ -818,19 +818,46 @@ function renderBilancolarPage(){
   const recent = S.kap.recent || [];
   const calendar = S.kap.calendar || {};
   const filt = S._kapFilter || 'all';
-  const filtered = filt === 'wl'
-    ? recent.filter(d => (S.wl || []).includes(d.ticker))
-    : filt === 'today'
-      ? recent.filter(d => {
-          const t = new Date(d.publish_date).getTime();
-          return Date.now() - t < 24 * 3600 * 1000;
-        })
-      : filt === 'week'
-        ? recent.filter(d => {
-            const t = new Date(d.publish_date).getTime();
-            return Date.now() - t < 7 * 24 * 3600 * 1000;
-          })
-        : recent;
+  // Tahtacı PR A: subject-text classifier (mirrors data/kap_client.py
+  // OPERATOR_SIGNAL_PATTERNS). Used to power the "Operatör" filter
+  // chip and decorate cards with a 🚨 badge.
+  const _opPatterns = {
+    INSIDER:        ['pay alım satım bildirim','pay sahipliği bildirim',
+                     'değişen pay sahipliği','yönetim kurulu üyesi pay'],
+    KAP_ALERT:      ['olağan dışı fiyat','olağandışı fiyat','olağan dışı miktar'],
+    BUYBACK:        ['pay geri alım','geri alım program','pay alımı programı'],
+    MNA:            ['finansal duran varlık edinim','birleşme',
+                     'devralma','bağlı ortaklık devri','satın alma'],
+    CAPITAL_CHANGE: ['sermaye artırım','bedelsiz sermaye',
+                     'bedelli sermaye','sermaye azaltım'],
+    MGMT_CHANGE:    ['yönetim kurulu','yönetici atama',
+                     'genel müdür','yönetici değişiklik'],
+  };
+  const _opTag = (subj) => {
+    const s = (subj || '').toLowerCase();
+    for (const [tag, needles] of Object.entries(_opPatterns)) {
+      if (needles.some(n => s.includes(n))) return tag;
+    }
+    return null;
+  };
+  const _opLabel = {
+    INSIDER:        '👤 İçeriden Alım',
+    KAP_ALERT:      '⚠️ KAP Uyarısı',
+    BUYBACK:        '💰 Pay Geri Alım',
+    MNA:            '🤝 Birleşme/Devralma',
+    CAPITAL_CHANGE: '📈 Sermaye',
+    MGMT_CHANGE:    '👔 Yönetim',
+  };
+  const isOperator = (d) => _opTag(d.subject) !== null;
+  const isWeek = (d) => (Date.now() - new Date(d.publish_date).getTime()) < 7 * 24 * 3600 * 1000;
+  const isToday = (d) => (Date.now() - new Date(d.publish_date).getTime()) < 24 * 3600 * 1000;
+  const isWatched = (d) => (S.wl || []).includes(d.ticker);
+
+  const filtered = filt === 'wl' ? recent.filter(isWatched)
+    : filt === 'today'    ? recent.filter(isToday)
+    : filt === 'week'     ? recent.filter(isWeek)
+    : filt === 'operator' ? recent.filter(isOperator)
+    : recent;
 
   let h = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px">
     <div>
@@ -840,12 +867,15 @@ function renderBilancolarPage(){
     <button class="btn btn-grn" onclick="loadBilancolar(true).then(()=>renderBilancolarPage())">🔄</button>
   </div>`;
 
-  // Filter chips
+  // Filter chips — "Operatör" chip highlights tahtacı-signed disclosures
+  // (insider buy, KAP warning, M&A, buyback...) which are the most
+  // actionable category for BullWatch users.
   const chips = [
-    ['all',   `Tümü (${recent.length})`,                    'var(--acc)'],
-    ['wl',    `Watchlist (${recent.filter(d=>(S.wl||[]).includes(d.ticker)).length})`, 'var(--blu)'],
-    ['today', `Bugün (${recent.filter(d=>(Date.now()-new Date(d.publish_date).getTime())<24*3600*1000).length})`, 'var(--grn)'],
-    ['week',  `Bu Hafta (${recent.filter(d=>(Date.now()-new Date(d.publish_date).getTime())<7*24*3600*1000).length})`, 'var(--cyn)'],
+    ['all',      `Tümü (${recent.length})`,                                  'var(--acc)'],
+    ['operator', `🚨 Operatör (${recent.filter(isOperator).length})`,         'var(--red)'],
+    ['wl',       `Watchlist (${recent.filter(isWatched).length})`,            'var(--blu)'],
+    ['today',    `Bugün (${recent.filter(isToday).length})`,                  'var(--grn)'],
+    ['week',     `Bu Hafta (${recent.filter(isWeek).length})`,                'var(--cyn)'],
   ];
   h += `<div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap">${chips.map(([k,l,c])=>`<button class="btn btn-sm ${filt===k?'':''}" style="${filt===k?`background:${c}20;border:1px solid ${c};color:${c}`:'background:var(--bg3);color:var(--t2)'}" onclick="S._kapFilter='${k}';renderBilancolarPage()">${l}</button>`).join('')}</div>`;
 
@@ -864,6 +894,13 @@ function renderBilancolarPage(){
       const lateBadge = d.is_late ? '<span class="pill p-red" style="font-size:9px;padding:1px 5px">geç</span>' : '';
       const ago = _kapTimeAgo(d.publish_date);
       const aiBadge = d.ai_summary ? '<span style="font-size:9px;color:var(--prp);font-weight:700;padding:1px 5px;background:rgba(186,104,200,.15);border-radius:3px;margin-left:6px">📖 AI</span>' : '';
+      // Tahtacı PR A: operator signal badge — most-actionable signal type.
+      // Renders next to the disclosure type label so the user can scan
+      // the feed for "operator activity" without reading every subject.
+      const _opTagForCard = _opTag(d.subject);
+      const opBadge = _opTagForCard
+        ? `<span style="font-size:9px;color:var(--red);font-weight:700;padding:1px 5px;background:rgba(239,83,80,.15);border:1px solid rgba(239,83,80,.35);border-radius:3px;margin-left:6px" title="Tahtacı imzalı bildirim: ${esc(_opLabel[_opTagForCard])}">${esc(_opLabel[_opTagForCard])}</span>`
+        : '';
       // Faz 4: reaction badges (1d / 1w / 1m). Green positive, red negative,
       // grey when not yet available (horizon hasn't elapsed).
       const reactionBadge = (label, pct) => {
@@ -883,7 +920,7 @@ function renderBilancolarPage(){
             <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:3px">
               <span style="font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:700;color:var(--cyn)">${esc(d.ticker)}</span>
               <span style="font-size:11px;color:${col};font-weight:600">${esc(lbl)}</span>
-              ${lateBadge}${aiBadge}
+              ${lateBadge}${aiBadge}${opBadge}
             </div>
             <div style="font-size:11px;color:var(--t3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(d.kap_title || '')} · ${esc(d.subject || '')}</div>
           </div>
