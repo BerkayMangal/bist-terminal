@@ -69,17 +69,6 @@ async def api_bwa_by_ticker(
     )
 
 
-@router.get("/api/bullwatch/alerts/{alert_id}")
-async def api_bwa_one(alert_id: str):
-    """Single alarm by id."""
-    from infra import bullwatch_alerts_storage as st
-    row = st.get_by_id(alert_id)
-    if row is None:
-        return error("alert not found", status_code=404)
-    return success({"alert": row},
-                   extra_meta={"endpoint": "bullwatch.alerts.one"})
-
-
 @router.get("/api/bullwatch/alerts/backtest")
 async def api_bwa_backtest(
     since_days: int = Query(90, ge=7, le=365),
@@ -87,7 +76,11 @@ async def api_bwa_backtest(
 ):
     """Backtest dashboard data — win rate by horizon, score band, zone,
     sector, pattern; fake-pump detector; 1d return histogram; BIST100
-    baseline. All derived from the immutable alarm history."""
+    baseline. All derived from the immutable alarm history.
+
+    Registered BEFORE /alerts/{alert_id} so the literal path wins over
+    the variadic one — FastAPI matches routes in registration order.
+    """
     try:
         from engine.bullwatch_backtest import compute_backtest
         data = await asyncio.to_thread(
@@ -100,6 +93,17 @@ async def api_bwa_backtest(
         data,
         extra_meta={"endpoint": "bullwatch.alerts.backtest"},
     )
+
+
+@router.get("/api/bullwatch/alerts/{alert_id}")
+async def api_bwa_one(alert_id: str):
+    """Single alarm by id."""
+    from infra import bullwatch_alerts_storage as st
+    row = st.get_by_id(alert_id)
+    if row is None:
+        return error("alert not found", status_code=404)
+    return success({"alert": row},
+                   extra_meta={"endpoint": "bullwatch.alerts.one"})
 
 
 @router.post("/api/bullwatch/alerts/refresh-reactions")
