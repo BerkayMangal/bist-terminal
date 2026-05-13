@@ -186,7 +186,33 @@ async function _updateBilancoBadge(){
 setTimeout(_updateBilancoBadge, 5000);
 setInterval(_updateBilancoBadge, 120000);
 
-function goPage(id){S.page=id;nav.querySelectorAll('.nav-b').forEach(b=>b.classList.toggle('on',b.dataset.p===id));if(mobNav)mobNav.querySelectorAll('.mob-bnav-item').forEach(b=>b.classList.toggle('on',b.dataset.p===id));document.querySelectorAll('.page').forEach(p=>p.classList.toggle('on',p.dataset.page===id));if(id==='home')renderHome();if(id==='radar')renderRadarPage();if(id==='cross')renderCrossPage();if(id==='bullwatch')renderBullwatchPage();if(id==='bullalfa')renderBullalfaPage();if(id==='bilancolar')renderBilancolarPage();if(id==='makro')renderMakroPage();if(id==='nasil')renderNasilPage();if(id==='takas')renderTakasPage();if(id==='sosyal')renderSosyalPage();if(id==='portfoy')renderPortfoyPage();}
+function goPage(id){
+  S.page=id;
+  nav.querySelectorAll('.nav-b').forEach(b=>b.classList.toggle('on',b.dataset.p===id));
+  if(mobNav)mobNav.querySelectorAll('.mob-bnav-item').forEach(b=>b.classList.toggle('on',b.dataset.p===id));
+  document.querySelectorAll('.page').forEach(p=>p.classList.toggle('on',p.dataset.page===id));
+  // Scroll the active nav button into view — important on mobile where
+  // the 9-tab nav lives in an overflow-x:auto container; otherwise the
+  // newly-activated tab can be offscreen.
+  const activeBtn = nav.querySelector('.nav-b.on');
+  if (activeBtn && activeBtn.scrollIntoView) {
+    activeBtn.scrollIntoView({behavior:'smooth', inline:'center', block:'nearest'});
+  }
+  // Always scroll page body to top when changing tabs — phones especially
+  // get stuck mid-scroll otherwise.
+  try { window.scrollTo({top:0, behavior:'instant'}); } catch (e) { window.scrollTo(0,0); }
+  if(id==='home')renderHome();
+  if(id==='radar')renderRadarPage();
+  if(id==='cross')renderCrossPage();
+  if(id==='bullwatch')renderBullwatchPage();
+  if(id==='bullalfa')renderBullalfaPage();
+  if(id==='bilancolar')renderBilancolarPage();
+  if(id==='makro')renderMakroPage();
+  if(id==='nasil')renderNasilPage();
+  if(id==='takas')renderTakasPage();
+  if(id==='sosyal')renderSosyalPage();
+  if(id==='portfoy')renderPortfoyPage();
+}
 
 // ===== QUICK TICKERS =====
 // ===== QUICK TICKERS =====
