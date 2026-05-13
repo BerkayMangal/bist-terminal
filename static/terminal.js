@@ -1840,7 +1840,16 @@ function renderRadarPage(){const pg=$('pg-radar');const sc=S.scan;if(!sc||!sc.it
 // Veri Tazeliği detay modal'ı — bir hissenin tüm freshness bundle'ını
 // gösterir: borsapy fetch_at, latest_quarter, KAP son rapor, gap, uyarılar.
 async function showFreshModal(ticker){
+  // Audit fix: dedupe rapid double-clicks. If a freshness modal is
+  // already open, close it first so we don't stack overlays — and we
+  // tag the new one so subsequent triggers within ~300ms are no-ops.
+  const existing = document.getElementById('freshModalOv');
+  if (existing) existing.remove();
+  const _now = Date.now();
+  if (window.__lastFreshModalAt && (_now - window.__lastFreshModalAt) < 300) return;
+  window.__lastFreshModalAt = _now;
   const ov = document.createElement('div');
+  ov.id = 'freshModalOv';
   ov.className = 'mov';
   ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(4px)';
   ov.onclick = (e) => { if (e.target === ov) ov.remove(); };
@@ -2162,8 +2171,17 @@ function renderCrossPage(containerId){
 }
 async function startCross(containerId){
   const cid = containerId || 'pg-cross';
-  const pg = $(cid); if(pg) pg.innerHTML='<div class="ld"><div class="sp"></div><div class="ld-t">Sinyaller kontrol ediliyor…</div></div>';
-  try{S.cross=await api('/api/cross');const cnt=$('cnt-s');if(cnt)cnt.textContent=S.cross.summary?.total||0;renderCrossPage(cid);}catch(e){if(pg)pg.innerHTML=`<div class="emp"><h3 style="color:var(--t2)">Hata: ${esc(e.message)}</h3></div>`;}
+  const pg0 = $(cid); if(pg0) pg0.innerHTML='<div class="ld"><div class="sp"></div><div class="ld-t">Sinyaller kontrol ediliyor…</div></div>';
+  try{
+    S.cross=await api('/api/cross');
+    const cnt=$('cnt-s');if(cnt)cnt.textContent=S.cross.summary?.total||0;
+    // Audit fix: if the host container has gone away during await
+    // (user switched modes / tabs), skip the render to avoid writing
+    // stale data into whatever replaced it.
+    if($(cid)) renderCrossPage(cid);
+  }catch(e){
+    const pg1=$(cid); if(pg1) pg1.innerHTML=`<div class="emp"><h3 style="color:var(--t2)">Hata: ${esc(e.message)}</h3></div>`;
+  }
 }
 
 // ===== BULLWATCH PAGE =====
