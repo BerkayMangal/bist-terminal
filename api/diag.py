@@ -282,6 +282,109 @@ async def api_diag_fundamentals_refresh(ticker: str):
     )
 
 
+@router.get("/api/diag/timeline/{ticker}")
+async def api_diag_timeline(
+    ticker: str,
+    days: int = Query(60, ge=7, le=180),
+):
+    """Combined ticker timeline: every daily score snapshot AND every
+    KAP financial report in the same window. Used by the freshness
+    modal to OVERLAY the two — "did the skor change BECAUSE bilanço
+    landed, or independently?".
+
+    Score events have `kind=score`, KAP events `kind=kap_financial`.
+    All events carry an ISO `date` field so the UI can interleave
+    them on the same x-axis.
+    """
+    sym = (ticker or "").upper().strip().replace(".IS", "")
+    if not sym:
+        raise HTTPException(status_code=400, detail="empty ticker")
+
+    def _go():
+        import datetime as _dt
+        cutoff = _dt.datetime.now(_dt.timezone.utc) - _dt.timedelta(days=days)
+        out: dict = {
+            "ticker": sym,
+            "days": days,
+            "score_events": [],
+            "kap_events": [],
+        }
+        # Score snapshots
+        try:
+            from infra.storage import _get_conn
+            c = _get_conn()
+            rows = c.execute(
+                "SELECT snap_date, score, fa_score, decision "
+                "FROM score_history "
+                "WHERE symbol = ? AND scoring_version = 'v13_handpicked' "
+                "AND snap_date >= ? "
+                "ORDER BY snap_date ASC",
+                (sym, cutoff.strftime("%Y-%m-%d")),
+            ).fetchall()
+            out["score_events"] = [
+                {"kind": "score",
+                 "date": r[0],
+                 "score": r[1],
+                 "fa_score": r[2],
+                 "decision": r[3]}
+                for r in rows
+            ]
+        except Exception as exc:
+            log.debug("timeline score query %s: %r", sym, exc)
+        # KAP financial events
+        try:
+            from infra import kap_storage
+            try:
+                from data.kap_client import (
+                    FINANCIAL_REPORT_SUBJECTS,
+                    DISCLOSURE_TYPE_FINANCIAL,
+                )
+            except Exception:
+                FINANCIAL_REPORT_SUBJECTS = {
+                    "finansal rapor",
+                    "konsolide finansal tablolar",
+                    "konsolide olmayan finansal tablolar",
+                }
+                DISCLOSURE_TYPE_FINANCIAL = "FR"
+            kap_rows = kap_storage.get_by_ticker(sym, limit=80)
+            for row in kap_rows:
+                dtype = (row.get("disclosure_type") or "").upper()
+                if dtype != DISCLOSURE_TYPE_FINANCIAL:
+                    continue
+                subj = (row.get("subject") or "").lower().strip()
+                if not any(s in subj for s in FINANCIAL_REPORT_SUBJECTS):
+                    continue
+                pub = row.get("publish_date")
+                if not pub:
+                    continue
+                try:
+                    pubdt = _dt.datetime.fromisoformat(pub)
+                    if pubdt.tzinfo is None:
+                        pubdt = pubdt.replace(tzinfo=_dt.timezone.utc)
+                    if pubdt < cutoff:
+                        continue
+                except Exception:
+                    continue
+                out["kap_events"].append({
+                    "kind": "kap_financial",
+                    "date": pub,
+                    "rule_type": row.get("rule_type"),
+                    "period": row.get("period"),
+                    "year": row.get("year"),
+                    "subject": row.get("subject"),
+                    "disclosure_index": row.get("disclosure_index"),
+                })
+        except Exception as exc:
+            log.debug("timeline kap query %s: %r", sym, exc)
+        return out
+
+    data = await asyncio.to_thread(_go)
+    return success(
+        data,
+        extra_meta={"endpoint": "diag.timeline"},
+    )
+
+
 @router.get("/api/diag/score-history/{ticker}")
 async def api_diag_score_history(
     ticker: str,
