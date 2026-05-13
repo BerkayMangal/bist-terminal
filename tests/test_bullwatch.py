@@ -36,6 +36,7 @@ from features.bullwatch_features import (
     detect_shakeout_recovery, detect_absorption,
     detect_tight_closes, detect_walk_up_accumulation,
     detect_price_action_patterns, ownership_signal,
+    consecutive_high_close_days,
     normalize_free_float,
     FLOAT_MARKET_CAP_CAP_TL, LIQUIDITY_FLOOR_TL,
 )
@@ -347,6 +348,58 @@ class TestWalkUp:
         closes = 100.0 + np.cumsum(rng.normal(0, 0.5, 30))
         df = _ohlcv(closes, volumes=np.full(30, 100_000.0))
         assert detect_walk_up_accumulation(df) is False
+
+
+class TestConsecutiveHighCloseDays:
+    def _bars(self, ranges):
+        """Build OHLCV where each bar is (low, high, close)."""
+        closes, highs, lows = [], [], []
+        for lo, hi, cl in ranges:
+            lows.append(lo); highs.append(hi); closes.append(cl)
+        opens = [(l + h) / 2 for l, h in zip(lows, highs)]
+        return _ohlcv(closes, highs=highs, lows=lows, opens=opens)
+
+    def test_all_high_closes(self):
+        # close at 95% of range every bar → streak = 5
+        bars = [(100.0, 110.0, 109.5)] * 5
+        df = self._bars(bars)
+        assert consecutive_high_close_days(df) == 5
+
+    def test_streak_broken_by_low_close(self):
+        bars = [
+            (100.0, 110.0, 109.0),   # high close
+            (100.0, 110.0, 109.0),   # high close
+            (100.0, 110.0, 102.0),   # low close — breaks
+            (100.0, 110.0, 109.0),   # high close (recent)
+            (100.0, 110.0, 109.5),   # high close (most recent)
+        ]
+        df = self._bars(bars)
+        # Count from the most recent backwards: 2 high → then low breaks
+        assert consecutive_high_close_days(df) == 2
+
+    def test_zero_range_breaks_streak(self):
+        bars = [
+            (100.0, 110.0, 109.0),
+            (100.0, 100.0, 100.0),   # zero range
+        ]
+        df = self._bars(bars)
+        assert consecutive_high_close_days(df) == 0
+
+    def test_empty_df_returns_zero(self):
+        import pandas as pd
+        assert consecutive_high_close_days(pd.DataFrame()) == 0
+
+    def test_low_close_returns_zero(self):
+        # Most recent close near low → streak starts at 0
+        bars = [(100.0, 110.0, 101.0)] * 5
+        df = self._bars(bars)
+        assert consecutive_high_close_days(df) == 0
+
+    def test_streak_respects_lookback_window(self):
+        # 20 bars of high closes, but lookback=5 caps at 5
+        bars = [(100.0, 110.0, 109.5)] * 20
+        df = self._bars(bars)
+        assert consecutive_high_close_days(df, lookback=5) == 5
 
 
 def test_detect_price_action_patterns_aggregates():

@@ -1360,6 +1360,17 @@ function _bwEvidenceChips(item){
   if(ct && depth!=null) chips.push({k:'Conf', v:`${ct}·${depth}`});
   if(item.data_status === 'partial') chips.push({k:'Veri', v:'partial', c:'var(--ylw)'});
   if(item.override_applied) chips.push({k:'Manual', v:(item.override_fields||[]).join('+')||'override', c:'var(--cyn)'});
+  // Tahtacı PR B — sustained walk-up + holding-group activity badges.
+  const walkup = m.walkup_days;
+  if(walkup != null && walkup >= 5){
+    const col = walkup >= 10 ? 'var(--red)' : (walkup >= 7 ? 'var(--orn)' : 'var(--ylw)');
+    chips.push({k:'Walk-Up', v:`${walkup}g`, c: col});
+  }
+  const grpBoost = m.group_activity_boost;
+  const grpName = m.group_name;
+  if(grpBoost != null && grpBoost > 0 && grpName){
+    chips.push({k:'Grup', v:`${grpName} +${grpBoost.toFixed(1)}`, c:'var(--cyn)'});
+  }
 
   if(!chips.length) return '';
   const items = chips.slice(0, 5).map(ch => {

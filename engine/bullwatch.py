@@ -52,6 +52,7 @@ from features.bullwatch_features import (
     price_change_5d, is_price_calm,
     atr_compression_ratio, bb_width_compression_ratio,
     detect_price_action_patterns,
+    consecutive_high_close_days,
     ownership_signal,
 )
 
@@ -1486,6 +1487,16 @@ def score_symbol(metrics: dict,
     if calm and s_pa is not None and s_pa > 0:
         s_pa = min(1.0, s_pa * 1.15)
 
+    # Tahtacı PR B — sustained walk-up boost. Operator markup phase shows
+    # as consecutive high-close days (close near day's high). 5+ days is
+    # the canonical footprint; 10+ is aggressive markup.
+    walkup_days = consecutive_high_close_days(df)
+    if walkup_days >= 5 and s_pa is not None:
+        # 5d → 1.10×, 7d → 1.20×, 10d+ → 1.30×
+        mult = 1.10 + min(0.20, max(0.0, (walkup_days - 5)) * 0.04)
+        s_pa = min(1.0, s_pa * mult)
+        r_pa.append(f"Sustained walk-up: {walkup_days} consecutive high-close days")
+
     sub_scores = {
         "float_pressure":      s_fp,
         "revenue_mispricing":  s_rev,
@@ -1572,6 +1583,28 @@ def score_symbol(metrics: dict,
     industry = _early_industry
     sector_tr = _early_sector_tr
 
+    # Tahtacı PR B — holding-group activity boost. Small additive bonus
+    # when peers in the same holding family fired CONVICTION alerts in
+    # the last 14 days. Capped at +6 points. Computed here so the
+    # metrics_dict below can surface diagnostics for the UI.
+    group_boost_meta: dict = {}
+    try:
+        from engine.bullwatch_group_activity import compute_group_activity_boost
+        group_boost_meta = compute_group_activity_boost(symbol)
+        gb = float(group_boost_meta.get("boost") or 0.0)
+        if gb > 0:
+            score = min(100.0, score + gb)
+            peers_active = group_boost_meta.get("peer_tickers_active") or []
+            if peers_active:
+                reasons.insert(
+                    0,
+                    f"Holding-group activity ({group_boost_meta.get('group')}): "
+                    f"{', '.join(peers_active[:3])} alarmed in 14d",
+                )
+                reasons = reasons[:8]
+    except Exception as _exc:
+        log.debug("group_activity_boost failed for %s: %r", symbol, _exc)
+
     metrics_dict = {
         "float_market_cap": fmc,
         "market_cap": market_cap,
@@ -1584,6 +1617,11 @@ def score_symbol(metrics: dict,
         "bb_compression": bb_r,
         "patterns": patterns.get("labels", []),
         "ownership_coverage": ow_coverage,
+        # Tahtacı PR B — sustained walk-up + group activity diagnostics.
+        "walkup_days": int(walkup_days or 0),
+        "group_name": group_boost_meta.get("group"),
+        "group_peers_active": group_boost_meta.get("peer_tickers_active") or [],
+        "group_activity_boost": float(group_boost_meta.get("boost") or 0.0),
         # Phase A.10 Step 2-A.2: propagate diagnostic fields so narrative
         # builder can use them. Set with .get() to be safe for legacy
         # callers (tests building metrics by hand).
