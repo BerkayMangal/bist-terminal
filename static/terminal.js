@@ -742,8 +742,16 @@ function renderAlarmlarPage(){
     ['active', `🔥 Son Hafta (${alarms.filter(isActive).length})`,                                  'var(--grn)'],
     ['wl',     `Watchlist (${alarms.filter(a=>isWatched(a.ticker)).length})`,                       'var(--blu)'],
     ['month',  `Son 30 gün (${alarms.filter(a=>(Date.now()-new Date(a.alarmed_at).getTime())<30*24*3600*1000).length})`, 'var(--cyn)'],
+    ['backtest', `📊 Backtest`, 'var(--prp)'],
   ];
   h += `<div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap">${chips.map(([k,l,c])=>`<button class="btn btn-sm" style="${filt===k?`background:${c}20;border:1px solid ${c};color:${c}`:'background:var(--bg3);color:var(--t2)'}" onclick="S._alarmFilter='${k}';renderAlarmlarPage()">${l}</button>`).join('')}</div>`;
+
+  // Backtest tab renders its own dashboard instead of the alarm list.
+  if (filt === 'backtest') {
+    pg.innerHTML = h + _bwBacktestPanel();
+    if (!S.bwBacktest) _bwBacktestLoad();
+    return;
+  }
 
   // Explainer banner
   h += `<div style="padding:12px 16px;background:var(--bg3);border-radius:var(--rad);margin-bottom:14px;font-size:var(--fs-base);color:var(--t2);line-height:1.6">
@@ -801,6 +809,179 @@ function renderAlarmlarPage(){
   </div>`;
 
   pg.innerHTML = h;
+}
+
+// ===== BACKTEST DASHBOARD (Tahtacı PR C) =====
+// Shows aggregated win rates over the immutable alarm history. The
+// data comes from /api/bullwatch/alerts/backtest which slices the
+// SAME records the alarm list above already renders.
+async function _bwBacktestLoad(){
+  const days = S._btDays || 90;
+  try {
+    const r = await api(`/api/bullwatch/alerts/backtest?since_days=${days}`);
+    S.bwBacktest = (r && (r.value || r)) || null;
+  } catch(e){
+    S.bwBacktest = { error: String(e && e.message || e) };
+  }
+  renderAlarmlarPage();
+}
+
+function _btPct(v){
+  if (v == null) return '—';
+  const sign = v > 0 ? '+' : '';
+  return `${sign}${v.toFixed(1)}%`;
+}
+function _btWR(v){
+  if (v == null) return '—';
+  return `${(v * 100).toFixed(0)}%`;
+}
+function _btWRColor(v){
+  if (v == null) return 'var(--t4)';
+  if (v >= 0.65) return 'var(--grn)';
+  if (v >= 0.50) return 'var(--ylw)';
+  return 'var(--red)';
+}
+
+function _btStatCell(s){
+  if (!s || s.n === 0) return `<td style="color:var(--t4);font-size:10px">—</td>`;
+  return `<td style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--t1)">
+    <span style="color:${_btWRColor(s.win_rate)};font-weight:700">${_btWR(s.win_rate)}</span>
+    <span style="color:var(--t4);font-size:9px;margin-left:4px">n=${s.n}</span>
+    <div style="font-size:9px;color:var(--t3);margin-top:2px">μ ${_btPct(s.mean)} · med ${_btPct(s.median)}</div>
+  </td>`;
+}
+
+function _btBreakdownTable(title, rows, keyName){
+  if (!rows || !rows.length) return '';
+  let h = `<div class="card" style="margin-top:14px"><div class="card-h"><h3 style="font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--cyn)">${title}</h3></div><div class="card-b" style="padding:0;overflow-x:auto">
+    <table style="width:100%;border-collapse:collapse;font-size:11px">
+      <thead><tr style="border-bottom:1px solid var(--bdr);color:var(--t4);font-size:10px;letter-spacing:.5px">
+        <th style="text-align:left;padding:8px 12px">${keyName}</th>
+        <th style="text-align:left;padding:8px 12px">n</th>
+        <th style="text-align:left;padding:8px 12px">1g</th>
+        <th style="text-align:left;padding:8px 12px">1h</th>
+        <th style="text-align:left;padding:8px 12px">1a</th>
+      </tr></thead><tbody>`;
+  rows.forEach((r, i) => {
+    const k = r.band || r.zone || r.sector || r.pattern || '—';
+    h += `<tr style="${i<rows.length-1?'border-bottom:1px solid var(--bdr);':''}">
+      <td style="padding:10px 12px;font-weight:700;color:var(--t1)">${esc(k)}</td>
+      <td style="padding:10px 12px;color:var(--t3);font-family:'JetBrains Mono',monospace">${r.n||0}</td>
+      ${_btStatCell(r['1d'])}
+      ${_btStatCell(r['1w'])}
+      ${_btStatCell(r['1m'])}
+    </tr>`;
+  });
+  h += '</tbody></table></div></div>';
+  return h;
+}
+
+function _btHistogram(buckets){
+  if (!buckets || !buckets.length) return '';
+  const maxN = Math.max(1, ...buckets.map(b => b.count));
+  let h = `<div class="card" style="margin-top:14px"><div class="card-h"><h3 style="font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--cyn)">📊 1-gün Getiri Dağılımı</h3></div><div class="card-b">`;
+  h += '<div style="display:flex;flex-direction:column;gap:3px;font-family:\'JetBrains Mono\',monospace;font-size:11px">';
+  buckets.forEach(b => {
+    const w = (b.count / maxN) * 100;
+    const isNeg = b.bucket.startsWith('-') || b.bucket.startsWith('<');
+    const col = isNeg ? 'var(--red)' : 'var(--grn)';
+    h += `<div style="display:flex;align-items:center;gap:8px">
+      <div style="width:64px;color:var(--t3);text-align:right">${esc(b.bucket)}</div>
+      <div style="flex:1;background:var(--bg3);height:14px;border-radius:2px;overflow:hidden"><div style="height:100%;background:${col};width:${w}%;opacity:.7"></div></div>
+      <div style="width:32px;color:var(--t2);text-align:right">${b.count}</div>
+    </div>`;
+  });
+  h += '</div></div></div>';
+  return h;
+}
+
+function _btFakePump(fp){
+  if (!fp || !fp.count) {
+    return `<div class="card" style="margin-top:14px"><div class="card-b" style="text-align:center;padding:20px;color:var(--grn);font-size:12px">✓ Pump-and-dump tespit edilmedi (1g pozitif ama 1h negatif kombinasyonu yok)</div></div>`;
+  }
+  let h = `<div class="card" style="margin-top:14px;border-left:3px solid var(--red)"><div class="card-h"><h3 style="font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--red)">⚠️ Pump-and-Dump Sinyalleri</h3>
+    <p style="font-size:11px;color:var(--t3);margin-top:4px">1 gün ≥+3% pozitif başlamış ama 1 hafta ≤-2% düşmüş alarmlar — operatör pump-and-fade imzası.</p></div>
+  <div class="card-b" style="padding:12px 16px">
+    <div style="font-size:11px;color:var(--t2);margin-bottom:10px">${fp.count} alarm / ${(fp.share*100).toFixed(0)}% — reaksiyon takip edilen alarmlarda.</div>
+    <div style="display:flex;flex-direction:column;gap:6px">`;
+  fp.samples.forEach(s => {
+    h += `<div style="display:flex;justify-content:space-between;gap:8px;font-size:11px;padding:6px 10px;background:var(--bg3);border-radius:4px;cursor:pointer" onclick="loadTicker('${esc(s.ticker)}')">
+      <span style="font-family:'JetBrains Mono',monospace;color:var(--cyn);font-weight:700">${esc(s.ticker)}</span>
+      <span style="color:var(--t3);font-size:10px;flex:1;margin-left:8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(s.pattern||'—')}</span>
+      <span style="color:var(--grn);font-family:'JetBrains Mono',monospace">1g ${_btPct(s['1d_pct'])}</span>
+      <span style="color:var(--red);font-family:'JetBrains Mono',monospace">1h ${_btPct(s['1w_pct'])}</span>
+    </div>`;
+  });
+  h += '</div></div></div>';
+  return h;
+}
+
+function _bwBacktestPanel(){
+  const bt = S.bwBacktest;
+  const days = S._btDays || 90;
+  let h = `<div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap;align-items:center">
+    <span style="font-size:11px;color:var(--t3);margin-right:4px">Periyot:</span>`;
+  [30, 60, 90, 180, 365].forEach(d => {
+    const active = days === d;
+    h += `<button class="btn btn-sm" style="${active?'background:var(--prp)20;border:1px solid var(--prp);color:var(--prp)':'background:var(--bg3);color:var(--t2)'}" onclick="S._btDays=${d};S.bwBacktest=undefined;renderAlarmlarPage()">${d}g</button>`;
+  });
+  h += '</div>';
+
+  if (!bt) {
+    h += '<div class="ld"><div class="sp"></div><div class="ld-t">Backtest hesaplanıyor…</div></div>';
+    return h;
+  }
+  if (bt.error) {
+    h += `<div class="emp"><h3 style="color:var(--red)">Backtest yüklenemedi: ${esc(bt.error)}</h3></div>`;
+    return h;
+  }
+
+  // Headline KPI strip
+  const overall = bt.overall || {};
+  const total = bt.total_alerts || 0;
+  h += `<div class="card" style="margin-bottom:14px"><div class="card-b">
+    <div style="display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap">
+      <div>
+        <div style="font-size:10px;color:var(--t4);letter-spacing:.5px">TOPLAM ALARM</div>
+        <div style="font-size:24px;font-weight:700;color:var(--cyn);font-family:'JetBrains Mono',monospace">${total}</div>
+        <div style="font-size:10px;color:var(--t3)">son ${days} gün</div>
+      </div>`;
+  ['1d', '1w', '1m'].forEach(hKey => {
+    const s = overall[hKey];
+    const lbl = hKey === '1d' ? '1 GÜN' : hKey === '1w' ? '1 HAFTA' : '1 AY';
+    const wr = s && s.win_rate != null ? _btWR(s.win_rate) : '—';
+    const mean = s && s.mean != null ? _btPct(s.mean) : '—';
+    const col = s ? _btWRColor(s.win_rate) : 'var(--t4)';
+    h += `<div>
+      <div style="font-size:10px;color:var(--t4);letter-spacing:.5px">${lbl} KAZANMA</div>
+      <div style="font-size:24px;font-weight:700;color:${col};font-family:'JetBrains Mono',monospace">${wr}</div>
+      <div style="font-size:10px;color:var(--t3)">μ ${mean} · n=${s?s.n:0}</div>
+    </div>`;
+  });
+  // BIST100 baseline
+  const bs = bt.baseline || {};
+  if (bs['1d'] != null || bs['1w'] != null || bs['1m'] != null) {
+    h += `<div>
+      <div style="font-size:10px;color:var(--t4);letter-spacing:.5px">XU100 BASELINE</div>
+      <div style="font-size:14px;color:var(--t2);font-family:'JetBrains Mono',monospace;margin-top:4px">1g ${_btPct(bs['1d'])} · 1h ${_btPct(bs['1w'])} · 1a ${_btPct(bs['1m'])}</div>
+      <div style="font-size:10px;color:var(--t3)">aynı pencere</div>
+    </div>`;
+  }
+  h += '</div></div></div>';
+
+  // Helper banner
+  h += `<div style="padding:10px 14px;background:var(--bg3);border-radius:var(--rad);margin-bottom:14px;font-size:11px;color:var(--t3);line-height:1.55">
+    💡 <b style="color:var(--t2)">Kazanma oranı</b> = alarm sonrası getiri pozitif olan oran. <b>μ</b> = ortalama, <b>med</b> = medyan. Skor band, zone, sektör, pattern kırılımları kalibrasyon için altın değerinde — hangi koşullarda sistemin işe yaradığını gösterir.
+  </div>`;
+
+  h += _btBreakdownTable('🎯 Skor Bandına Göre', bt.by_score_band, 'Skor Bandı');
+  h += _btBreakdownTable('🔥 Zone\'a Göre', bt.by_zone, 'Zone');
+  h += _btBreakdownTable('🏭 Sektöre Göre (top 10)', bt.by_sector, 'Sektör');
+  h += _btBreakdownTable('📐 Pattern\'e Göre (top 8)', bt.by_pattern, 'Pattern');
+  h += _btFakePump(bt.fake_pump);
+  h += _btHistogram(bt.histogram_1d);
+
+  return h;
 }
 
 // ===== BİLANÇOLAR (KAP DISCLOSURE FEED) =====
