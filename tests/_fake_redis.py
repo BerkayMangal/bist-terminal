@@ -164,7 +164,10 @@ class FakeRedis:
 
     # ── Scan ──────────────────────────────────────────────────────
 
-    def scan_iter(self, match: str = "*"):
+    def scan_iter(self, match: str = "*", count: Optional[int] = None):
+        # `count` is a Redis server-side chunk hint — no-op for the
+        # in-process fake. Accept it so callers using the real-redis
+        # signature don't blow up.
         # Snapshot keys to avoid mid-iteration mutation issues
         for k in list(self._data.keys()):
             self._check_expired(k)

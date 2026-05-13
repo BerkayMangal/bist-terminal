@@ -337,21 +337,48 @@ async def _cold_start_scan() -> Optional[dict]:
     return await _refresh_and_persist()
 
 
+# Fields kept in `lite` mode — the BullWatch list view only ever
+# renders these. Heavy fields (metrics, components, reasons, narrative)
+# are fetched lazily via /api/bullwatch/{ticker} when a card opens.
+_LITE_FIELDS = (
+    "symbol", "score", "zone", "pattern",
+    "data_quality", "sector", "sector_group", "sector_tr",
+    "industry", "delta", "is_late",
+    # KAP boost meta surfaced by the new engine — small + actionable
+    "data_status",
+)
+
+
+def _trim_item_for_lite(item: dict) -> dict:
+    """Drop heavy fields from a BullWatchResult dict to shrink payload."""
+    return {k: item.get(k) for k in _LITE_FIELDS if k in item}
+
+
 def _apply_filters_and_slice(
     payload: dict,
     zone: Optional[str],
     min_score: float,
     limit: int,
+    lite: bool = False,
 ) -> list[dict]:
     """Per-request filter on the cached/snapshot items. Filters happen on
-    read, never on write — caching every parameter combo isn't worth it."""
+    read, never on write — caching every parameter combo isn't worth it.
+
+    When `lite=True`, heavy fields (metrics, components, reasons,
+    narrative, …) are stripped. The list view never uses them; the
+    detail panel re-fetches via /api/bullwatch/{ticker}. Cuts ~70% of
+    response size on a 50-item list.
+    """
     items = list(payload.get("items") or [])
     if zone:
         zone_norm = zone.strip().upper()
         items = [it for it in items if it.get("zone") == zone_norm]
     if min_score > 0:
         items = [it for it in items if (it.get("score") or 0) >= min_score]
-    return items[:limit]
+    items = items[:limit]
+    if lite:
+        items = [_trim_item_for_lite(it) for it in items]
+    return items
 
 
 @router.get("/api/bullwatch")
@@ -373,6 +400,13 @@ async def api_bullwatch(
                                     "refreshed top-50 subset. Default reads "
                                     "the 30-min full-universe snapshot."
                                 )),
+    lite: bool = Query(False,
+                       description=(
+                           "Strip heavy item fields (metrics, components, "
+                           "reasons, narrative). Cuts ~70% of payload — "
+                           "the list view uses this; detail panel re-fetches "
+                           "via /api/bullwatch/{ticker}."
+                       )),
 ):
     """
     Return ranked BullWatch candidates.
@@ -405,7 +439,7 @@ async def api_bullwatch(
             return error(f"BullWatch scan failed: {exc}", status_code=500)
         return _build_response(
             payload, "experimental", zone, min_score, limit,
-            from_snapshot=False,
+            from_snapshot=False, lite=lite,
         )
 
     # ── Pick the snapshot module based on the requested tier ───────
@@ -446,6 +480,7 @@ async def api_bullwatch(
                 from_snapshot=from_snapshot,
                 scan_id=snapshot_scan_id,
                 refresh_scheduled=scheduled,
+                lite=lite,
             )
         # No view at all → cold-start (blocks; spec-allowed only here)
         payload = await _cold_start_scan()
@@ -453,7 +488,7 @@ async def api_bullwatch(
             return error("BullWatch cold-start scan failed", status_code=500)
         return _build_response(
             payload, "cold_start", zone, min_score, limit,
-            from_snapshot=False,
+            from_snapshot=False, lite=lite,
         )
 
     # ── refresh=false: serve view if fresh; schedule refresh if stale ──
@@ -465,6 +500,7 @@ async def api_bullwatch(
                 zone, min_score, limit,
                 from_snapshot=from_snapshot,
                 scan_id=snapshot_scan_id,
+                lite=lite,
             )
         # Stale → schedule refresh and serve stale view in the meantime
         scheduled = _schedule_background_refresh()
@@ -474,6 +510,7 @@ async def api_bullwatch(
             scan_id=snapshot_scan_id,
             refresh_scheduled=scheduled,
             stale=True,
+            lite=lite,
         )
 
     # ── No view exists at all → cold-start (blocking) ───────────────
@@ -482,7 +519,7 @@ async def api_bullwatch(
         return error("BullWatch cold-start scan failed", status_code=500)
     return _build_response(
         payload, "cold_start", zone, min_score, limit,
-        from_snapshot=False,
+        from_snapshot=False, lite=lite,
     )
 
 
@@ -496,9 +533,10 @@ def _build_response(
     scan_id: Optional[str] = None,
     refresh_scheduled: bool = False,
     stale: bool = False,
+    lite: bool = False,
 ) -> JSONResponse:
     """Apply filters, build response envelope, attach snapshot meta."""
-    items = _apply_filters_and_slice(payload, zone, min_score, limit)
+    items = _apply_filters_and_slice(payload, zone, min_score, limit, lite=lite)
     extra_meta: dict[str, Any] = {
         "engine": "bullwatch_v1",
         "from_snapshot": from_snapshot,
