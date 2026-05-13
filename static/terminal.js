@@ -3,7 +3,7 @@
 // ===== STATE =====
 const S={page:'home',scan:null,cross:null,macro:null,dash:null,takas:null,social:null,hero:null,quote:null,book:null,wl:JSON.parse(localStorage.getItem('bb_wl')||'[]'),seen:JSON.parse(localStorage.getItem('bb_seen')||'[]'),_alerts:[]};
 const QT=['ASELS','THYAO','BIMAS','KCHOL','TUPRS','AKBNK','GARAN','FROTO','TOASO','PGSUS'];
-const PAGES=[{id:'nasil',label:'Nasıl?',icon:'❓'},{id:'home',label:'Ana Sayfa',icon:'🏠'},{id:'radar',label:'Radar',icon:'📡'},{id:'bullwatch',label:'BullWatch',icon:'🐂'},{id:'alarmlar',label:'Alarmlar',icon:'🚨'},{id:'bullalfa',label:'BullAlfa',icon:'🎯'},{id:'bilancolar',label:'Bilançolar',icon:'📰'},{id:'cross',label:'Sinyaller',icon:'⚡'},{id:'makro',label:'Makro',icon:'🌍'},{id:'portfoy',label:'Portföy',icon:'💼'}];
+const PAGES=[{id:'nasil',label:'Nasıl?',icon:'❓'},{id:'home',label:'Ana Sayfa',icon:'🏠'},{id:'akis',label:'Akış',icon:'📰'},{id:'radar',label:'Radar',icon:'📡'},{id:'bullwatch',label:'BullWatch',icon:'🐂'},{id:'alarmlar',label:'Alarmlar',icon:'🚨'},{id:'bullalfa',label:'BullAlfa',icon:'🎯'},{id:'bilancolar',label:'Bilançolar',icon:'📊'},{id:'cross',label:'Sinyaller',icon:'⚡'},{id:'makro',label:'Makro',icon:'🌍'},{id:'portfoy',label:'Portföy',icon:'💼'}];
 const $=s=>document.getElementById(s);
 
 // ===== XSS SANITIZER =====
@@ -255,6 +255,7 @@ function goPage(id){
   // get stuck mid-scroll otherwise.
   try { window.scrollTo({top:0, behavior:'instant'}); } catch (e) { window.scrollTo(0,0); }
   if(id==='home')renderHome();
+  if(id==='akis')renderAkisPage();
   if(id==='radar')renderRadarPage();
   if(id==='cross')renderCrossPage();
   if(id==='bullwatch')renderBullwatchPage();
@@ -686,6 +687,128 @@ async function loadBook(){try{S.book=await api('/api/book');}catch(e){}}
 async function loadMarketStatus(){try{S.marketStatus=await api('/api/market-status');}catch(e){}}
 async function loadMacro(){try{S.macro=await cachedApi('/api/macro');const el=$('macMini');if(el)el.innerHTML=renderMacMini(S.macro.items||[]);const ng=$('nabGrid');if(ng)ng.innerHTML=renderNabiz(S.macro.items||[]);renderTickerBar(S.macro.items||[]);loadHomeAction();}catch(e){console.error('macro:',e);}}
 function renderTickerBar(items){const tb=$('tbar');const inner=items.map(m=>`<div class="tbar-i"><span style="color:var(--t2);font-weight:600">${esc(m.flag||'')} ${esc(m.key||m.name)}</span><span style="color:var(--t1)">${fN(m.price,m.key?.includes('TRY')?4:2)}</span><span style="color:${cC(m.change_pct)};font-size:10px">${cS(m.change_pct)}%</span></div>`).join('');tb.innerHTML=`<div class="tbar-inner">${inner}${inner}</div>`;}
+
+// ===== AKIŞ (UNIFIED ACTIVITY FEED) =====
+// Tek chronological feed: CONVICTION alarm + listeye giriş/çıkış +
+// KAP finansal rapor + auto-refresh skor değişimi. Watchlist filtresi.
+async function loadAkis(force){
+  if (S.akis && !force) return S.akis;
+  const wlOn = S._akisWlOnly !== false;       // default ON
+  const hours = S._akisHours || 24;
+  let url = `/api/activity/recent?since_hours=${hours}&limit=80`;
+  if (wlOn && S.wl && S.wl.length) {
+    url += '&watchlist=' + encodeURIComponent(S.wl.join(','));
+  }
+  try {
+    const r = await api(url);
+    const v = (r && (r.value || r)) || {};
+    S.akis = {
+      items: v.items || [],
+      counts: v.counts || {},
+      watchlist_filter: !!v.watchlist_filter,
+      since_hours: v.since_hours || hours,
+      fetched_at: Date.now(),
+    };
+  } catch(e) {
+    console.warn('akis fetch failed', e);
+    S.akis = { items: [], counts: {} };
+  }
+  return S.akis;
+}
+
+function _akisItemStyle(t){
+  const m = {
+    ALARM:         {ic:'🚨', col:'var(--red)', bg:'rgba(239,83,80,.12)', lbl:'CONVICTION Alarm'},
+    MEMBERSHIP:    {ic:'📋', col:'var(--orn)', bg:'rgba(255,167,38,.12)', lbl:'Liste Hareketi'},
+    KAP_FINANCIAL: {ic:'📰', col:'var(--cyn)', bg:'var(--blud)', lbl:'KAP Bilanço'},
+    SCORE_CHANGE:  {ic:'⚡', col:'var(--grn)', bg:'var(--grnd)', lbl:'Skor Değişimi'},
+  };
+  return m[t] || {ic:'•', col:'var(--t3)', bg:'var(--bg3)', lbl:t};
+}
+
+function _akisTimeAgo(iso){
+  return _alarmTimeAgo(iso);
+}
+
+function renderAkisPage(){
+  const pg = $('pg-akis');
+  if (!S.akis) {
+    pg.innerHTML = _skelHeader('📰 Akış — son 24 saat yükleniyor…') + _skelList(8);
+    loadAkis().then(() => renderAkisPage());
+    return;
+  }
+  const items = S.akis.items || [];
+  const counts = S.akis.counts || {};
+  const wlOn = S._akisWlOnly !== false;
+  const hours = S._akisHours || 24;
+
+  let h = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px">
+    <div>
+      <h2 style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-lg);color:var(--cyn)">📰 Aktivite Akışı</h2>
+      <p style="font-size:var(--fs-sm);color:var(--t3);margin-top:2px">Son ${hours} saatte sistemde ne olduğunu tek listede gör · ${items.length} olay</p>
+    </div>
+    <button class="btn btn-grn" onclick="S.akis=null;loadAkis(true).then(()=>renderAkisPage())">🔄</button>
+  </div>`;
+
+  // Source-type counts strip
+  h += `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px">
+    ${['ALARM','MEMBERSHIP','KAP_FINANCIAL','SCORE_CHANGE'].map(t=>{
+      const st = _akisItemStyle(t);
+      const c = counts[t] || 0;
+      return `<span style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:var(--rad);background:${st.bg};color:${st.col};font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700"><span>${st.ic}</span>${esc(st.lbl)} <b style="margin-left:2px">${c}</b></span>`;
+    }).join('')}
+  </div>`;
+
+  // Filter controls: hours selector + watchlist toggle
+  h += '<div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap;align-items:center;font-size:11px">';
+  [6, 24, 72, 168].forEach(hr => {
+    const on = hours === hr;
+    const lbl = hr === 168 ? '7g' : hr === 72 ? '3g' : hr === 24 ? '24sa' : '6sa';
+    h += `<button class="btn btn-sm" style="${on?'background:var(--prp)20;border:1px solid var(--prp);color:var(--prp)':'background:var(--bg3);color:var(--t2)'};font-size:11px" onclick="S._akisHours=${hr};S.akis=null;loadAkis(true).then(()=>renderAkisPage())">${lbl}</button>`;
+  });
+  h += `<label style="margin-left:auto;display:inline-flex;align-items:center;gap:6px;color:var(--t2);cursor:pointer">
+    <input type="checkbox" ${wlOn?'checked':''} onchange="S._akisWlOnly=this.checked;S.akis=null;loadAkis(true).then(()=>renderAkisPage())" /> Sadece Watchlist
+  </label></div>`;
+
+  // Explainer
+  h += `<div style="padding:10px 14px;background:var(--bg3);border-radius:var(--rad);margin-bottom:12px;font-size:11px;color:var(--t2);line-height:1.55">
+    💡 <b style="color:var(--cyn)">Tek akış, dört kaynak:</b> CONVICTION alarmları, BullWatch liste hareketleri, KAP'a düşen finansal raporlar, ve auto-refresh'in yakaladığı anlamlı skor değişimleri — hepsi chronological sırayla. Tıkla → ilgili hisseye git.
+  </div>`;
+
+  if (!items.length) {
+    const tip = wlOn
+      ? 'Watchlist filtresi aktif. Son ' + hours + ' saatte senin hisselerin için olay yok. Filtreyi kapatabilir ya da süreyi artırabilirsin.'
+      : 'Son ' + hours + ' saatte hiç olay olmamış. Sistem yeni başlatılmış olabilir.';
+    h += `<div class="emp" style="padding:30px 20px;text-align:center"><h3 style="color:var(--t2);font-size:14px;margin-bottom:8px">Akış sessiz</h3><p style="color:var(--t4);font-size:11px;line-height:1.6">${esc(tip)}</p></div>`;
+    pg.innerHTML = h;
+    return;
+  }
+
+  h += '<div class="card"><div class="card-b" style="padding:0">';
+  items.forEach((it, i) => {
+    const st = _akisItemStyle(it.type);
+    const ago = _akisTimeAgo(it.occurred_at);
+    const wlBadge = (S.wl||[]).includes(it.ticker)
+      ? '<span style="font-size:10px;color:var(--ylw);margin-left:6px" title="Watchlist">⭐</span>' : '';
+    h += `<div class="kap-row" style="padding:11px 14px;${i<items.length-1?'border-bottom:1px solid var(--bdr);':''}cursor:pointer;transition:background .1s" onclick="loadTicker('${esc(it.ticker)}')" onmouseover="this.style.background='var(--bg3)'" onmouseout="this.style.background=''">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
+        <div style="flex:1;min-width:0">
+          <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:3px">
+            <span style="font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:700;color:var(--cyn)">${esc(it.ticker)}</span>
+            ${wlBadge}
+            <span style="display:inline-flex;align-items:center;gap:3px;font-family:'JetBrains Mono',monospace;font-size:10px;color:${st.col};font-weight:700;padding:2px 6px;background:${st.bg};border-radius:3px"><span>${st.ic}</span>${esc(st.lbl)}</span>
+          </div>
+          <div class="kap-row-subj" style="font-size:11.5px;color:var(--t2);line-height:1.45">${esc(it.summary || '')}</div>
+          ${it.detail ? `<div style="font-size:10.5px;color:var(--t4);margin-top:2px;line-height:1.4">${esc(it.detail)}</div>` : ''}
+        </div>
+        <div style="text-align:right;font-size:10px;color:var(--t4);font-family:'JetBrains Mono',monospace;flex-shrink:0;white-space:nowrap">${esc(ago)}</div>
+      </div>
+    </div>`;
+  });
+  h += '</div></div>';
+
+  pg.innerHTML = h;
+}
 
 // ===== ALARMLAR (BULLWATCH HIGH-CONVICTION HISTORY) =====
 // BullWatch list is volatile by design (re-rank per scan), so the user
