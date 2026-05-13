@@ -211,9 +211,13 @@
   }
 
   // ── Mode filter tabs ──────────────────────────────────────────
+  // The special mode value '__SIGNALS__' switches the page from BullAlfa
+  // mode cards to the pure technical signals view (formerly the Sinyaller
+  // tab — merged here so the user has one scanner home, not two).
   function renderModeTabs(byMode, total) {
     const order = ['HIZLI', 'SWING', 'POZİSYON', 'TOPLANIYOR', 'SAKİN', 'UZAK DUR'];
     const cur = BA.filters.mode || '';
+    const isSignals = cur === '__SIGNALS__';
     const tabs = [
       `<button class="btn btn-sm" style="background:${cur ? 'var(--bg3)' : 'linear-gradient(135deg,var(--acc),var(--acc2))'};color:${cur ? 'var(--t2)' : '#000'};font-size:11px;padding:6px 12px;min-height:36px;border:1px solid ${cur ? 'transparent' : 'var(--acc)'}" onclick="BullAlfa._setMode('')">Tümü (${total})</button>`
     ];
@@ -224,7 +228,10 @@
       const on = cur === m;
       tabs.push(`<button class="btn btn-sm" style="background:${on ? meta.bg : 'var(--bg3)'};color:${meta.color};border:1px solid ${on ? meta.color : 'transparent'};font-size:11px;padding:6px 12px;min-height:36px" onclick="BullAlfa._setMode('${esc(m)}')">${meta.icon} ${meta.label} (${cnt})</button>`);
     }
-    return `<div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap">${tabs.join('')}</div>`;
+    // Sinyaller — orange, separated visually so the user reads it as a
+    // distinct sub-view (not a mode filter on the same data).
+    tabs.push(`<button class="btn btn-sm" style="background:${isSignals ? 'rgba(255,167,38,.15)' : 'var(--bg3)'};color:var(--orn);border:1px solid ${isSignals ? 'var(--orn)' : 'rgba(255,167,38,.2)'};font-size:11px;padding:6px 12px;min-height:36px;margin-left:auto" onclick="BullAlfa._setMode('__SIGNALS__')">⚡ Sinyaller</button>`);
+    return `<div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap;align-items:center">${tabs.join('')}</div>`;
   }
 
   // ── SWING / actionable spotlight ──────────────────────────────
@@ -378,6 +385,28 @@
   // ── Render ────────────────────────────────────────────────────
   async function renderTab(rootEl) {
     if (!rootEl) return;
+
+    // Sinyaller (formerly the Cross tab) — render the technical signals
+    // view in-place. Re-uses renderCrossPage from terminal.js. Mode tabs
+    // stay visible so the user can switch back to BullAlfa modes.
+    if (BA.filters.mode === '__SIGNALS__') {
+      const meta = (BA.scan && BA.scan.meta) || {};
+      const total = ((BA.scan && BA.scan.signals) || []).length;
+      const byMode = meta.by_mode || {};
+      let shell = renderModeTabs(byMode, total);
+      shell += '<div id="ba-signals-host"></div>';
+      rootEl.innerHTML = shell;
+      // Ensure cross data is loaded and rendered into the host div
+      if (typeof window.S !== 'undefined' && !window.S.cross) {
+        if (typeof window.startCross === 'function') {
+          window.startCross('ba-signals-host');
+        }
+      } else if (typeof window.renderCrossPage === 'function') {
+        window.renderCrossPage('ba-signals-host');
+      }
+      return;
+    }
+
     // First render — loading spinner
     if (!BA.scan) rootEl.innerHTML = renderLoading();
 
