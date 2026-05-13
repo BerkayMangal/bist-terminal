@@ -1466,12 +1466,55 @@ function _radarFreshBanner(){
       <button class="btn btn-sm" style="background:var(--bg3);color:var(--t2);font-size:10px;padding:3px 8px;min-height:24px;margin-left:auto" onclick="loadRadarFreshness(true)">🔄 Yenile</button>
     </div>
     <div style="font-size:var(--fs-xs);color:var(--t4);margin-top:6px">Fresh = borsapy son ${th.fresh_hours||26}sa içinde fetch · Stale = ${th.stale_hours||72}sa+ ${warn}</div>
+    ${_radarKapHealthBanner()}
   </div>`;
+}
+
+// KAP feed health summary — pipeline'ın üst kısmı çalışıyor mu?
+// Background loop'un son cycle telemetry'sini gösterir + storage stats.
+function _radarKapHealthBanner(){
+  const k = S.kapHealth;
+  if (!k) return '';
+  const st = k.storage || {};
+  const lc = k.last_cycle;
+  const newestIso = st.newest_publish_date;
+  const newestMs = newestIso ? new Date(newestIso).getTime() : null;
+  const newestHrs = newestMs ? Math.round((Date.now() - newestMs)/3600000) : null;
+  const total = (st.total_in_sqlite||0) + (st.total_in_redis||0);
+  // Health verdict:
+  //   green   — son disclosure ≤ 24h, last cycle çalışmış, 0 error
+  //   yellow  — son disclosure 24-72h ya da last_cycle yok
+  //   red     — son disclosure 72h+ ya da cycle error sayısı >0
+  let col = 'var(--grn)', ic = '✓', verdict = 'Akış sağlıklı';
+  if (lc && lc.errors > 0) { col = 'var(--red)'; ic = '✕'; verdict = `Loop ${lc.errors} hata aldı`; }
+  else if (newestHrs == null) { col = 'var(--t4)'; ic = '?'; verdict = 'Henüz disclosure görülmemiş'; }
+  else if (newestHrs > 72) { col = 'var(--red)'; ic = '✕'; verdict = `Son disclosure ${newestHrs}sa önce — feed durmuş olabilir`; }
+  else if (newestHrs > 24 || !lc) { col = 'var(--ylw)'; ic = '◷'; verdict = lc ? `Son disclosure ${newestHrs}sa önce` : 'Loop henüz çalışmadı'; }
+  const cycleLine = lc
+    ? `Son poll: ${lc.duration_sec}s · ${lc.tickers_with_disclosures}/${lc.universe_size} ticker · ${lc.new_disclosures_persisted} yeni · ${lc.errors} hata`
+    : 'Background loop henüz tetiklenmedi (uygulama yeni başlatıldı?)';
+  return `<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--bdr);display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:var(--fs-xs)">
+    <span style="font-family:'JetBrains Mono',monospace;color:var(--t4);text-transform:uppercase;letter-spacing:.5px">📰 KAP Feed</span>
+    <span style="display:inline-flex;align-items:center;gap:4px;color:${col};font-weight:700"><span>${ic}</span>${esc(verdict)}</span>
+    <span style="color:var(--t3)">${esc(cycleLine)}</span>
+    <span style="color:var(--t4);margin-left:auto">Storage: ${total} kayıt</span>
+  </div>`;
+}
+
+async function loadKapHealth(){
+  try {
+    const r = await api('/api/kap/health');
+    S.kapHealth = (r && (r.value || r)) || null;
+    if (S.page === 'radar') renderRadarPage();
+  } catch(e) {
+    console.warn('kap health fetch failed', e);
+  }
 }
 
 function renderRadarPage(){const pg=$('pg-radar');const sc=S.scan;if(!sc||!sc.items||!sc.items.length){pg.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px"><h2 style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-lg);color:var(--cyn)">🏛️ Temel Analiz Radar</h2><button class="btn btn-grn" onclick="startScan()">▶ SCAN</button></div><div class="emp"><h3 style="color:var(--t2)">Henüz taranmadı</h3></div>`;return;}
   // Veri tazeliği — sayfa açıldıkça otomatik fetch (5dk cached)
   if (!S.diagFresh) { loadRadarFreshness(); }
+  if (!S.kapHealth) { loadKapHealth(); }
   const sort=S._radarSort||'deger';pg.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px"><div><h2 style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-lg);color:var(--cyn)">🏛️ V13 Saf Değerleme Radar — ${sc.items.length} Hisse</h2><p style="font-size:var(--fs-sm);color:var(--t3);margin-top:2px">${sc.asof?new Date(sc.asof).toLocaleString('tr-TR'):''}</p></div><button class="btn btn-grn" onclick="startScan()">🔄</button></div>${_radarFreshBanner()}<div style="padding:12px 16px;background:var(--bg3);border-radius:var(--rad);margin-bottom:14px;font-size:var(--fs-base);color:var(--t2);line-height:1.6"><b style="color:var(--cyn)">V13 Saf Değerleme nasıl çalışır?</b> Uzun vadeli değer tarayıcı. ${sc.items.length} BIST hissesi 7 temel boyutta analiz edilir: Değerleme (F/K, PD/DD, FD/FAVÖK), Kalite (ROE, marjlar), Büyüme, Bilanço sağlamlığı (Altman Z, borç), Kâr Kalitesi (Beneish, nakit akış), Sermaye Tahsisi ve Hendek (marj stabilitesi). <span style="color:var(--ylw)">Kısa vadeli momentum ve teknik sinyaller için → Cross Hunter.</span></div><div class="card"><div class="card-b" style="overflow-x:auto">${renderRadarTbl(sc.items,sort)}</div></div>`;}
 
 // Veri Tazeliği detay modal'ı — bir hissenin tüm freshness bundle'ını
@@ -1528,8 +1571,88 @@ async function showFreshModal(ticker){
     data.warnings.forEach(w => { h += `<div style="font-size:var(--fs-sm);color:var(--t2);padding:3px 0">• ${esc(w)}</div>`; });
     h += '</div>';
   }
-  h += `<div style="text-align:right;margin-top:12px"><button class="btn btn-sm btn-blu" onclick="loadTicker('${esc(data.ticker)}');this.closest('.mov').remove()">Hisseyi Aç →</button></div>`;
+  // 30-day score history sparkline — "skor gerçekten değişiyor mu?"
+  h += `<div id="fmHist" style="margin-bottom:12px"></div>`;
+  h += `<div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+    <button id="fmRefBtn" class="btn btn-sm btn-grn" onclick="forceRefreshTicker('${esc(data.ticker)}', this)" style="flex:1;min-width:140px">🔄 Şimdi Yenile (cache'i kır + yeniden fetch)</button>
+    <button class="btn btn-sm btn-blu" style="flex:1;min-width:140px" onclick="loadTicker('${esc(data.ticker)}');this.closest('.mov').remove()">Hisseyi Aç →</button>
+  </div>`;
+  h += `<div id="fmRefResult" style="margin-top:8px;font-size:11px;color:var(--t3)"></div>`;
   ov.querySelector('div').innerHTML = h;
+  // Sparkline async
+  loadFreshSparkline(data.ticker);
+}
+
+async function loadFreshSparkline(ticker){
+  try {
+    const r = await api('/api/diag/score-history/' + encodeURIComponent(ticker) + '?days=30');
+    const v = (r && (r.value || r)) || {};
+    const items = v.items || [];
+    const el = document.getElementById('fmHist');
+    if (!el) return;
+    if (!items.length) {
+      el.innerHTML = `<div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--t4);letter-spacing:.5px;margin-bottom:4px">📈 30 GÜNLÜK SKOR TARİHÇESİ</div>
+        <div style="padding:12px;background:var(--bg3);border-radius:var(--rad);font-size:11px;color:var(--t4);text-align:center">Henüz snapshot yok — score_history boş.</div>`;
+      return;
+    }
+    const scores = items.map(i => i.score).filter(s => s != null);
+    if (!scores.length) { el.innerHTML = ''; return; }
+    const min = Math.min(...scores), max = Math.max(...scores);
+    const range = Math.max(1, max - min);
+    const first = scores[0], last = scores[scores.length - 1];
+    const delta = last - first;
+    const dCol = delta > 1 ? 'var(--grn)' : delta < -1 ? 'var(--red)' : 'var(--t3)';
+    const dSign = delta > 0 ? '+' : '';
+    // SVG sparkline
+    const w = 480, hgt = 64, pad = 4;
+    const pts = items.map((it, i) => {
+      const x = pad + (i / Math.max(1, items.length-1)) * (w - 2*pad);
+      const y = it.score == null ? null : (hgt - pad - ((it.score - min) / range) * (hgt - 2*pad));
+      return y == null ? null : `${x.toFixed(1)},${y.toFixed(1)}`;
+    }).filter(Boolean).join(' ');
+    el.innerHTML = `<div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--cyn);letter-spacing:.5px;margin-bottom:4px">📈 30 GÜNLÜK SKOR TARİHÇESİ · ${items.length} snapshot</div>
+      <div style="padding:8px 12px;background:var(--bg3);border-radius:var(--rad)">
+        <svg width="100%" viewBox="0 0 ${w} ${hgt}" preserveAspectRatio="none" style="display:block">
+          <polyline fill="none" stroke="${dCol}" stroke-width="2" points="${pts}" />
+        </svg>
+        <div style="display:flex;justify-content:space-between;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--t4);margin-top:4px">
+          <span>${esc(items[0].snap_date)} · ${first.toFixed(0)}</span>
+          <span style="color:${dCol};font-weight:700">${dSign}${delta.toFixed(1)} puan</span>
+          <span>${esc(items[items.length-1].snap_date)} · ${last.toFixed(0)}</span>
+        </div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--t4);margin-top:2px">min ${min.toFixed(0)} · max ${max.toFixed(0)} · range ${range.toFixed(0)}</div>
+      </div>`;
+  } catch(e) {
+    console.warn('sparkline fetch failed', e);
+  }
+}
+
+async function forceRefreshTicker(ticker, btn){
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Yenileniyor… (~10-30s)'; }
+  const out = document.getElementById('fmRefResult');
+  if (out) out.innerHTML = '<span style="color:var(--t4)">Cache invalidate ediliyor, borsapy yeniden çağrılıyor…</span>';
+  try {
+    const r = await fetch('/api/diag/fundamentals/' + encodeURIComponent(ticker) + '/refresh', {method:'POST'});
+    const j = await r.json();
+    const v = j.value || j;
+    if (!v.analysis_ok && !v.after) {
+      if (out) out.innerHTML = `<span style="color:var(--red)">Yenileme başarısız: ${esc(j.error || 'unknown')}</span>`;
+      return;
+    }
+    const b = v.before || {}; const a = v.after || {};
+    const bAge = b.borsapy?.age_hours; const aAge = a.borsapy?.age_hours;
+    const scoreLine = v.new_score != null ? ` · Yeni skor: <b style="color:var(--grn)">${v.new_score.toFixed?.(0) || v.new_score}</b>` : '';
+    if (out) out.innerHTML = `<span style="color:var(--grn)">✓ Yenilendi.</span> Önce: ${bAge!=null?bAge.toFixed(0)+'sa':'?'} → Sonra: ${aAge!=null?aAge.toFixed(0)+'sa':'?'}${scoreLine}`;
+    // Invalidate the freshness cache so the modal/banner re-fetch
+    S.diagFresh = null; S.diagFreshSummary = null; S.diagFreshFetchedAt = 0;
+    // Re-load this one ticker's bundle for the open modal
+    setTimeout(() => showFreshModal(ticker), 1200);
+    setTimeout(() => loadRadarFreshness(true), 1500);
+  } catch(e) {
+    if (out) out.innerHTML = `<span style="color:var(--red)">Hata: ${esc(String(e.message||e))}</span>`;
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '🔄 Şimdi Yenile (cache\'i kır + yeniden fetch)'; }
+  }
 }
 
 // ===== CROSS PAGE =====

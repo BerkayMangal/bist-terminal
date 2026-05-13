@@ -195,6 +195,44 @@ class TestComputeFreshness:
         assert out["kap"]["rule_type"] == "Yıllık"
 
 
+# ── _latest_kap_financial — financial vs non-financial filter ───
+
+
+class TestLatestKapFinancial:
+    def test_picks_most_recent_financial(self, monkeypatch):
+        from engine.diag_fundamentals import _latest_kap_financial
+        import infra.kap_storage as ks
+        rows = [
+            {"disclosure_type": "FR",
+             "subject": "Konsolide Finansal Tablolar",
+             "publish_date": _iso_hours_ago(2.0),
+             "rule_type": "3 Aylık", "period": 1, "year": 2026,
+             "disclosure_index": 100},
+            {"disclosure_type": "FR",
+             "subject": "Konsolide Finansal Tablolar",
+             "publish_date": _iso_hours_ago(2000.0),  # much older
+             "rule_type": "Yıllık", "period": 4, "year": 2025,
+             "disclosure_index": 50},
+        ]
+        monkeypatch.setattr(ks, "get_by_ticker", lambda t, limit=50: rows)
+        out = _latest_kap_financial("FORTE")
+        # First financial in the (already DESC-sorted) list wins
+        assert out["disclosure_index"] == 100
+        assert out["rule_type"] == "3 Aylık"
+
+    def test_skips_non_financial_subjects(self, monkeypatch):
+        from engine.diag_fundamentals import _latest_kap_financial
+        import infra.kap_storage as ks
+        rows = [
+            {"disclosure_type": "FR",
+             "subject": "Sorumluluk Beyanı",  # not a balance sheet
+             "publish_date": _iso_hours_ago(2.0)},
+        ]
+        monkeypatch.setattr(ks, "get_by_ticker", lambda t, limit=50: rows)
+        out = _latest_kap_financial("FORTE")
+        assert out == {}
+
+
 # ── compute_summary batch ───────────────────────────────────────
 
 
