@@ -237,6 +237,42 @@ def compute_data_freshness(ticker: str) -> dict[str, Any]:
     return out
 
 
+# Severity used by the stale-list sort: stale > unknown > old > fresh.
+# Higher is worse, so reverse-sorting puts the worst rows first.
+STALE_SEVERITY = {"stale": 3, "unknown": 2, "old": 1, "fresh": 0}
+
+
+def filter_stale_rows(
+    rows: list[dict[str, Any]],
+    threshold: str = "stale",
+) -> list[dict[str, Any]]:
+    """Filter + sort the summary rows for the stale-tickers panel.
+
+    threshold:
+      'stale'        → only stale + unknown
+      'old'          → stale + unknown + old (anything not fresh)
+      'any-warning'  → anything with warnings or non-fresh status
+    """
+
+    def _matches(r: dict) -> bool:
+        st = r.get("age_status")
+        if threshold == "old":
+            return st in ("stale", "old", "unknown")
+        if threshold == "any-warning":
+            return bool(r.get("warnings")) or st != "fresh"
+        # default: stale
+        return st in ("stale", "unknown")
+
+    matched = [r for r in rows if _matches(r)]
+    matched.sort(
+        key=lambda r: (
+            -STALE_SEVERITY.get(r.get("age_status") or "fresh", 0),
+            -(r.get("age_hours") or 0),
+        )
+    )
+    return matched
+
+
 def compute_summary(
     tickers: list[str],
 ) -> dict[str, Any]:

@@ -75,6 +75,127 @@ async def api_diag_fundamentals_summary(
     )
 
 
+@router.get("/api/diag/stale")
+async def api_diag_stale(
+    threshold: str = Query(
+        "stale",
+        description="'stale' (>72h or missing), 'old' (>26h), or 'any-warning' (includes quarterly-missing & gap flags)",
+    ),
+    limit: int = Query(40, ge=1, le=200),
+):
+    """List tickers that need attention — used by the Radar "⚠️ N stale"
+    drill-down. Sorted by severity then by age desc."""
+    from engine.diag_fundamentals import compute_summary
+
+    # Build universe (scan items first, else config UNIVERSE)
+    universe: list[str] = []
+    try:
+        from app import get_top10_items  # type: ignore
+        universe = [
+            (i.get("ticker") or i.get("symbol") or "").upper()
+            for i in (get_top10_items() or [])
+            if (i.get("ticker") or i.get("symbol"))
+        ]
+    except Exception:
+        pass
+    if not universe:
+        try:
+            from config import UNIVERSE
+            universe = [u.replace(".IS", "").upper() for u in UNIVERSE]
+        except Exception:
+            universe = []
+    if not universe:
+        return success({"items": [], "summary": {"matched": 0}})
+
+    summary = await asyncio.to_thread(compute_summary, universe)
+    rows = summary.get("items") or []
+    from engine.diag_fundamentals import filter_stale_rows
+    matched = filter_stale_rows(rows, threshold=threshold)[:limit]
+    return success(
+        {
+            "items": matched,
+            "summary": {
+                "matched": len(matched),
+                "universe_size": len(universe),
+                "threshold": threshold,
+            },
+            "thresholds": summary.get("thresholds") or {},
+        },
+        extra_meta={"endpoint": "diag.stale"},
+    )
+
+
+@router.post("/api/diag/fundamentals/batch-refresh")
+async def api_diag_batch_refresh(
+    tickers: str = Query(..., description="Comma-separated ticker list"),
+    max_concurrency: int = Query(4, ge=1, le=8),
+):
+    """Force-refresh a batch of tickers. Bounded parallelism keeps borsapy
+    happy (rate limits surface as retries upstream). Returns per-ticker
+    success/failure with the new age — UI can show a result table."""
+    raw = [t.strip().upper().replace(".IS", "") for t in tickers.split(",")]
+    syms = [t for t in raw if t]
+    syms = list(dict.fromkeys(syms))   # dedupe, preserve order
+    if not syms:
+        raise HTTPException(status_code=400, detail="no tickers")
+    # Cap batch size to keep the request reasonably bounded
+    syms = syms[:30]
+
+    def _one(sym: str) -> dict:
+        try:
+            from engine.kap_dispatcher import _invalidate_caches_for_ticker
+            from engine.analysis import analyze_symbol
+            from engine.diag_fundamentals import compute_data_freshness
+            _invalidate_caches_for_ticker(sym)
+            try:
+                analyze_symbol(sym + ".IS")
+                ok = True
+                err = None
+            except Exception as exc:  # provider failure on this ticker
+                ok = False
+                err = f"{type(exc).__name__}: {exc}"
+            after = compute_data_freshness(sym)
+            return {
+                "ticker": sym,
+                "ok": ok,
+                "error": err,
+                "new_age_hours": after["borsapy"].get("age_hours"),
+                "new_status": after.get("age_status"),
+                "new_latest_quarter": after["borsapy"].get("latest_quarter"),
+            }
+        except Exception as exc:
+            return {
+                "ticker": sym,
+                "ok": False,
+                "error": f"{type(exc).__name__}: {exc}",
+                "new_age_hours": None,
+                "new_status": "unknown",
+                "new_latest_quarter": None,
+            }
+
+    def _go():
+        from concurrent.futures import ThreadPoolExecutor
+        out: list[dict] = []
+        with ThreadPoolExecutor(max_workers=max_concurrency) as pool:
+            for r in pool.map(_one, syms):
+                out.append(r)
+        return out
+
+    items = await asyncio.to_thread(_go)
+    ok_n = sum(1 for i in items if i["ok"])
+    return success(
+        {
+            "items": items,
+            "summary": {
+                "requested": len(syms),
+                "succeeded": ok_n,
+                "failed": len(items) - ok_n,
+            },
+        },
+        extra_meta={"endpoint": "diag.batch_refresh"},
+    )
+
+
 @router.get("/api/diag/fundamentals/{ticker}")
 async def api_diag_fundamentals_one(ticker: str):
     """Full freshness bundle for one ticker — used by the Radar

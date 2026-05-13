@@ -18,6 +18,7 @@ from engine.diag_fundamentals import (
     compute_data_freshness,
     compute_summary,
     _age_status,
+    filter_stale_rows,
 )
 
 
@@ -276,3 +277,63 @@ class TestComputeSummary:
                   "latest_quarter", "quarterly_available",
                   "kap_age_days", "kap_rule_type", "gap_days", "warnings"):
             assert k in row
+
+
+# ── filter_stale_rows — stale-panel filter + severity sort ───────
+
+
+def _row(ticker: str, status: str, age_hours=None, warnings=None):
+    return {
+        "ticker": ticker,
+        "age_status": status,
+        "age_hours": age_hours,
+        "warnings": warnings or [],
+    }
+
+
+class TestFilterStaleRows:
+    @pytest.fixture
+    def mix(self):
+        return [
+            _row("F1", "fresh", 4),
+            _row("F2", "fresh", 12),
+            _row("O1", "old",   40),
+            _row("S1", "stale", 80),
+            _row("S2", "stale", 200),
+            _row("U1", "unknown"),
+            _row("FW", "fresh", 2,
+                 warnings=["quarterly data missing"]),
+        ]
+
+    def test_default_picks_stale_and_unknown(self, mix):
+        out = filter_stale_rows(mix)
+        kinds = [r["age_status"] for r in out]
+        assert "stale" in kinds and "unknown" in kinds
+        assert "fresh" not in kinds
+        assert "old" not in kinds
+
+    def test_severity_sort_stale_first(self, mix):
+        out = filter_stale_rows(mix)
+        # stale ahead of unknown
+        assert out[0]["age_status"] == "stale"
+        # Oldest stale first within the stale group
+        assert out[0]["ticker"] == "S2"
+        assert out[1]["ticker"] == "S1"
+        # Unknown after stale
+        assert out[-1]["age_status"] == "unknown"
+
+    def test_old_threshold_includes_old(self, mix):
+        out = filter_stale_rows(mix, threshold="old")
+        kinds = {r["age_status"] for r in out}
+        assert kinds == {"stale", "old", "unknown"}
+
+    def test_any_warning_includes_fresh_with_warning(self, mix):
+        out = filter_stale_rows(mix, threshold="any-warning")
+        tickers = {r["ticker"] for r in out}
+        # FW is fresh-but-warned — must be included
+        assert "FW" in tickers
+        # F1 (fresh, no warning) must be excluded
+        assert "F1" not in tickers
+
+    def test_empty_input(self):
+        assert filter_stale_rows([]) == []
