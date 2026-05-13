@@ -706,6 +706,14 @@ async function loadAlarmlar(force){
     stats = (s && s.stats) || {};
   } catch (e) {}
   S.alarmlar = { recent, stats, fetched_at: Date.now() };
+  // Eagerly pull membership stats (cheap) so the chip badge shows count
+  if (!S.bwMembership || force) {
+    try {
+      const ms = await api('/api/bullwatch/membership/stats');
+      const stt = (ms && (ms.value || ms)) || {};
+      S.bwMembership = { items: null, stats: stt.stats || {} };
+    } catch(e) { /* ignore */ }
+  }
   return S.alarmlar;
 }
 
@@ -757,11 +765,14 @@ function renderAlarmlarPage(){
     <button class="btn btn-grn" onclick="loadAlarmlar(true).then(()=>renderAlarmlarPage())">🔄</button>
   </div>`;
 
+  const membershipStats = (S.bwMembership && S.bwMembership.stats) || {};
+  const memTotal = membershipStats.total_30d || 0;
   const chips = [
     ['all',    `Tümü (${alarms.length})`,                                                            'var(--acc)'],
     ['active', `🔥 Son Hafta (${alarms.filter(isActive).length})`,                                  'var(--grn)'],
     ['wl',     `Watchlist (${alarms.filter(a=>isWatched(a.ticker)).length})`,                       'var(--blu)'],
     ['month',  `Son 30 gün (${alarms.filter(a=>(Date.now()-new Date(a.alarmed_at).getTime())<30*24*3600*1000).length})`, 'var(--cyn)'],
+    ['membership', `📋 Hareketler${memTotal?` (${memTotal})`:''}`, 'var(--orn)'],
     ['backtest', `📊 Backtest`, 'var(--prp)'],
   ];
   h += `<div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap">${chips.map(([k,l,c])=>`<button class="btn btn-sm" style="${filt===k?`background:${c}20;border:1px solid ${c};color:${c}`:'background:var(--bg3);color:var(--t2)'}" onclick="S._alarmFilter='${k}';renderAlarmlarPage()">${l}</button>`).join('')}</div>`;
@@ -770,6 +781,12 @@ function renderAlarmlarPage(){
   if (filt === 'backtest') {
     pg.innerHTML = h + _bwBacktestPanel();
     if (!S.bwBacktest) _bwBacktestLoad();
+    return;
+  }
+  // Membership-events tab — list churn (entries / exits / zone changes).
+  if (filt === 'membership') {
+    pg.innerHTML = h + _bwMembershipPanel();
+    if (!S.bwMembership || !S.bwMembership.items) _bwMembershipLoad();
     return;
   }
 
@@ -1001,6 +1018,121 @@ function _bwBacktestPanel(){
   h += _btFakePump(bt.fake_pump);
   h += _btHistogram(bt.histogram_1d);
 
+  return h;
+}
+
+// ===== BULLWATCH MEMBERSHIP EVENTS =====
+// "Listeye girdi / Listeden düştü / Zone yükseldi" alarm tipi. CONVICTION
+// alarmlarından ayrı tablo. Default ekran watchlist filtresiyle gelir —
+// gürültü düşük tutmak için.
+async function _bwMembershipLoad(){
+  const wlOnly = S._bwMemWatchlistOnly !== false;   // default ON
+  const typeFilter = S._bwMemTypeFilter || '';
+  let url = '/api/bullwatch/membership/recent?limit=150&since_days=30';
+  if (typeFilter) url += '&event_type=' + encodeURIComponent(typeFilter);
+  if (wlOnly && S.wl && S.wl.length) {
+    url += '&tickers=' + encodeURIComponent(S.wl.join(','));
+  }
+  try {
+    const [r, s] = await Promise.all([
+      api(url),
+      api('/api/bullwatch/membership/stats').catch(() => null),
+    ]);
+    const v = (r && (r.value || r)) || {};
+    const ss = (s && (s.value || s)) || {};
+    S.bwMembership = {
+      items: v.items || [],
+      stats: ss.stats || {},
+      fetched_at: Date.now(),
+    };
+  } catch(e) {
+    console.warn('membership fetch failed', e);
+    S.bwMembership = { items: [], stats: {} };
+  }
+  renderAlarmlarPage();
+}
+
+function _bwMemEventStyle(t){
+  const m = {
+    ENTRY:          {ic:'🆕', col:'var(--blu)', bg:'var(--blud)',  lbl:'Listeye Girdi'},
+    EXIT:           {ic:'🔻', col:'var(--orn)', bg:'rgba(255,167,38,.12)', lbl:'Listeden Düştü'},
+    ZONE_UPGRADE:   {ic:'⚡', col:'var(--grn)', bg:'var(--grnd)',  lbl:'Zone Yükseldi'},
+    ZONE_DOWNGRADE: {ic:'🔽', col:'var(--red)', bg:'var(--redd)',  lbl:'Zone Düştü'},
+  };
+  return m[t] || {ic:'?', col:'var(--t3)', bg:'var(--bg3)', lbl:t};
+}
+
+function _bwMembershipPanel(){
+  const m = S.bwMembership;
+  const wlOnly = S._bwMemWatchlistOnly !== false;
+  const tf = S._bwMemTypeFilter || '';
+
+  let h = '';
+  // Explainer banner
+  h += `<div style="padding:10px 14px;background:var(--bg3);border-radius:var(--rad);margin-bottom:12px;font-size:11px;color:var(--t2);line-height:1.55">
+    📋 <b style="color:var(--orn)">Liste Hareketleri:</b> BullWatch listesi her scan'de yeniden hesaplanır. Bu sayfa <b>her değişikliği</b> kaydeder — bir hisse listeye yeni girdiyse, düştüyse, zone'u yükseldiyse. Bu, CONVICTION alarmlarından <b>ayrı</b> bir feed: chatty ama izlenmek için ideal.
+  </div>`;
+
+  // Filter controls
+  const types = [
+    ['',               'Tümü',           'var(--t3)'],
+    ['ENTRY',          '🆕 Girdi',       'var(--blu)'],
+    ['EXIT',           '🔻 Düştü',       'var(--orn)'],
+    ['ZONE_UPGRADE',   '⚡ Yükseldi',    'var(--grn)'],
+    ['ZONE_DOWNGRADE', '🔽 Düştü',       'var(--red)'],
+  ];
+  h += '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;align-items:center">';
+  types.forEach(([k, lbl, c]) => {
+    const on = tf === k;
+    h += `<button class="btn btn-sm" style="${on?`background:${c}20;border:1px solid ${c};color:${c}`:'background:var(--bg3);color:var(--t2)'};font-size:11px" onclick="S._bwMemTypeFilter='${k}';S.bwMembership=null;_bwMembershipLoad()">${esc(lbl)}</button>`;
+  });
+  h += `<label style="margin-left:auto;display:inline-flex;align-items:center;gap:6px;font-size:11px;color:var(--t2);cursor:pointer">
+    <input type="checkbox" ${wlOnly?'checked':''} onchange="S._bwMemWatchlistOnly=this.checked;S.bwMembership=null;_bwMembershipLoad()" /> Sadece Watchlist
+  </label></div>`;
+
+  if (!m || !m.items) {
+    h += '<div class="ld"><div class="sp"></div><div class="ld-t">Hareketler yükleniyor…</div></div>';
+    return h;
+  }
+  if (!m.items.length) {
+    const tip = wlOnly
+      ? 'Watchlist filtresi aktif — yıldızladığın hisselerde son 30g hareket yok. Filtreyi kaldır veya watchlist\'e hisse ekle.'
+      : 'Son 30 günde hareket kaydı yok. Sistem yeni başlatılmış olabilir — ilk scan tamamlanınca buraya kayıt düşmeye başlar.';
+    h += `<div class="emp" style="padding:30px 20px;text-align:center"><h4 style="color:var(--t2)">Henüz hareket yok</h4><p style="color:var(--t4);font-size:11px;margin-top:6px">${esc(tip)}</p></div>`;
+    return h;
+  }
+
+  // Group by ticker for compact rendering — same ticker can have
+  // multiple events in 30 days.
+  h += '<div class="card"><div class="card-b" style="padding:0">';
+  m.items.forEach((it, i) => {
+    const st = _bwMemEventStyle(it.event_type);
+    const ago = _alarmTimeAgo(it.occurred_at);
+    const wlBadge = (S.wl||[]).includes(it.ticker)
+      ? '<span style="font-size:10px;color:var(--ylw);margin-left:6px" title="Watchlist">⭐</span>' : '';
+    const sub = it.event_type === 'ZONE_UPGRADE' || it.event_type === 'ZONE_DOWNGRADE'
+      ? `${esc(it.prev_zone||'?')} → ${esc(it.new_zone||'?')}` + (it.new_score!=null && it.prev_score!=null ? ` · skor ${it.prev_score.toFixed(0)} → ${it.new_score.toFixed(0)}` : '')
+      : it.event_type === 'ENTRY'
+        ? `Zone: ${esc(it.new_zone||'?')}` + (it.new_score!=null?` · Skor ${it.new_score.toFixed(0)}`:'') + (it.new_pattern?` · ${esc(it.new_pattern)}`:'')
+        : `Önceki zone: ${esc(it.prev_zone||'?')}` + (it.prev_score!=null?` · Skor ${it.prev_score.toFixed(0)}`:'');
+    h += `<div style="padding:10px 14px;${i<m.items.length-1?'border-bottom:1px solid var(--bdr);':''}cursor:pointer;transition:background .1s" onclick="loadTicker('${esc(it.ticker)}')" onmouseover="this.style.background='var(--bg3)'" onmouseout="this.style.background=''">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+        <div style="flex:1;min-width:0">
+          <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:3px">
+            <span style="font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:700;color:var(--cyn)">${esc(it.ticker)}</span>
+            ${wlBadge}
+            <span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:${st.col};font-weight:700;padding:2px 6px;background:${st.bg};border-radius:3px">${st.ic} ${esc(st.lbl)}</span>
+          </div>
+          <div style="font-size:11px;color:var(--t3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${sub}</div>
+        </div>
+        <div style="text-align:right;font-size:10px;color:var(--t4);font-family:'JetBrains Mono',monospace;flex-shrink:0">${esc(ago)}</div>
+      </div>
+    </div>`;
+  });
+  h += '</div></div>';
+  h += `<div style="margin-top:14px;padding:10px 14px;background:var(--bg3);border-radius:var(--rad);font-size:11px;color:var(--t3);line-height:1.6">
+    💡 <b style="color:var(--t2)">Nasıl çalışır:</b> Her BullWatch scan'inden sonra yeni liste önceki ile karşılaştırılır. Listeye giren / düşen / zone'u değişen her hisse buraya yazılır. Watchlist filtresi açıkken sadece yıldızladığın hisselerin hareketi görünür.
+  </div>`;
   return h;
 }
 
