@@ -178,8 +178,19 @@ def _persist_snapshot(payload: dict) -> Optional[str]:
     Returns the new scan_id on success, None if the store is unavailable
     or rejected the write. Caller continues normally — snapshot persistence
     is best-effort, never blocks the response path.
+
+    Side effect — Alarm dispatch (immutable high-conviction history).
+    The BullWatch list itself is volatile (re-ranks every scan); the
+    alarm record persists across scans so the user can answer
+    "system gave a strong call N days ago — where is the ticker now?"
     """
     items = payload.get("items") or []
+    # Dispatch alarms — best-effort, never blocks the snapshot write
+    try:
+        from engine.bullwatch_alerts import dispatch_scan_alerts
+        dispatch_scan_alerts(items)
+    except Exception as exc:
+        log.warning("BullWatch alarm dispatch failed: %r", exc)
     if not items:
         return None
     try:
