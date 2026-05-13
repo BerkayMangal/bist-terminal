@@ -1295,26 +1295,31 @@ function renderBilancolarPage(){
         const sign = pct > 0 ? '+' : '';
         return `<span style="font-size:9px;color:${c};font-weight:700;padding:1px 5px;background:${c}15;border-radius:3px">${label}: ${sign}${pct.toFixed(1)}%</span>`;
       };
-      const reactionsRow = `<div style="display:flex;gap:4px;margin-top:6px;font-family:'JetBrains Mono',monospace">
-        ${reactionBadge('1g', d.reaction_1d_pct)}
-        ${reactionBadge('1h', d.reaction_1w_pct)}
-        ${reactionBadge('1a', d.reaction_1m_pct)}
-      </div>`;
-      h += `<div style="padding:10px 14px;${i<filtered.length-1?'border-bottom:1px solid var(--bdr);':''}transition:background .1s">
-        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;cursor:pointer" onclick="loadTicker('${esc(d.ticker)}')" onmouseover="this.style.background='var(--bg3)'" onmouseout="this.style.background=''">
+      // reactionsRow inlined into the row footer below to share a single
+      // flex line with the AI button on wide screens (wraps on phone).
+      // Compact mobile-first row. Two visible lines max for subject
+      // (line-clamp), badge row wraps so badges never push off-screen,
+      // reactions + AI button share one footer row on wide / wrap on phone.
+      const subjLine = `${esc(d.kap_title || '')} · ${esc(d.subject || '')}`;
+      h += `<div class="kap-row" style="padding:10px 12px;${i<filtered.length-1?'border-bottom:1px solid var(--bdr);':''}transition:background .1s">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;cursor:pointer" onclick="loadTicker('${esc(d.ticker)}')" onmouseover="this.style.background='var(--bg3)'" onmouseout="this.style.background=''">
           <div style="flex:1;min-width:0">
-            <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:3px">
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;flex-wrap:wrap">
               <span style="font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:700;color:var(--cyn)">${esc(d.ticker)}</span>
               <span style="font-size:11px;color:${col};font-weight:600">${esc(lbl)}</span>
               ${lateBadge}${aiBadge}${opBadge}
             </div>
-            <div style="font-size:11px;color:var(--t3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(d.kap_title || '')} · ${esc(d.subject || '')}</div>
+            <div class="kap-row-subj" style="font-size:11px;color:var(--t3);line-height:1.4">${subjLine}</div>
           </div>
-          <div style="text-align:right;font-size:10px;color:var(--t4);font-family:'JetBrains Mono',monospace;flex-shrink:0">${ago}</div>
+          <div style="text-align:right;font-size:10px;color:var(--t4);font-family:'JetBrains Mono',monospace;flex-shrink:0;white-space:nowrap">${ago}</div>
         </div>
-        ${reactionsRow}
-        <div style="margin-top:6px;display:flex;gap:6px;justify-content:flex-end">
-          <button class="btn btn-sm" style="background:var(--bg3);color:var(--prp);font-size:10px;padding:2px 8px" onclick="event.stopPropagation();openKapAnalysis(${d.disclosure_index})">${d.ai_summary ? '📖 AI Yorumu' : '🤖 AI Analizi Üret'}</button>
+        <div class="kap-row-footer" style="margin-top:6px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+          <div style="display:flex;gap:4px;font-family:'JetBrains Mono',monospace;flex-wrap:wrap">
+            ${reactionBadge('1g', d.reaction_1d_pct)}
+            ${reactionBadge('1h', d.reaction_1w_pct)}
+            ${reactionBadge('1a', d.reaction_1m_pct)}
+          </div>
+          <button class="btn btn-sm" style="background:var(--bg3);color:var(--prp);font-size:10px;padding:3px 8px;margin-left:auto" onclick="event.stopPropagation();openKapAnalysis(${d.disclosure_index})">${d.ai_summary ? '📖 AI' : '🤖 AI Üret'}</button>
         </div>
       </div>`;
     });
