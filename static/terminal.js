@@ -3,7 +3,7 @@
 // ===== STATE =====
 const S={page:'home',scan:null,cross:null,macro:null,dash:null,takas:null,social:null,hero:null,quote:null,book:null,wl:JSON.parse(localStorage.getItem('bb_wl')||'[]'),seen:JSON.parse(localStorage.getItem('bb_seen')||'[]'),_alerts:[]};
 const QT=['ASELS','THYAO','BIMAS','KCHOL','TUPRS','AKBNK','GARAN','FROTO','TOASO','PGSUS'];
-const PAGES=[{id:'nasil',label:'Nasıl?',icon:'❓'},{id:'home',label:'Ana Sayfa',icon:'🏠'},{id:'radar',label:'Radar',icon:'📡'},{id:'bullwatch',label:'BullWatch',icon:'🐂'},{id:'bullalfa',label:'BullAlfa',icon:'🎯'},{id:'bilancolar',label:'Bilançolar',icon:'📰'},{id:'cross',label:'Sinyaller',icon:'⚡'},{id:'makro',label:'Makro',icon:'🌍'},{id:'portfoy',label:'Portföy',icon:'💼'}];
+const PAGES=[{id:'nasil',label:'Nasıl?',icon:'❓'},{id:'home',label:'Ana Sayfa',icon:'🏠'},{id:'radar',label:'Radar',icon:'📡'},{id:'bullwatch',label:'BullWatch',icon:'🐂'},{id:'alarmlar',label:'Alarmlar',icon:'🚨'},{id:'bullalfa',label:'BullAlfa',icon:'🎯'},{id:'bilancolar',label:'Bilançolar',icon:'📰'},{id:'cross',label:'Sinyaller',icon:'⚡'},{id:'makro',label:'Makro',icon:'🌍'},{id:'portfoy',label:'Portföy',icon:'💼'}];
 const $=s=>document.getElementById(s);
 
 // ===== XSS SANITIZER =====
@@ -206,6 +206,7 @@ function goPage(id){
   if(id==='cross')renderCrossPage();
   if(id==='bullwatch')renderBullwatchPage();
   if(id==='bullalfa')renderBullalfaPage();
+  if(id==='alarmlar')renderAlarmlarPage();
   if(id==='bilancolar')renderBilancolarPage();
   if(id==='makro')renderMakroPage();
   if(id==='nasil')renderNasilPage();
@@ -612,6 +613,142 @@ async function loadBook(){try{S.book=await api('/api/book');}catch(e){}}
 async function loadMarketStatus(){try{S.marketStatus=await api('/api/market-status');}catch(e){}}
 async function loadMacro(){try{S.macro=await cachedApi('/api/macro');const el=$('macMini');if(el)el.innerHTML=renderMacMini(S.macro.items||[]);const ng=$('nabGrid');if(ng)ng.innerHTML=renderNabiz(S.macro.items||[]);renderTickerBar(S.macro.items||[]);loadHomeAction();}catch(e){console.error('macro:',e);}}
 function renderTickerBar(items){const tb=$('tbar');const inner=items.map(m=>`<div class="tbar-i"><span style="color:var(--t2);font-weight:600">${esc(m.flag||'')} ${esc(m.key||m.name)}</span><span style="color:var(--t1)">${fN(m.price,m.key?.includes('TRY')?4:2)}</span><span style="color:${cC(m.change_pct)};font-size:10px">${cS(m.change_pct)}%</span></div>`).join('');tb.innerHTML=`<div class="tbar-inner">${inner}${inner}</div>`;}
+
+// ===== ALARMLAR (BULLWATCH HIGH-CONVICTION HISTORY) =====
+// BullWatch list is volatile by design (re-rank per scan), so the user
+// can't track "system gave a strong call N days ago — where is the
+// ticker now?". This tab is the immutable history of those strong
+// calls + their post-alarm price reactions.
+async function loadAlarmlar(force){
+  if (S.alarmlar && !force) return S.alarmlar;
+  let recent = []; let stats = {};
+  try {
+    const r = await api('/api/bullwatch/alerts/recent?limit=100');
+    recent = (r && (r.items || r.value)) || [];
+  } catch (e) {
+    console.warn('alerts/recent failed', e);
+  }
+  try {
+    const s = await api('/api/bullwatch/alerts/stats');
+    stats = (s && s.stats) || {};
+  } catch (e) {}
+  S.alarmlar = { recent, stats, fetched_at: Date.now() };
+  return S.alarmlar;
+}
+
+function _alarmTimeAgo(iso){
+  if (!iso) return '';
+  const t = new Date(iso).getTime();
+  if (!Number.isFinite(t)) return '';
+  const ms = Date.now() - t;
+  const min = Math.round(ms / 60000);
+  if (min < 1) return 'az önce';
+  if (min < 60) return `${min} dk önce`;
+  const hr = Math.round(min / 60);
+  if (hr < 24) return `${hr} sa önce`;
+  return `${Math.round(hr / 24)} gün önce`;
+}
+
+function renderAlarmlarPage(){
+  const pg = $('pg-alarmlar');
+  if (!S.alarmlar) {
+    pg.innerHTML = '<div class="ld"><div class="sp"></div><div class="ld-t">Alarm geçmişi yükleniyor...</div></div>';
+    loadAlarmlar().then(() => renderAlarmlarPage());
+    return;
+  }
+  const alarms = S.alarmlar.recent || [];
+  const stats = S.alarmlar.stats || {};
+  const filt = S._alarmFilter || 'all';
+
+  // Filter buckets
+  const isWatched = (t) => (S.wl || []).includes(t);
+  const isActive = (a) => {
+    // "Active" = alarm verildi ve hala bullwatch listesinde olabilir.
+    // Bunu tam bilemiyoruz client'tan ama proxy: son 7 günde alarm + score >= 75 idi.
+    const t = new Date(a.alarmed_at).getTime();
+    return Date.now() - t < 7 * 24 * 3600 * 1000;
+  };
+  const filtered = filt === 'wl'
+    ? alarms.filter(a => isWatched(a.ticker))
+    : filt === 'active'
+      ? alarms.filter(isActive)
+      : filt === 'month'
+        ? alarms.filter(a => (Date.now() - new Date(a.alarmed_at).getTime()) < 30 * 24 * 3600 * 1000)
+        : alarms;
+
+  let h = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px">
+    <div>
+      <h2 style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-lg);color:var(--red)">🚨 Alarm Geçmişi — BullWatch</h2>
+      <p style="font-size:var(--fs-sm);color:var(--t3);margin-top:2px">${alarms.length} kayıt · Son 30 günde ${stats.last_30d_count || 0} alarm · BullWatch sistem "çok emin" dediğinde kaydedilir</p>
+    </div>
+    <button class="btn btn-grn" onclick="loadAlarmlar(true).then(()=>renderAlarmlarPage())">🔄</button>
+  </div>`;
+
+  const chips = [
+    ['all',    `Tümü (${alarms.length})`,                                                            'var(--acc)'],
+    ['active', `🔥 Son Hafta (${alarms.filter(isActive).length})`,                                  'var(--grn)'],
+    ['wl',     `Watchlist (${alarms.filter(a=>isWatched(a.ticker)).length})`,                       'var(--blu)'],
+    ['month',  `Son 30 gün (${alarms.filter(a=>(Date.now()-new Date(a.alarmed_at).getTime())<30*24*3600*1000).length})`, 'var(--cyn)'],
+  ];
+  h += `<div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap">${chips.map(([k,l,c])=>`<button class="btn btn-sm" style="${filt===k?`background:${c}20;border:1px solid ${c};color:${c}`:'background:var(--bg3);color:var(--t2)'}" onclick="S._alarmFilter='${k}';renderAlarmlarPage()">${l}</button>`).join('')}</div>`;
+
+  // Explainer banner
+  h += `<div style="padding:12px 16px;background:var(--bg3);border-radius:var(--rad);margin-bottom:14px;font-size:var(--fs-base);color:var(--t2);line-height:1.6">
+    <b style="color:var(--red)">🚨 Alarm ne zaman verilir?</b> BullWatch sistem aşağıdaki <b>tüm</b> kriterleri sağladığında: zone=CONVICTION + score≥75 + yüksek veri kalitesi + ≥2 motor onayı. Aynı hisse 7 gün dedupe. <span style="color:var(--t4)">Liste değişse de bu kayıt sabit kalır — kalibrasyon için altın değerinde.</span>
+  </div>`;
+
+  if (!filtered.length) {
+    h += '<div class="emp" style="padding:40px 20px"><h3 style="color:var(--t2);font-size:14px;margin-bottom:8px">Bu filtrede alarm yok</h3><p style="color:var(--t4);font-size:11px">Sistem her gün alarm vermez — "çok emin" dediği zaman not eder. Bu iyi bir şey.</p></div>';
+    pg.innerHTML = h;
+    return;
+  }
+
+  // Reaction badge helper (same shape as Bilançolar reactions)
+  const reactionBadge = (label, pct) => {
+    if (pct == null) return `<span style="font-size:9px;color:var(--t4);padding:1px 5px;background:var(--bg3);border-radius:3px">${label}: —</span>`;
+    const c = pct > 0 ? 'var(--grn)' : pct < 0 ? 'var(--red)' : 'var(--t3)';
+    const sign = pct > 0 ? '+' : '';
+    return `<span style="font-size:9px;color:${c};font-weight:700;padding:1px 5px;background:${c}15;border-radius:3px">${label}: ${sign}${pct.toFixed(1)}%</span>`;
+  };
+
+  h += '<div class="card"><div class="card-b" style="padding:0">';
+  filtered.forEach((a, i) => {
+    const ago = _alarmTimeAgo(a.alarmed_at);
+    const scoreCol = a.score_at_alarm >= 85 ? 'var(--grn)' : 'var(--ylw)';
+    const watchedDot = isWatched(a.ticker) ? '<span style="font-size:10px;color:var(--ylw);margin-left:4px" title="Watchlist\'inde">⭐</span>' : '';
+    h += `<div style="padding:12px 14px;${i<filtered.length-1?'border-bottom:1px solid var(--bdr);':''}cursor:pointer;transition:background .1s" onclick="loadTicker('${esc(a.ticker)}')" onmouseover="this.style.background='var(--bg3)'" onmouseout="this.style.background=''">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px">
+        <div style="flex:1;min-width:0">
+          <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:3px">
+            <span style="font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:700;color:var(--cyn)">${esc(a.ticker)}</span>
+            ${watchedDot}
+            <span style="font-size:11px;color:${scoreCol};font-weight:700">Score: ${a.score_at_alarm}</span>
+            <span style="font-size:10px;color:var(--t3)">${esc(a.zone_at_alarm)}</span>
+            <span style="font-size:10px;color:var(--t4);padding:1px 5px;background:var(--bg3);border-radius:3px">${a.engines_fired} motor</span>
+          </div>
+          <div style="font-size:11px;color:var(--t3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(a.pattern_at_alarm || '')}${a.sector_tr ? ' · ' + esc(a.sector_tr) : ''}</div>
+        </div>
+        <div style="text-align:right;font-size:10px;color:var(--t4);font-family:'JetBrains Mono',monospace;flex-shrink:0">
+          <div>${ago}</div>
+          ${a.price_at_alarm ? `<div style="margin-top:2px;color:var(--t3)">@ ${a.price_at_alarm.toFixed(2)} TL</div>` : ''}
+        </div>
+      </div>
+      <div style="display:flex;gap:4px;font-family:'JetBrains Mono',monospace">
+        ${reactionBadge('1g', a.reaction_1d_pct)}
+        ${reactionBadge('1h', a.reaction_1w_pct)}
+        ${reactionBadge('1a', a.reaction_1m_pct)}
+      </div>
+    </div>`;
+  });
+  h += '</div></div>';
+
+  // Help footer
+  h += `<div style="margin-top:14px;padding:10px 14px;background:var(--bg3);border-radius:var(--rad);font-size:11px;color:var(--t3);line-height:1.6">
+    📊 <b style="color:var(--t2)">Reaction izleme:</b> Alarm verildiği fiyat üzerinden 1 gün / 1 hafta / 1 ay sonrası fiyat değişimi otomatik takip edilir. Sistem doğruluğunu kalibre etmek için bu kayıtlara bakın.
+  </div>`;
+
+  pg.innerHTML = h;
+}
 
 // ===== BİLANÇOLAR (KAP DISCLOSURE FEED) =====
 // Faz 2 — Alert sayfası + bilanço takvimi. Two-pane layout: recent

@@ -244,14 +244,19 @@ async def lifespan(application: FastAPI):
     # just disables the feed.
     kap_feed_task = None
     kap_reactions_task = None
+    bw_alerts_reactions_task = None
     try:
-        from engine.background_tasks import kap_feed_loop, kap_reactions_loop
+        from engine.background_tasks import (
+            kap_feed_loop, kap_reactions_loop, bw_alert_reactions_loop,
+        )
         kap_feed_task = asyncio.create_task(kap_feed_loop())
         log.info("KAP feed loop started")
-        # Faz 4 reaction tracker — daily backfill of post-announcement
-        # price reactions. Cheap; runs once per day.
         kap_reactions_task = asyncio.create_task(kap_reactions_loop())
         log.info("KAP reactions loop started")
+        # BW alarm reaction tracker — backfills 1d/1w/1m on alarm rows
+        # so the Alarmlar tab can show real performance over time.
+        bw_alerts_reactions_task = asyncio.create_task(bw_alert_reactions_loop())
+        log.info("BW alarm reactions loop started")
     except Exception as e:
         log.warning(f"KAP feed loop not started: {e}")
     yield
@@ -266,6 +271,8 @@ async def lifespan(application: FastAPI):
         kap_feed_task.cancel()
     if kap_reactions_task is not None:
         kap_reactions_task.cancel()
+    if bw_alerts_reactions_task is not None:
+        bw_alerts_reactions_task.cancel()
     redis_client.shutdown()
     log.info(f"{APP_NAME} shutting down")
 
