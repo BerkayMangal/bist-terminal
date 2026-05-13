@@ -65,11 +65,32 @@ h3{font-family:'DM Sans',sans-serif;font-size:18px;font-weight:700;color:var(--t
 .section-sub{font-size:clamp(14px,1.8vw,16px);color:var(--t2);max-width:640px;margin-top:12px;line-height:1.7}
 
 /* ===== HERO ===== */
-.hero{padding:clamp(96px,16vw,144px) clamp(20px,4vw,48px) clamp(48px,8vw,80px);text-align:center;position:relative;overflow:hidden;max-width:1180px;margin:0 auto}
-.hero-bg-glow{position:absolute;top:-30%;left:50%;transform:translateX(-50%);width:800px;height:600px;background:radial-gradient(ellipse at center,rgba(255,179,0,.08) 0%,transparent 65%);pointer-events:none;z-index:0}
+.hero{padding:clamp(80px,12vw,128px) clamp(20px,4vw,48px) clamp(40px,6vw,72px);text-align:center;position:relative;overflow:hidden;max-width:1180px;margin:0 auto}
+.hero-bg-glow{position:absolute;top:-20%;left:50%;transform:translateX(-50%);width:900px;height:700px;background:radial-gradient(ellipse at center,rgba(255,179,0,.10) 0%,transparent 60%);pointer-events:none;z-index:0}
 .hero-grid{position:absolute;inset:0;background-image:linear-gradient(var(--bdr) 1px,transparent 1px),linear-gradient(90deg,var(--bdr) 1px,transparent 1px);background-size:48px 48px;mask-image:radial-gradient(ellipse 80% 60% at 50% 30%,black 30%,transparent 95%);-webkit-mask-image:radial-gradient(ellipse 80% 60% at 50% 30%,black 30%,transparent 95%);z-index:0}
 .hero>*{position:relative;z-index:1}
 .hero-badge{display:inline-flex;align-items:center;gap:8px;font-family:'JetBrains Mono',monospace;font-size:10.5px;color:var(--gold);letter-spacing:1.4px;text-transform:uppercase;padding:6px 14px;border:1px solid rgba(255,179,0,.22);border-radius:40px;background:rgba(255,179,0,.06);margin-bottom:20px}
+
+/* ===== HERO VISUAL — animated radar + ticker pings ===== */
+.hero-visual{margin:clamp(24px,5vw,48px) auto 0;width:100%;max-width:520px;position:relative;aspect-ratio:1.6/1}
+.hv-svg{width:100%;height:100%;display:block}
+.hv-ring{fill:none;stroke:rgba(255,179,0,.22);stroke-width:1}
+.hv-ring.r2{stroke:rgba(255,179,0,.14)}
+.hv-ring.r3{stroke:rgba(255,179,0,.07)}
+.hv-axis{stroke:rgba(255,255,255,.08);stroke-width:1}
+.hv-sweep{transform-origin:200px 175px;animation:hv-sweep 4s linear infinite}
+@keyframes hv-sweep{from{transform:rotate(0)}to{transform:rotate(360deg)}}
+.hv-dot{transform-origin:center;transform-box:fill-box}
+.hv-dot circle{transform-origin:center;transform-box:fill-box}
+.hv-ping{animation:hv-ping 2.4s ease-out infinite}
+@keyframes hv-ping{0%{r:3;opacity:1}80%{r:18;opacity:0}100%{r:18;opacity:0}}
+.hv-label{font-family:'JetBrains Mono',monospace;font-size:11px;fill:var(--t1);font-weight:700}
+.hv-sub{font-family:'JetBrains Mono',monospace;font-size:9px;fill:var(--t3);letter-spacing:.5px}
+.hv-callout{font-family:'JetBrains Mono',monospace;font-size:10px;fill:var(--gold);font-weight:700;letter-spacing:.5px}
+.hv-callout-bg{fill:rgba(255,179,0,.08);stroke:rgba(255,179,0,.35);stroke-width:1}
+@media(max-width:480px){
+  .hero-visual{margin-top:clamp(20px,4vw,32px);max-width:360px}
+}
 .bdot{width:6px;height:6px;border-radius:50%;background:var(--gold);animation:pulse 2s infinite}
 @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(.8)}}
 .hero-h1{font-family:'Playfair Display',Georgia,serif;font-size:clamp(32px,6.5vw,64px);font-weight:800;line-height:1.08;letter-spacing:-.02em;color:var(--t1);margin-bottom:18px;max-width:880px;margin-left:auto;margin-right:auto}
@@ -148,14 +169,37 @@ footer a{color:var(--t2)}
 footer a:hover{color:var(--gold)}
 
 /* ===== MOBILE TIGHTENING ===== */
+@media(max-width:640px){
+  /* Sections: less whitespace between, content denser */
+  .section{padding:clamp(36px,7vw,56px) clamp(16px,4vw,28px)}
+  .value-grid{margin-top:24px;gap:14px}
+  .value-card{padding:20px 18px}
+  .steps-grid{margin-top:24px;gap:12px}
+  .step-card{padding:18px}
+  /* Hero: tighter top padding, less margin between blocks */
+  .hero{padding-top:clamp(72px,11vw,96px);padding-bottom:32px}
+  .hero-h1{font-size:clamp(28px,7.5vw,42px);margin-bottom:14px;line-height:1.12}
+  .hero-sub{font-size:14px;line-height:1.55;margin-bottom:20px}
+  .hero-cta-group{gap:8px}
+  /* Stats strip: compact 2-row layout */
+  .stats-strip{padding:12px 14px;gap:10px;margin-top:24px}
+  .stat-pill{min-width:64px;gap:0}
+  .stat-num{font-size:18px}
+  .stat-lbl{font-size:8.5px;letter-spacing:.8px}
+  /* Preview card: tighter */
+  .hero-preview{margin-top:28px}
+  .preview-inner{padding:14px;gap:6px}
+  .preview-row{padding:10px 12px}
+}
 @media(max-width:480px){
   nav{padding:0 14px;height:52px}
   .nav-logo{font-size:13px}
-  .hero{padding-top:84px}
-  .preview-inner{padding:14px;gap:6px}
-  .preview-row{padding:10px 12px}
-  .stats-strip{padding:14px 16px;gap:14px}
-  .stat-pill{min-width:72px}
+  .preview-tk{font-size:14px}
+  .preview-pill{font-size:9.5px;padding:2px 6px}
+  .preview-reason{font-size:11.5px;line-height:1.5}
+  /* Stats: 2x2 grid feels neater than wrap on small phones */
+  .stats-strip{display:grid;grid-template-columns:1fr 1fr;gap:8px 12px}
+  .stat-pill{min-width:0}
 }
 </style>
 </head>
@@ -190,6 +234,64 @@ footer a:hover{color:var(--gold)}
     <div class="stat-pill"><div class="stat-num">7</div><div class="stat-lbl">BullWatch motor</div></div>
     <div class="stat-pill"><div class="stat-num">6</div><div class="stat-lbl">Tahtacı tag</div></div>
     <div class="stat-pill"><div class="stat-num">∞</div><div class="stat-lbl">Alarm geçmişi</div></div>
+  </div>
+
+  <!-- Hero visual — animated SVG radar with ticker pings + tahtacı callout.
+       Replaces the empty space where the static preview used to sit. -->
+  <div class="hero-visual" aria-hidden="true">
+    <svg class="hv-svg" viewBox="0 0 400 250" preserveAspectRatio="xMidYMid meet">
+      <!-- concentric rings -->
+      <circle class="hv-ring r3" cx="200" cy="175" r="180"/>
+      <circle class="hv-ring r2" cx="200" cy="175" r="130"/>
+      <circle class="hv-ring r2" cx="200" cy="175" r="85"/>
+      <circle class="hv-ring" cx="200" cy="175" r="40"/>
+      <!-- crosshair -->
+      <line class="hv-axis" x1="20" y1="175" x2="380" y2="175"/>
+      <line class="hv-axis" x1="200" y1="20" x2="200" y2="330"/>
+      <!-- sweeping arm -->
+      <g class="hv-sweep">
+        <defs>
+          <linearGradient id="sweepGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stop-color="rgba(255,179,0,0)"/>
+            <stop offset="80%" stop-color="rgba(255,179,0,.5)"/>
+            <stop offset="100%" stop-color="rgba(255,179,0,.95)"/>
+          </linearGradient>
+        </defs>
+        <path d="M 200 175 L 380 175 A 180 180 0 0 0 326 48 Z" fill="url(#sweepGrad)" opacity=".55"/>
+      </g>
+      <!-- ticker pings on the radar -->
+      <!-- KAPLM — top right, CONVICTION green -->
+      <g class="hv-dot" transform="translate(285 95)">
+        <circle r="14" class="hv-ping" fill="rgba(34,197,94,.55)"/>
+        <circle r="5" fill="#22C55E"/>
+        <text class="hv-label" x="14" y="-2">KAPLM</text>
+        <text class="hv-sub" x="14" y="10">CONVICTION</text>
+      </g>
+      <!-- FORTE — left, frozen cyan -->
+      <g class="hv-dot" transform="translate(105 130)">
+        <circle r="14" class="hv-ping" fill="rgba(34,211,238,.45)" style="animation-delay:.7s"/>
+        <circle r="5" fill="#22d3ee"/>
+        <text class="hv-label" x="-46" y="-4" text-anchor="end" style="text-anchor:end">FORTE</text>
+        <text class="hv-sub" x="-46" y="8" style="text-anchor:end">🧊 DONMUŞ</text>
+      </g>
+      <!-- LOGO — bottom right, KAP gap red -->
+      <g class="hv-dot" transform="translate(265 215)">
+        <circle r="14" class="hv-ping" fill="rgba(239,68,68,.45)" style="animation-delay:1.4s"/>
+        <circle r="5" fill="#EF4444"/>
+        <text class="hv-label" x="14" y="-2">LOGO</text>
+        <text class="hv-sub" x="14" y="10">GAP +2g ⚠</text>
+      </g>
+      <!-- ABCDE — bottom left, fresh blue -->
+      <g class="hv-dot" transform="translate(135 220)">
+        <circle r="14" class="hv-ping" fill="rgba(99,140,255,.45)" style="animation-delay:2s"/>
+        <circle r="5" fill="#9EB8FF"/>
+        <text class="hv-label" x="-50" y="-4" text-anchor="end" style="text-anchor:end">ABCDE</text>
+        <text class="hv-sub" x="-50" y="8" style="text-anchor:end">🆕 GİRDİ</text>
+      </g>
+      <!-- center label -->
+      <text class="hv-callout" x="200" y="180" text-anchor="middle" style="text-anchor:middle">SCAN</text>
+      <text class="hv-sub" x="200" y="194" text-anchor="middle" style="text-anchor:middle;fill:var(--t4)">437 BIST</text>
+    </svg>
   </div>
 
   <div class="hero-preview">
