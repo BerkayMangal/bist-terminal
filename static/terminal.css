@@ -120,6 +120,22 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg0);color:var(
 /* LOADING */
 .ld{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:50px 20px;gap:12px}.sp{width:28px;height:28px;border:3px solid var(--bdr);border-top-color:var(--acc);border-radius:50%;animation:spn .7s linear infinite}@keyframes spn{to{transform:rotate(360deg)}}.ld-t{font-family:'JetBrains Mono',monospace;font-size:var(--fs-sm);color:var(--t3)}
 
+/* Skeleton loaders — perceived performance > spinner. Reusable across
+   list-style pages (Alarmlar, Bilançolar, BullWatch). Each block has
+   a shimmer animation that telegraphs "content coming" while the API
+   call lands. */
+.skel{background:linear-gradient(90deg,var(--bg3) 0%,var(--bg4) 50%,var(--bg3) 100%);background-size:200% 100%;animation:shimmer 1.4s ease-in-out infinite;border-radius:4px}
+.skel-card{background:var(--bg2);border:1px solid var(--bdr);border-radius:var(--rad2);padding:14px;margin-bottom:10px}
+.skel-line{height:11px;margin-bottom:6px}
+.skel-line.lg{height:16px}
+.skel-line.short{width:30%}
+.skel-line.medium{width:60%}
+.skel-line.long{width:85%}
+.skel-pill{display:inline-block;height:18px;width:60px;margin-right:6px;border-radius:3px;vertical-align:middle}
+.skel-ring{width:80px;height:80px;border-radius:50%}
+.skel-row-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.skel-row-tickerblock{flex:1}
+
 /* MISC */
 .emp{text-align:center;padding:40px 20px}.emp h3{color:var(--t2);font-size:15px;margin-bottom:6px}.emp p{color:var(--t3);font-size:12px}.chart-img{width:100%;border-radius:var(--rad);border:1px solid var(--bdr)}
 .drv{display:inline-block;font-size:var(--fs-sm);padding:3px 8px;border-radius:3px;margin:2px 3px 2px 0}.drv-p{background:var(--grnd);color:var(--grn)}.drv-n{background:var(--redd);color:var(--red)}
