@@ -98,6 +98,12 @@ KAP_FEED_INTERVAL_PEAK:    int = 300   # 5 min during peak announcement windows
 KAP_FEED_INTERVAL_OFFHOURS: int = 1800  # 30 min overnight
 KAP_FEED_RETRY_AFTER_ERROR: int = 600   # back off 10 min on hard error
 
+# Reaction tracker refresh — runs once per day (after Borsa İstanbul
+# close). Backfills 1d/1w/1m reactions on disclosures that have aged
+# enough.
+KAP_REACTIONS_STARTUP_DELAY: int = 900   # 15 min after boot
+KAP_REACTIONS_INTERVAL:      int = 86400  # daily
+
 # ================================================================
 # DATA SOURCE IMPORTS — borsapy only
 # ================================================================
@@ -521,3 +527,29 @@ async def kap_feed_loop() -> None:
             log.warning("KAP feed cycle raised: %r", exc)
             sleep_for = KAP_FEED_RETRY_AFTER_ERROR
         await asyncio.sleep(sleep_for)
+
+
+# ================================================================
+# KAP REACTION REFRESH LOOP (Faz 4)
+# ================================================================
+
+
+async def kap_reactions_loop() -> None:
+    """Once-per-day backfill of 1d/1w/1m post-announcement price
+    reactions on KAP disclosures."""
+    log.info(
+        "KAP reactions loop scheduled — first run in %ds, then daily",
+        KAP_REACTIONS_STARTUP_DELAY,
+    )
+    await asyncio.sleep(KAP_REACTIONS_STARTUP_DELAY)
+    while True:
+        try:
+            from engine.kap_reactions import refresh_reactions
+            stats = await asyncio.to_thread(refresh_reactions, 200)
+            log.info("KAP reactions tick stats: %s", stats)
+        except asyncio.CancelledError:
+            log.info("KAP reactions loop cancelled")
+            raise
+        except Exception as exc:
+            log.warning("KAP reactions cycle raised: %r", exc)
+        await asyncio.sleep(KAP_REACTIONS_INTERVAL)

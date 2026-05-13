@@ -701,6 +701,19 @@ function renderBilancolarPage(){
       const lateBadge = d.is_late ? '<span class="pill p-red" style="font-size:9px;padding:1px 5px">geç</span>' : '';
       const ago = _kapTimeAgo(d.publish_date);
       const aiBadge = d.ai_summary ? '<span style="font-size:9px;color:var(--prp);font-weight:700;padding:1px 5px;background:rgba(186,104,200,.15);border-radius:3px;margin-left:6px">📖 AI</span>' : '';
+      // Faz 4: reaction badges (1d / 1w / 1m). Green positive, red negative,
+      // grey when not yet available (horizon hasn't elapsed).
+      const reactionBadge = (label, pct) => {
+        if (pct == null) return `<span style="font-size:9px;color:var(--t4);padding:1px 5px;background:var(--bg3);border-radius:3px">${label}: —</span>`;
+        const c = pct > 0 ? 'var(--grn)' : pct < 0 ? 'var(--red)' : 'var(--t3)';
+        const sign = pct > 0 ? '+' : '';
+        return `<span style="font-size:9px;color:${c};font-weight:700;padding:1px 5px;background:${c}15;border-radius:3px">${label}: ${sign}${pct.toFixed(1)}%</span>`;
+      };
+      const reactionsRow = `<div style="display:flex;gap:4px;margin-top:6px;font-family:'JetBrains Mono',monospace">
+        ${reactionBadge('1g', d.reaction_1d_pct)}
+        ${reactionBadge('1h', d.reaction_1w_pct)}
+        ${reactionBadge('1a', d.reaction_1m_pct)}
+      </div>`;
       h += `<div style="padding:10px 14px;${i<filtered.length-1?'border-bottom:1px solid var(--bdr);':''}transition:background .1s">
         <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;cursor:pointer" onclick="loadTicker('${esc(d.ticker)}')" onmouseover="this.style.background='var(--bg3)'" onmouseout="this.style.background=''">
           <div style="flex:1;min-width:0">
@@ -713,6 +726,7 @@ function renderBilancolarPage(){
           </div>
           <div style="text-align:right;font-size:10px;color:var(--t4);font-family:'JetBrains Mono',monospace;flex-shrink:0">${ago}</div>
         </div>
+        ${reactionsRow}
         <div style="margin-top:6px;display:flex;gap:6px;justify-content:flex-end">
           <button class="btn btn-sm" style="background:var(--bg3);color:var(--prp);font-size:10px;padding:2px 8px" onclick="event.stopPropagation();openKapAnalysis(${d.disclosure_index})">${d.ai_summary ? '📖 AI Yorumu' : '🤖 AI Analizi Üret'}</button>
         </div>

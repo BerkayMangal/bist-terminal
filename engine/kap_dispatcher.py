@@ -41,6 +41,35 @@ def dispatch_new_disclosure(rec: DisclosureRecord) -> None:
     if rec.is_financial_report():
         _invalidate_caches_for_ticker(rec.ticker)
         _queue_ai_analysis(rec)
+        _capture_reaction_baseline(rec)
+
+
+# ── Faz 4: Reaction tracker baseline ────────────────────────────────
+
+
+def _capture_reaction_baseline(rec: DisclosureRecord) -> None:
+    """Snapshot the day's close right after detection so the daily
+    reaction refresh has a baseline. Runs in a daemon thread to avoid
+    blocking the feed loop on borsapy."""
+    import threading
+    def _go():
+        try:
+            from engine.kap_reactions import capture_reference_price
+            px = capture_reference_price(
+                rec.ticker, rec.disclosure_index, rec.publish_date,
+            )
+            if px is not None:
+                log.info(
+                    "KAP reaction baseline: %s/%s @ %.2f",
+                    rec.ticker, rec.disclosure_index, px,
+                )
+        except Exception as exc:
+            log.debug("reaction baseline failed for %s/%s: %r",
+                      rec.ticker, rec.disclosure_index, exc)
+    threading.Thread(
+        target=_go, daemon=True,
+        name=f"kap-react-{rec.disclosure_index}",
+    ).start()
 
 
 # ── Plan C: cache invalidation ─────────────────────────────────────

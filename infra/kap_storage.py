@@ -66,11 +66,28 @@ CREATE TABLE IF NOT EXISTS kap_disclosures (
     url                 TEXT,
     fetched_at          TEXT NOT NULL,           -- ISO8601 UTC
     ai_analyzed_at      TEXT,                    -- populated by Faz 3
-    ai_summary          TEXT                     -- populated by Faz 3
+    ai_summary          TEXT,                    -- populated by Faz 3
+    price_at_disclosure REAL,                    -- Faz 4: close on event day
+    reaction_1d_pct     REAL,                    -- Faz 4: 1 trading day later
+    reaction_1w_pct     REAL,                    -- Faz 4: 5 trading days later
+    reaction_1m_pct     REAL,                    -- Faz 4: 21 trading days later
+    reaction_updated_at TEXT                     -- last reaction backfill timestamp
 );
 CREATE INDEX IF NOT EXISTS idx_kap_ticker ON kap_disclosures(ticker, publish_date DESC);
 CREATE INDEX IF NOT EXISTS idx_kap_publish ON kap_disclosures(publish_date DESC);
 """
+
+# Lightweight ALTER TABLE migration for the Faz 4 reaction columns.
+# SQLite's CREATE TABLE IF NOT EXISTS doesn't add columns to existing
+# tables, so we have to do this with a try/except per column for users
+# whose DB was already initialized under Faz 1-3.
+_FAZ4_MIGRATIONS = [
+    "ALTER TABLE kap_disclosures ADD COLUMN price_at_disclosure REAL",
+    "ALTER TABLE kap_disclosures ADD COLUMN reaction_1d_pct REAL",
+    "ALTER TABLE kap_disclosures ADD COLUMN reaction_1w_pct REAL",
+    "ALTER TABLE kap_disclosures ADD COLUMN reaction_1m_pct REAL",
+    "ALTER TABLE kap_disclosures ADD COLUMN reaction_updated_at TEXT",
+]
 
 
 # ── Thread-local SQLite connection (mirrors infra/storage.py) ───────
@@ -98,7 +115,15 @@ def init_db() -> None:
         c = _conn()
         c.executescript(_CREATE_SQL)
         c.commit()
-        log.info("kap_disclosures table ready")
+        # Idempotent Faz 4 column adds — IGNORE if they already exist
+        # (SQLite raises OperationalError on "duplicate column name").
+        for sql in _FAZ4_MIGRATIONS:
+            try:
+                c.execute(sql)
+                c.commit()
+            except sqlite3.OperationalError:
+                pass
+        log.info("kap_disclosures table ready (with reaction columns)")
     except Exception as exc:
         log.warning("kap_storage init_db failed: %r", exc)
 

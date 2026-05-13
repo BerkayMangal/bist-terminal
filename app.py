@@ -237,10 +237,15 @@ async def lifespan(application: FastAPI):
     # (Plan C). The pykap dependency is optional at boot — failure here
     # just disables the feed.
     kap_feed_task = None
+    kap_reactions_task = None
     try:
-        from engine.background_tasks import kap_feed_loop
+        from engine.background_tasks import kap_feed_loop, kap_reactions_loop
         kap_feed_task = asyncio.create_task(kap_feed_loop())
         log.info("KAP feed loop started")
+        # Faz 4 reaction tracker — daily backfill of post-announcement
+        # price reactions. Cheap; runs once per day.
+        kap_reactions_task = asyncio.create_task(kap_reactions_loop())
+        log.info("KAP reactions loop started")
     except Exception as e:
         log.warning(f"KAP feed loop not started: {e}")
     yield
@@ -253,6 +258,8 @@ async def lifespan(application: FastAPI):
         bullalfa_task.cancel()
     if kap_feed_task is not None:
         kap_feed_task.cancel()
+    if kap_reactions_task is not None:
+        kap_reactions_task.cancel()
     redis_client.shutdown()
     log.info(f"{APP_NAME} shutting down")
 
