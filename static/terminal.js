@@ -31,6 +31,59 @@ function confColor(pct){if(pct>=80)return'var(--grn)';if(pct>=60)return'var(--yl
 // Bilanço veri yaşı rozeti — kullanıcı tarama sonucunun ne kadar taze
 // olduğunu anlasın diye (raw_cache TTL 24h, stale grace 7g).
 // r.data_age_hours: 0..168h olağan; 168+ stale (gri), 24+ uyarı (sarı).
+// Skeleton helpers — telegraph "content coming" instead of a spinner.
+// One row-style skeleton serves Bilançolar + Alarmlar (both list-style
+// with ticker + meta + reaction pills). The count argument controls
+// how many placeholder rows render — eyeballed to fit a typical
+// viewport without forcing a scroll.
+function _skelRow(){
+  return `<div class="skel-card">
+    <div class="skel-row-header">
+      <div class="skel-row-tickerblock">
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">
+          <div class="skel skel-line lg" style="width:60px"></div>
+          <div class="skel skel-pill"></div>
+          <div class="skel skel-pill" style="width:90px"></div>
+        </div>
+        <div class="skel skel-line long"></div>
+      </div>
+      <div class="skel skel-line short" style="width:50px"></div>
+    </div>
+    <div style="display:flex;gap:4px;margin-top:6px">
+      <div class="skel skel-pill" style="width:60px;height:14px"></div>
+      <div class="skel skel-pill" style="width:60px;height:14px"></div>
+      <div class="skel skel-pill" style="width:60px;height:14px"></div>
+    </div>
+  </div>`;
+}
+function _skelList(count){
+  return `<div class="card"><div class="card-b" style="padding:14px">${
+    Array.from({length: count}, () => _skelRow()).join('')
+  }</div></div>`;
+}
+function _skelTwoPane(){
+  // Bilançolar-style two-pane skeleton
+  return `<div class="g2" style="gap:14px">
+    <div>${_skelList(6)}</div>
+    <div>${_skelList(4)}</div>
+  </div>`;
+}
+function _skelHeader(title){
+  return `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px">
+    <div>
+      <h2 style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-lg);color:var(--t2)">${esc(title)}</h2>
+      <div class="skel skel-line short" style="width:200px;margin-top:6px"></div>
+    </div>
+    <div class="skel skel-pill" style="width:48px;height:32px"></div>
+  </div>
+  <div style="display:flex;gap:6px;margin-bottom:14px">
+    <div class="skel skel-pill" style="width:90px;height:28px"></div>
+    <div class="skel skel-pill" style="width:90px;height:28px"></div>
+    <div class="skel skel-pill" style="width:90px;height:28px"></div>
+    <div class="skel skel-pill" style="width:90px;height:28px"></div>
+  </div>`;
+}
+
 function bilancoBadge(r){
   const h = r && r.data_age_hours;
   if (h == null) return '';
@@ -652,7 +705,7 @@ function _alarmTimeAgo(iso){
 function renderAlarmlarPage(){
   const pg = $('pg-alarmlar');
   if (!S.alarmlar) {
-    pg.innerHTML = '<div class="ld"><div class="sp"></div><div class="ld-t">Alarm geçmişi yükleniyor...</div></div>';
+    pg.innerHTML = _skelHeader('🚨 Alarm Geçmişi — yükleniyor…') + _skelList(8);
     loadAlarmlar().then(() => renderAlarmlarPage());
     return;
   }
@@ -811,7 +864,7 @@ function _kapTimeAgo(iso){
 function renderBilancolarPage(){
   const pg = $('pg-bilancolar');
   if (!S.kap) {
-    pg.innerHTML = '<div class="ld"><div class="sp"></div><div class="ld-t">Bilanço akışı yükleniyor...</div></div>';
+    pg.innerHTML = _skelHeader('📰 Bilanço Akışı — yükleniyor…') + _skelTwoPane();
     loadBilancolar().then(() => renderBilancolarPage());
     return;
   }

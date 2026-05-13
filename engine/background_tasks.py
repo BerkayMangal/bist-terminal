@@ -86,7 +86,7 @@ BULLWATCH_REFRESH_INTERVAL:      int = 1800  # cold tier — 30 min
 BULLWATCH_RETRY_AFTER_ERROR:     int = 300
 
 BULLWATCH_HOT_STARTUP_DELAY:     int = 480   # ~8 min — wait for first cold scan
-BULLWATCH_HOT_INTERVAL:          int = 300   # hot tier — 5 min
+BULLWATCH_HOT_INTERVAL:          int = 180   # hot tier — 3 min (was 5min)
 BULLWATCH_HOT_SIZE:              int = 50    # how many top tickers to refresh
 
 # KAP disclosure feed (Faz 1). Cadence is market-hours aware: peak
