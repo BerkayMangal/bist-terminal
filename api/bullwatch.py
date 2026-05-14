@@ -41,6 +41,9 @@ _CACHE: dict[str, Any] = {
     "progress": 0,        # symbols processed so far (during in-flight scan)
     "total": 0,           # total symbols in the in-flight scan
     "scan_started_at": 0.0,
+    # Stage 5: "history_fetch" | "scoring" | None — lets the UI show a
+    # phase-aware spinner message. None when no scan is in flight.
+    "scan_phase": None,
 }
 # Thread-safe lock for _CACHE writes. Multiple threads can write to this
 # dict simultaneously: the scan executor thread updates progress, the
@@ -129,15 +132,27 @@ def _run_scan(min_score: float = 0.0,
     t0 = time.time()
     # Thread-safe atomic init — the async health handler reads these
     # concurrently with the scan thread that writes them.
+    # Stage 5: start the phase as "history_fetch" so /api/bullwatch/health
+    # can show the right message immediately, instead of a stale 0/N.
     _cache_update(
         scan_started_at=t0,
         progress=0,
         total=len(universe),
+        scan_phase="history_fetch",
     )
 
-    def _on_progress(done: int, total: int) -> None:
+    def _on_scoring_progress(done: int, total: int) -> None:
         # Atomic — readers see either old or new pair, never partial.
-        _cache_update(progress=done, total=total)
+        # Stage 5: phase transitions to "scoring" on the first tick. The
+        # transition is idempotent so this is cheap to do every call.
+        _cache_update(progress=done, total=total, scan_phase="scoring")
+
+    def _on_history_progress(done: int, total: int) -> None:
+        # Stage 5 fix: emit history chunk progress so the UI doesn't
+        # show 0/N for the full 5-7 min cold-load window.
+        _cache_update(
+            progress=done, total=total, scan_phase="history_fetch",
+        )
 
     # Overhaul Stage 2: pull previous-scan zones for hysteresis.
     # Once a ticker earned a zone, the exit threshold is HIGHER than the
@@ -151,7 +166,9 @@ def _run_scan(min_score: float = 0.0,
     # max_workers=16 — yfinance fetches are I/O-bound, GIL doesn't apply.
     results = scan(universe, min_score=min_score,
                    include_ineligible=True, cap_tl=cap_tl,
-                   max_workers=16, progress_callback=_on_progress,
+                   max_workers=16,
+                   progress_callback=_on_scoring_progress,
+                   history_progress_callback=_on_history_progress,
                    previous_zones=previous_zones)
     eligible = [r for r in results if r.eligible]
     if limit:
@@ -351,7 +368,12 @@ def _read_snapshot_payload(
 # Watchdog: scan'ler bazen borsapy timeout'ları yüzünden 427/437'de
 # takılı kalabiliyor — production'da 491s sonucu olmadan asılı kaldığı
 # gözlemlendi. Bu cap'i geçen scan'ı zorla bitir ve partial sonuç publish et.
-_SCAN_WATCHDOG_SEC = 8 * 60        # 8 min hard cap
+# Stage 5: 8 min → 12 min. Measured cold-load: history_fetch alone took
+# 5-7 min for 437 tickers (before this stage's parallelism + sleep fix);
+# 8 min watchdog therefore fired during/right after history_fetch, before
+# scoring could populate the cache. 12 min gives a safety margin even on
+# a slow Railway worker while the perf fix bedss in.
+_SCAN_WATCHDOG_SEC = 12 * 60       # 12 min hard cap
 
 
 async def _refresh_and_persist(min_score: float = 0.0) -> Optional[dict]:
@@ -444,7 +466,9 @@ async def _refresh_and_persist(min_score: float = 0.0) -> Optional[dict]:
     finally:
         if _SCAN_DONE is not None:
             _SCAN_DONE.set()
-        _cache_set("running", False)
+        # Stage 5: clear phase along with running so the UI doesn't
+        # display stale "history_fetch" after a failed scan.
+        _cache_update(running=False, scan_phase=None)
 
 
 def _schedule_background_refresh() -> bool:
@@ -567,6 +591,12 @@ async def api_bullwatch(
     """
     now = time.time()
     is_experimental = (cap_tl is not None) or diagnostic
+
+    # Phase notes (Stage 5):
+    #   scan_phase is exposed via /api/bullwatch/health so the UI can
+    #   render a phase-aware progress message instead of a flat 0/N.
+    #   Phases: "history_fetch" (silent on prod for 5+ min in the past),
+    #   then "scoring" (was the only phase that ticked progress before).
 
     # ── Experimental requests bypass snapshot+cache (ad-hoc tuning) ──
     if is_experimental:
@@ -716,6 +746,9 @@ async def api_bullwatch_health():
     total = _CACHE.get("total", 0)
     scan_started = _CACHE.get("scan_started_at", 0)
     elapsed_sec = (time.time() - scan_started) if (running and scan_started) else None
+    # Stage 5: surface the phase so the UI can show "Tarihsel veri
+    # indiriliyor X/Y" vs "Skorlanıyor X/Y" instead of a flat counter.
+    scan_phase = _CACHE.get("scan_phase") if running else None
 
     return success({
         "ok": True,
@@ -729,6 +762,7 @@ async def api_bullwatch_health():
         "scan_total": total,
         "scan_progress_pct": round(progress / total * 100, 1) if total else None,
         "scan_elapsed_sec": round(elapsed_sec, 1) if elapsed_sec is not None else None,
+        "scan_phase": scan_phase,
         "cache": _cache_stats_safe(),
         "history": _history_stats_safe(),
         # Phase A.10 Step 2-B.1: scan runtime diagnostics

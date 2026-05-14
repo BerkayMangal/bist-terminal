@@ -3984,28 +3984,40 @@ async function _bwPollUntilReady(fetchPromise){
       const total=h.scan_total||1;
       const pct=h.scan_progress_pct||0;
       const elapsed=h.scan_elapsed_sec||0;
+      const phase=h.scan_phase||'scoring';
+      // Stage 5: phase-aware UI. history_fetch used to silently
+      // hold 0/N for 5-7 min before the user saw any movement.
+      const isHistory = phase === 'history_fetch';
       const eta=done>0&&pct<99?Math.round((elapsed/done)*(total-done)):null;
-      const isStragglers=pct>=98 && done<total;  // last few stuck on yfinance timeouts
+      const isStragglers=!isHistory && pct>=98 && done<total;
       const elapsedStr=elapsed>=120?`${(elapsed/60).toFixed(1)}dk`:`${elapsed.toFixed(0)}s`;
+      const headline = isHistory
+        ? '📥 Tarihsel veri indiriliyor'
+        : (isStragglers ? '⏳ Son hisseler bekleniyor' : '🐂 BullWatch tarama devam ediyor');
+      const detail = isHistory
+        ? `${total} hisse için 1 yıllık fiyat geçmişi indiriliyor. Bu adım 1-2 dakika sürer, sonra skorlama başlar.`
+        : (isStragglers
+          ? `${total-done} hisse veri sağlayıcıdan yanıt bekliyor. <b style="color:var(--t2)">Maksimum 4 dakikada</b> sonuç gelir veya parçalı liste gösterilir.`
+          : `${total} BIST mikro-kapı paralel taranıyor. Bazı semboller yavaş yanıtlıyor — sayfa kapatma, otomatik yenilenecek.`);
+      const barColor = isHistory ? 'var(--blu, #4a90e2)'
+        : (isStragglers ? 'var(--ylw)' : 'var(--acc)');
       pg.innerHTML=`<div class="ld" style="padding:40px 20px">
         <div class="sp"></div>
-        <div class="ld-t" style="margin-top:12px">${isStragglers?'⏳ Son hisseler bekleniyor':'🐂 BullWatch tarama devam ediyor'}</div>
+        <div class="ld-t" style="margin-top:12px">${headline}</div>
         <div style="margin-top:16px;max-width:360px;width:100%">
           <div style="display:flex;justify-content:space-between;font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--t2);margin-bottom:6px">
-            <span>${done}/${total} hisse</span>
+            <span>${done}/${total}${isHistory ? ' veri' : ' hisse'}</span>
             <span>${pct.toFixed(0)}%</span>
           </div>
           <div style="height:6px;background:var(--bg3);border-radius:3px;overflow:hidden">
-            <div style="width:${pct}%;height:100%;background:${isStragglers?'var(--ylw)':'var(--acc)'};transition:width .5s"></div>
+            <div style="width:${pct}%;height:100%;background:${barColor};transition:width .5s"></div>
           </div>
           <div style="font-size:10px;color:var(--t4);margin-top:8px;text-align:center">
             ⏱️ ${elapsedStr} geçti${eta!=null?` · ~${eta}s kaldı`:''}
           </div>
         </div>
         <div style="font-size:11px;color:var(--t4);margin-top:14px;max-width:360px;text-align:center;line-height:1.5">
-          ${isStragglers
-            ? `${total-done} hisse veri sağlayıcıdan yanıt bekliyor. <b style="color:var(--t2)">Maksimum 4 dakikada</b> sonuç gelir veya parçalı liste gösterilir.`
-            : `${total} BIST mikro-kapı paralel taranıyor. Bazı semboller yavaş yanıtlıyor — sayfa kapatma, otomatik yenilenecek.`}
+          ${detail}
         </div>
       </div>`;
       await new Promise(r=>setTimeout(r,3000));

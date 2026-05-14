@@ -1916,6 +1916,7 @@ def scan(symbols: list[str],
          progress_callback: Optional[Callable[[int, int], None]] = None,
          scan_now: Optional[Any] = None,
          previous_zones: Optional[dict[str, str]] = None,
+         history_progress_callback: Optional[Callable[[int, int], None]] = None,
          ) -> list[BullWatchResult]:
     """
     Run BullWatch across a universe.
@@ -1956,8 +1957,22 @@ def scan(symbols: list[str],
 
     # Bulk-fetch history in one shot — the existing helper already
     # batches via borsapy, so this is the cheap path.
+    # Stage 5: forward optional history_progress_callback. The default
+    # batch_download_history accepts a kwarg; injected test fakes that
+    # don't accept it gracefully degrade via the TypeError fallback.
     try:
-        hist_map = history_fn(symbols) or {}
+        if history_progress_callback is not None:
+            try:
+                hist_map = history_fn(
+                    symbols,
+                    progress_callback=history_progress_callback,
+                ) or {}
+            except TypeError:
+                # Caller-injected history_fn doesn't accept the kwarg —
+                # safe to fall back to the positional contract.
+                hist_map = history_fn(symbols) or {}
+        else:
+            hist_map = history_fn(symbols) or {}
     except Exception as exc:
         log.warning("BullWatch: batch history fetch failed: %r", exc)
         hist_map = {}

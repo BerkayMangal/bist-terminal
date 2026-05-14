@@ -301,15 +301,17 @@ class TestCacheThreadSafety:
 class TestProvidersDeadCodeRemoved:
     def test_file_length_under_old_size(self):
         """The duplicate dead block at lines 915-1005 (90 lines) must
-        be gone. File should be < 920 lines."""
+        be gone. Threshold raised in Stage 5 to accommodate the
+        history_progress_callback plumbing (~32 added lines)."""
         path = os.path.join(
             os.path.dirname(__file__), "..", "data", "providers.py",
         )
         with open(path, "r", encoding="utf-8") as fh:
             n = sum(1 for _ in fh)
-        assert n < 920, (
+        assert n < 970, (
             f"data/providers.py has {n} lines — dead code may have "
-            "regressed (was 1005 with duplicate, now should be ~914)"
+            "regressed (was 1005 with duplicate before Stage 1; "
+            "~946 expected after Stage 5)"
         )
 
     def test_no_duplicate_fetch_one_in_batch(self):

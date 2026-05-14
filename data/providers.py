@@ -13,7 +13,7 @@ import math
 import logging
 import re
 import datetime as _dt
-from typing import Optional, Any
+from typing import Optional, Any, Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import numpy as np
@@ -818,8 +818,17 @@ def batch_download_history_v9(
     symbols: list[str],
     period: str = "1y",
     interval: str = "1d",
+    progress_callback: Optional[Callable[[int, int], None]] = None,
 ) -> dict[str, pd.DataFrame]:
-    """borsapy ile toplu price history. Chunk+retry+cache fallback."""
+    """borsapy ile toplu price history. Chunk+retry+cache fallback.
+
+    Stage 5 (Great Overhaul):
+      - Optional progress_callback(done, total) fires after each chunk
+        finishes (Pass 1 + Pass 2). Lets the UI report ``Tarihsel veri:
+        X/Y``  instead of staying at 0/N for several minutes.
+      - WORKERS / inter-chunk sleep come from config so they can be tuned
+        without code edits.
+    """
     if not BORSAPY_AVAILABLE:
         return {}
     try:
@@ -846,10 +855,29 @@ def batch_download_history_v9(
             pass
         return sym, None
 
+    def _emit_progress(done: int) -> None:
+        """Fire the progress callback under a try guard — caller code is
+        observability-only and must never break the fetch."""
+        if progress_callback is None:
+            return
+        try:
+            progress_callback(done, len(symbols))
+        except Exception:
+            pass
+
     import time as _time
+    try:
+        from config import BATCH_HISTORY_CHUNK_SLEEP_SEC as _CHUNK_SLEEP
+    except Exception:
+        _CHUNK_SLEEP = 0.3
     CHUNK = 25
-    WORKERS = min(BATCH_HISTORY_WORKERS, 5)
+    WORKERS = BATCH_HISTORY_WORKERS
     failed: list[str] = []
+
+    # Stage 5 progress model: emit `len(result)` (= actual successful
+    # downloads so far) instead of "attempts processed". This way Pass 2
+    # retries continue to push the counter up rather than appearing to
+    # stall at 100% while retries are still chugging.
 
     # Pass 1: Chunk halinde indir
     for ci in range(0, len(symbols), CHUNK):
@@ -868,13 +896,17 @@ def batch_download_history_v9(
                         pass
         except Exception:
             failed.extend(chunk)
+        # Progress = symbols actually downloaded so far. If Pass 1 has
+        # rate-limit issues and many symbols failed, the bar will reflect
+        # the true success count rather than pretending the work is done.
+        _emit_progress(len(result))
         if ci + CHUNK < len(symbols):
-            _time.sleep(1.0)
+            _time.sleep(_CHUNK_SLEEP)
 
     # Pass 2: Retry başarısızlar
     if failed:
         log.info(f"batch_history retry: {len(failed)} sembol")
-        _time.sleep(2.0)
+        _time.sleep(1.0)  # Stage 5: 2.0 → 1.0; one retry breath, not two
         still_failed = []
         for ci in range(0, len(failed), CHUNK):
             chunk = failed[ci:ci+CHUNK]
@@ -892,7 +924,10 @@ def batch_download_history_v9(
                             pass
             except Exception:
                 still_failed.extend(chunk)
-            _time.sleep(1.5)
+            # Same success-count model — Pass 2 keeps moving the bar up
+            # as retries succeed, never backwards.
+            _emit_progress(len(result))
+            _time.sleep(_CHUNK_SLEEP)
         failed = still_failed
 
     # Pass 3: Cache fallback
