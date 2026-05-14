@@ -2949,6 +2949,7 @@ function _bwCard(item){
       <div style="text-align:right;flex-shrink:0">
         <div style="font-family:'JetBrains Mono',monospace;font-size:28px;font-weight:700;color:${z.col};line-height:1">${score}</div>
         <div style="font-size:9px;color:var(--t4);text-transform:uppercase;letter-spacing:1px;margin-top:2px">SCORE</div>
+        <button class="clk-t" style="background:none;border:0;cursor:pointer;font-size:10px;color:var(--gold);margin-top:6px;padding:2px 6px;background:rgba(255,179,0,.08);border:1px solid rgba(255,179,0,.25);border-radius:4px;font-family:'JetBrains Mono',monospace" onclick="event.stopPropagation();showBwExplainModal('${esc(item.symbol)}')" title="Niye bu skor? Tahtacı imzası ne kadar net?">🎯 Niye?</button>
       </div>
     </div>
     <div style="font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--t1);margin-top:6px;line-height:1.5;font-weight:600">${esc(item.pattern||'—')}</div>
@@ -2961,6 +2962,139 @@ function _bwCard(item){
     </div>`:''}
   </div>`;
 }
+// ===== BULLWATCH EXPLAINABILITY MODAL — "Niye bu skor?" =====
+// Tahtacı-merkezli: kullanıcı tıklayınca açar, headline'da "Tahtacı
+// Signal Strength" daire, altında 3-kategori engine breakdown
+// (🎯 Tahtacı imzaları / 📊 Teknik teyit / 🏛️ Temel bağlam).
+async function showBwExplainModal(ticker){
+  // Dedupe rapid double-clicks (lesson from PR #62 audit fix)
+  const existing = document.getElementById('bwExplainOv');
+  if (existing) existing.remove();
+  const _now = Date.now();
+  if (window.__lastBwExplainAt && (_now - window.__lastBwExplainAt) < 300) return;
+  window.__lastBwExplainAt = _now;
+
+  const ov = document.createElement('div');
+  ov.id = 'bwExplainOv';
+  ov.className = 'mov';
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(6px)';
+  ov.onclick = (e) => { if (e.target === ov) ov.remove(); };
+  ov.innerHTML = `<div style="background:var(--bg1);border:1px solid var(--bdr2);border-radius:var(--rad);max-width:720px;width:100%;max-height:90vh;overflow-y:auto;padding:24px"><div style="text-align:center;color:var(--t3);padding:30px"><div class="sp" style="margin:0 auto 12px"></div>${esc(ticker)} skor açıklaması yükleniyor…</div></div>`;
+  document.body.appendChild(ov);
+
+  let data;
+  try {
+    const r = await api('/api/bullwatch/explain/' + encodeURIComponent(ticker));
+    data = (r && (r.value || r)) || null;
+  } catch(e) {
+    ov.querySelector('div').innerHTML = `<div style="color:var(--red);padding:20px;text-align:center">Yüklenemedi: ${esc(String(e.message||e))}</div><div style="text-align:center"><button class="btn btn-sm" onclick="this.closest('.mov').remove()">Kapat</button></div>`;
+    return;
+  }
+  if (!data) { ov.remove(); return; }
+  ov.querySelector('div').innerHTML = _bwExplainHtml(data);
+}
+
+function _bwExplainHtml(d){
+  const ts = d.tahtaci_strength || {};
+  const tsScore = ts.score || 0;
+  const tsPct = Math.round(tsScore * 100);
+  // Color for the headline tahtaci circle
+  const tsCol = tsScore >= 0.6 ? 'var(--gold)' : tsScore >= 0.4 ? 'var(--orn)' : tsScore >= 0.2 ? 'var(--ylw)' : 'var(--t3)';
+  const tsBg = tsScore >= 0.6 ? 'rgba(255,179,0,.18)' : tsScore >= 0.4 ? 'rgba(255,167,38,.15)' : 'rgba(255,193,7,.10)';
+  let h = `<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;gap:12px">
+    <div>
+      <h3 style="font-family:'JetBrains Mono',monospace;color:var(--cyn);font-size:18px">🎯 ${esc(d.symbol)} · Niye bu skor?</h3>
+      <div style="font-size:11px;color:var(--t3);margin-top:2px">Zone: <b style="color:var(--t1)">${esc(d.zone||'')}</b> · Final: <b style="color:var(--t1)">${(d.score||0).toFixed(1)}</b> · ${esc(d.pattern||'')}</div>
+    </div>
+    <button class="btn btn-sm" style="background:var(--bg3);color:var(--t2)" onclick="this.closest('.mov').remove()">✕</button>
+  </div>`;
+
+  // Tahtacı Signal Strength headline — big circular badge
+  h += `<div style="display:flex;align-items:center;gap:18px;padding:16px;background:${tsBg};border:1px solid ${tsCol}55;border-radius:var(--rad);margin-bottom:14px">
+    <div style="flex-shrink:0;width:96px;height:96px;border-radius:50%;background:${tsCol}25;border:2px solid ${tsCol};display:flex;flex-direction:column;align-items:center;justify-content:center">
+      <div style="font-family:'JetBrains Mono',monospace;font-size:28px;font-weight:700;color:${tsCol};line-height:1">${tsPct}</div>
+      <div style="font-size:9px;color:${tsCol};opacity:.85;text-transform:uppercase;letter-spacing:1px;margin-top:2px">/100</div>
+    </div>
+    <div style="flex:1;min-width:0">
+      <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:${tsCol};text-transform:uppercase;letter-spacing:1px;font-weight:700">🎯 Tahtacı Signal Strength</div>
+      <div style="font-size:16px;color:var(--t1);font-weight:700;margin-top:4px">${esc(ts.label||'—')}</div>
+      <div style="font-size:11px;color:var(--t3);margin-top:6px;line-height:1.5">BullWatch'ın <b style="color:var(--t2)">tahtacı operasyonu tespit etmek</b> için baktığı 4 sinyalin birleşik gücü.</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;font-size:10px;font-family:'JetBrains Mono',monospace">
+        ${_bwExplainBadge('KAP', (ts.components||{}).kap_activity, 'var(--red)')}
+        ${_bwExplainBadge('Insider/Own', (ts.components||{}).ownership, 'var(--orn)')}
+        ${_bwExplainBadge('Grup', (ts.components||{}).group_boost, 'var(--cyn)')}
+        ${_bwExplainBadge('Walk-Up', (ts.components||{}).walkup_days, 'var(--blu)', 'g')}
+      </div>
+    </div>
+  </div>`;
+
+  // Engine breakdown — 3 categories
+  const grouped = d.engines_grouped || {};
+  ['tahtaci','teyit','baglam'].forEach(cat => {
+    const bucket = grouped[cat];
+    if (!bucket || !bucket.engines || !bucket.engines.length) return;
+    h += `<div style="margin-bottom:12px">
+      <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--cyn);font-weight:700;letter-spacing:.5px;margin-bottom:4px">${esc(bucket.label)}</div>
+      <div style="font-size:10px;color:var(--t4);margin-bottom:8px;line-height:1.5">${esc(bucket.description||'')}</div>
+      <div style="display:flex;flex-direction:column;gap:6px">`;
+    bucket.engines.forEach(e => {
+      h += _bwExplainEngineRow(e, d.delta);
+    });
+    h += '</div></div>';
+  });
+
+  // Data quality footer
+  const dq = d.data_quality || {};
+  const dqCol = dq.tier === 'high' ? 'var(--grn)' : dq.tier === 'medium' ? 'var(--ylw)' : 'var(--red)';
+  h += `<div style="margin-top:14px;padding:10px 14px;background:var(--bg3);border-left:3px solid ${dqCol};border-radius:0 var(--rad) var(--rad) 0;font-size:11px;color:var(--t2);line-height:1.55">
+    <b style="color:${dqCol}">📊 Veri kalitesi: ${esc(dq.tier||'?').toUpperCase()}</b><br>
+    ${esc(dq.tier_explanation||'')}${dq.is_bank?' <i>(Banka — cashflow standart formatta gelmez, beklenen davranış.)</i>':''}
+    ${(dq.missing_fields && dq.missing_fields.length)?`<br><span style="color:var(--t4);font-size:10px">Eksik: ${esc(dq.missing_fields.slice(0,5).join(', '))}</span>`:''}
+  </div>`;
+
+  // Action button → opens regular ticker detail
+  h += `<div style="text-align:right;margin-top:14px"><button class="btn btn-sm btn-blu" onclick="loadTicker('${esc(d.symbol)}');this.closest('.mov').remove()">Hisseyi Aç →</button></div>`;
+  return h;
+}
+
+function _bwExplainBadge(label, value, col, unit){
+  if (value == null) return '';
+  const v = typeof value === 'number' ? (unit ? value + unit : (value <= 1 ? (value*100).toFixed(0)+'%' : value.toFixed(0))) : value;
+  return `<span style="display:inline-flex;align-items:center;gap:3px;padding:2px 8px;background:${col}15;color:${col};border-radius:3px;font-weight:600"><span style="opacity:.7">${esc(label)}</span><b>${esc(String(v))}</b></span>`;
+}
+
+function _bwExplainEngineRow(e, delta){
+  const avail = e.available;
+  const sub = e.sub_score;
+  const contrib = e.contribution_pct || 0;
+  // Bar fill = sub_score (0..1) — visual signal strength of this engine
+  const fillPct = avail ? Math.round((sub||0) * 100) : 0;
+  // Delta indicator
+  let deltaHtml = '';
+  if (delta && delta.by_engine && delta.by_engine[e.key] != null) {
+    const d = delta.by_engine[e.key];
+    if (Math.abs(d) >= 0.05) {
+      const dCol = d > 0 ? 'var(--grn)' : 'var(--red)';
+      const dSign = d > 0 ? '↑' : '↓';
+      deltaHtml = ` <span style="color:${dCol};font-size:9px;margin-left:4px">${dSign}${Math.abs(d).toFixed(2)}</span>`;
+    }
+  }
+  const reasonsHtml = (e.reasons && e.reasons.length)
+    ? `<div style="font-size:10px;color:var(--t3);margin-top:3px;line-height:1.5">${e.reasons.slice(0,3).map(r=>'✓ '+esc(r)).join('<br>')}</div>`
+    : '';
+  const opacity = avail ? '1' : '0.45';
+  return `<div style="padding:8px 10px;background:var(--bg3);border-radius:var(--rad);opacity:${opacity}">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:4px">
+      <span style="font-size:11px;color:var(--t1);font-weight:600" title="${esc(e.description||'')}">${esc(e.label)} ${avail?'':'<span style=\"color:var(--t4);font-size:9px\">· veri yok</span>'}${deltaHtml}</span>
+      <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--gold);font-weight:700">${contrib.toFixed(1)}</span>
+    </div>
+    <div style="height:6px;background:var(--bg2);border-radius:3px;overflow:hidden">
+      <div style="height:100%;width:${fillPct}%;background:linear-gradient(90deg,var(--gold)80,var(--gold));transition:width .3s"></div>
+    </div>
+    ${reasonsHtml}
+  </div>`;
+}
+
 // Lightweight markdown — only **bold** support, no XSS surface beyond esc()
 function _bwMarkdown(s){
   if(!s) return '';

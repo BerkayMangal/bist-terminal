@@ -732,6 +732,56 @@ async def api_bullwatch_watchlist_state(
     })
 
 
+@router.get("/api/bullwatch/explain/{symbol}")
+async def api_bullwatch_explain(symbol: str):
+    """Score explainability for one ticker — "Niye bu skor / niye
+    tahtacı sinyali?". Pulls the symbol's current item from the live
+    BullWatch cache (or snapshot fallback) and runs it through
+    `engine.bullwatch_explainability.build_explanation`.
+
+    Returns: Tahtacı Signal Strength + per-engine breakdown grouped
+    into 🎯 Tahtacı / 📊 Teyit / 🏛️ Bağlam categories + previous
+    snapshot delta when available.
+
+    Literal path registered BEFORE variadic /{symbol} so FastAPI
+    doesn't route 'explain' as a ticker symbol. (Lesson from PR #51.)
+    """
+    sym = (symbol or "").upper().strip().replace(".IS", "")
+    if not sym:
+        return error("empty symbol", status_code=400)
+
+    def _go():
+        # 1) Try live in-mem cache
+        items = ((_CACHE.get("items") or {}).get("items")) or []
+        for it in items:
+            if (it.get("symbol") or "").upper() == sym:
+                return it
+        # 2) Fall back to snapshot store
+        snap = _read_snapshot_payload(limit=500)
+        if snap and snap.get("items"):
+            for it in snap["items"]:
+                if (it.get("symbol") or "").upper() == sym:
+                    return it
+        return None
+
+    item = await asyncio.get_event_loop().run_in_executor(None, _go)
+    if not item:
+        return error(
+            f"{sym} not currently in BullWatch list — only listed tickers "
+            "can be explained. Run a scan first or check the ticker.",
+            status_code=404,
+        )
+
+    from engine.bullwatch_explainability import build_explanation
+    bundle = await asyncio.get_event_loop().run_in_executor(
+        None, build_explanation, item,
+    )
+    return success(
+        bundle,
+        extra_meta={"endpoint": "bullwatch.explain"},
+    )
+
+
 @router.get("/api/bullwatch/{symbol}")
 async def api_bullwatch_symbol(symbol: str):
     """
