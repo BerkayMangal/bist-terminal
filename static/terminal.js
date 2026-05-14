@@ -2962,6 +2962,69 @@ function _bwCard(item){
     </div>`:''}
   </div>`;
 }
+// ===== BULLWATCH PRE-ALARM PANEL — "Tahtacı yaklaşıyor" =====
+// CONVICTION mantığı (score≥75 + ≥2 motor + data_quality=high) HİÇ
+// DEĞİŞMEDİ — bu sadece score 70-74 arasındaki güçlü tahtacı imzalı
+// adayları surface eden read-only ek panel. Alarm storage'a yazılmaz.
+async function loadBwPreAlarms(){
+  try {
+    const r = await api('/api/bullwatch/pre-alarms?limit=8');
+    const v = (r && (r.value || r)) || {};
+    S.bwPreAlarms = {
+      items: v.items || [],
+      fetched_at: Date.now(),
+    };
+  } catch(e) {
+    console.warn('pre-alarms fetch failed', e);
+    S.bwPreAlarms = { items: [], error: String(e.message||e) };
+  }
+}
+
+function _bwPreAlarmsPanel(){
+  const data = S.bwPreAlarms;
+  if (!data || !data.items || !data.items.length) return '';
+  const items = data.items.slice(0, 6);
+  // Header with count + "what is this" tooltip
+  let h = `<div style="margin-bottom:14px;padding:12px 14px;background:linear-gradient(135deg,rgba(255,167,38,.10),rgba(255,167,38,.03));border:1px solid var(--orn);border-left:3px solid var(--orn);border-radius:0 var(--rad) var(--rad) 0">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px">
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--orn);text-transform:uppercase;letter-spacing:.7px;font-weight:700">⏳ TAHTACI YAKLAŞIYOR</span>
+        <span style="font-size:10px;color:var(--t4);font-family:'JetBrains Mono',monospace">${items.length} aday · skor 70-74 · güçlü tahtacı imzası</span>
+      </div>
+      <span title="CONVICTION (skor≥75 + ≥2 motor + yüksek veri) henüz kriterleri karşılamayan ama tahtacı imzası ısınmakta olan adaylar. Alarm değil — erken görünürlük." style="font-size:10px;color:var(--t4);cursor:help;text-decoration:underline dotted">ne bu?</span>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px">`;
+  items.forEach(c => {
+    const ts = c.tahtaci_strength || 0;
+    const tsPct = Math.round(ts * 100);
+    const tsCol = ts >= 0.6 ? 'var(--gold)' : ts >= 0.4 ? 'var(--orn)' : 'var(--ylw)';
+    const blocker = c.data_quality_blocker;
+    const missingTxt = (c.missing_engines && c.missing_engines.length)
+      ? `Eksik: ${c.missing_engines.slice(0,2).join(' + ')}`
+      : '';
+    h += `<div style="padding:10px 12px;background:var(--bg2);border:1px solid var(--bdr);border-left:3px solid ${tsCol};border-radius:0 var(--rad) var(--rad) 0;cursor:pointer;transition:transform .15s" onclick="showBwExplainModal('${esc(c.symbol)}')" onmouseover="this.style.transform='translateY(-1px)'" onmouseout="this.style.transform=''">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:6px">
+        <div style="flex:1;min-width:0">
+          <div style="display:flex;align-items:baseline;gap:6px">
+            <span style="font-family:'JetBrains Mono',monospace;font-weight:700;color:var(--cyn);font-size:13px">${esc(c.symbol)}</span>
+            <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--t1);font-weight:700">${c.score.toFixed(1)}</span>
+            <span style="font-size:9px;color:var(--t4)">→ 75</span>
+          </div>
+          <div style="font-size:10px;color:${tsCol};margin-top:2px;font-weight:600">🎯 ${esc(c.tahtaci_label||'')}</div>
+          ${missingTxt ? `<div style="font-size:9.5px;color:var(--t3);margin-top:3px;line-height:1.4">${esc(missingTxt)}</div>` : ''}
+          ${blocker ? `<div style="font-size:9px;color:var(--orn);margin-top:2px;line-height:1.4">⚠ ${esc(blocker)}</div>` : ''}
+        </div>
+        <div style="text-align:right;flex-shrink:0">
+          <div style="font-family:'JetBrains Mono',monospace;font-size:18px;font-weight:700;color:${tsCol};line-height:1">${tsPct}</div>
+          <div style="font-size:8px;color:${tsCol};opacity:.7;text-transform:uppercase;letter-spacing:.5px">tahtacı</div>
+        </div>
+      </div>
+    </div>`;
+  });
+  h += '</div></div>';
+  return h;
+}
+
 // ===== BULLWATCH EXPLAINABILITY MODAL — "Niye bu skor?" =====
 // Tahtacı-merkezli: kullanıcı tıklayınca açar, headline'da "Tahtacı
 // Signal Strength" daire, altında 3-kategori engine breakdown
@@ -3366,6 +3429,15 @@ function renderBullwatchPage(){
       renderBullwatchPage();
     }).catch(() => { S._alarmsLoading = false; });
   }
+  // Faz 2: lazy-load pre-alarm candidates (score 70-74 + güçlü tahtacı).
+  // Mevcut CONVICTION listesi BOZULMAZ — bu sadece üstte ek panel.
+  if (!S.bwPreAlarms && !S._bwPreAlarmsLoading) {
+    S._bwPreAlarmsLoading = true;
+    loadBwPreAlarms().then(() => {
+      S._bwPreAlarmsLoading = false;
+      renderBullwatchPage();
+    }).catch(() => { S._bwPreAlarmsLoading = false; });
+  }
   const bw=S.bullwatch;
   // Empty / error state — but ONLY if we have NO usable cards at all.
   // (If we have current results AND a refresh error, we keep the cards
@@ -3557,6 +3629,9 @@ function renderBullwatchPage(){
       h+='</div>';
     }
   }else{
+    // Faz 2: Pre-alarm panel ÜSTTE — "tahtacı yaklaşıyor" adayları.
+    // Mevcut shortlist + full grid BOZULMADI, sadece üstüne ek panel.
+    h += _bwPreAlarmsPanel();
     // Phase A.10 Step 2-C: prepend shortlist section ABOVE the full grid.
     // Shortlist is purely additive — full grid is rendered AFTER it,
     // unchanged. Items missing from shortlist STILL appear in the grid.
