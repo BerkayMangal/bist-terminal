@@ -139,12 +139,20 @@ def _run_scan(min_score: float = 0.0,
         # Atomic — readers see either old or new pair, never partial.
         _cache_update(progress=done, total=total)
 
+    # Overhaul Stage 2: pull previous-scan zones for hysteresis.
+    # Once a ticker earned a zone, the exit threshold is HIGHER than the
+    # entry threshold (2pt buffer) — prevents run-to-run flap at the
+    # 75/60 boundary. First scan or new ticker → no previous zone → no
+    # hysteresis applied (back-compat).
+    previous_zones = _read_previous_zone_map()
+
     # Always include_ineligible=True — it's just a filter on already-computed
     # results, no extra fetches. Lets us surface near_misses for free.
     # max_workers=16 — yfinance fetches are I/O-bound, GIL doesn't apply.
     results = scan(universe, min_score=min_score,
                    include_ineligible=True, cap_tl=cap_tl,
-                   max_workers=16, progress_callback=_on_progress)
+                   max_workers=16, progress_callback=_on_progress,
+                   previous_zones=previous_zones)
     eligible = [r for r in results if r.eligible]
     if limit:
         eligible = eligible[:limit]
@@ -251,6 +259,40 @@ def _persist_snapshot(payload: dict) -> Optional[str]:
     except Exception as exc:
         log.warning("BullWatch snapshot persist failed: %r", exc)
         return None
+
+
+def _read_previous_zone_map(
+    module: str = "bullwatch",
+) -> dict[str, str]:
+    """Return {ticker: zone} from the latest BullWatch snapshot.
+
+    Used by Stage 2 hysteresis — score_symbol() consults this map per
+    ticker so that boundary-zone tickers don't flap between
+    CONVICTION/CONFIRMED/EARLY across scans.
+
+    Falls back to empty dict if snapshot store is unavailable or no
+    snapshot exists yet (first scan after startup, or fresh install).
+    """
+    out: dict[str, str] = {}
+    try:
+        store = get_default_store()
+        scan_id = store.read_latest_scan_id(module)
+        if scan_id is None:
+            return out
+        # Read the top items (we keep up to 500); each item already has
+        # a `zone` field from the previous scoring pass.
+        top = store.read_top(module, 500, scan_id=scan_id)
+        if not top:
+            return out
+        tickers = [t for t, _ in top]
+        items_map = store.read_items(module, tickers, scan_id=scan_id)
+        for t, it in (items_map or {}).items():
+            z = (it or {}).get("zone")
+            if z:
+                out[t] = z
+    except Exception as exc:
+        log.debug("read_previous_zone_map failed: %r", exc)
+    return out
 
 
 def _read_snapshot_payload(
