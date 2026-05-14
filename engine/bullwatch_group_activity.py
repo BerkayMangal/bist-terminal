@@ -25,8 +25,15 @@ _MAX_BOOST = 6.0
 def compute_group_activity_boost(
     ticker: str,
     lookback_days: int = 14,
+    scan_now: Optional[_dt.datetime] = None,
 ) -> dict[str, Any]:
     """Return a boost dict for `ticker` based on recent group activity.
+
+    DETERMINISM (audit fix, Stage 1):
+      scan_now pins the window cutoff to a caller-supplied timestamp
+      so all symbols in a single scan share an identical 14-day
+      window. Without it, datetime.now() at call time may shift the
+      window mid-scan.
 
     Output schema:
         {
@@ -59,9 +66,10 @@ def compute_group_activity_boost(
         log.debug("storage import failed: %r", exc)
         return out
 
-    cutoff = _dt.datetime.now(_dt.timezone.utc) - _dt.timedelta(
-        days=max(1, lookback_days)
-    )
+    now_ref = scan_now if scan_now is not None else _dt.datetime.now(_dt.timezone.utc)
+    if now_ref.tzinfo is None:
+        now_ref = now_ref.replace(tzinfo=_dt.timezone.utc)
+    cutoff = now_ref - _dt.timedelta(days=max(1, lookback_days))
 
     active: set[str] = set()
     try:
