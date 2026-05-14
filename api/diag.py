@@ -75,6 +75,107 @@ async def api_diag_fundamentals_summary(
     )
 
 
+@router.get("/api/diag/cache-coherence")
+async def api_diag_cache_coherence():
+    """Cache layer coherence raporu — Stage 3 audit observability.
+
+    BullWatch path'inde 4 ayrı cache katmanı var (raw_cache, analysis_cache,
+    bullwatch_cache, snapshot_store). TTL'leri farklı; bir layer fresh
+    ama diğeri stale ise score'lar yanlış çıkabilir.
+
+    Bu endpoint her layer'ın boyutunu, en eski entry'sini ve hit rate'ini
+    raporlar — kullanıcı veya operator "neden BullWatch eski veri
+    gösteriyor" sorusunu cevaplayabilsin.
+    """
+    out: dict = {
+        "ok": True,
+        "layers": {},
+        "warnings": [],
+    }
+    # core.cache layers
+    try:
+        from core.cache import raw_cache, analysis_cache, tech_cache, history_cache
+        for name, c in (
+            ("raw_cache", raw_cache),
+            ("analysis_cache", analysis_cache),
+            ("tech_cache", tech_cache),
+            ("history_cache", history_cache),
+        ):
+            try:
+                stats = c.stats() if hasattr(c, "stats") else {"size": len(c)}
+                out["layers"][name] = stats
+            except Exception as exc:
+                out["layers"][name] = {"error": str(exc)}
+    except Exception as exc:
+        out["warnings"].append(f"core.cache import: {exc}")
+
+    # bullwatch_cache (separate from core)
+    try:
+        from data import bullwatch_cache as bwc
+        if hasattr(bwc, "stats"):
+            out["layers"]["bullwatch_cache"] = bwc.stats()
+        elif hasattr(bwc, "_STATS"):
+            out["layers"]["bullwatch_cache"] = dict(bwc._STATS)
+    except Exception as exc:
+        out["warnings"].append(f"bullwatch_cache: {exc}")
+
+    # snapshot_store (cold copy of last scan)
+    try:
+        from core.snapshot_store import get_default_store
+        import time as _t
+        store = get_default_store()
+        snap_info: dict = {}
+        for module in ("bullwatch", "bullwatch_hot", "bullalfa"):
+            try:
+                scan_id = store.read_latest_scan_id(module)
+                if scan_id:
+                    meta = store.read_meta(module, scan_id=scan_id) or {}
+                    asof_unix = meta.get("asof_unix")
+                    age_sec = (
+                        round(_t.time() - asof_unix, 1) if asof_unix else None
+                    )
+                    snap_info[module] = {
+                        "scan_id": scan_id,
+                        "asof_unix": asof_unix,
+                        "age_sec": age_sec,
+                    }
+            except Exception as exc:
+                snap_info[module] = {"error": str(exc)}
+        out["layers"]["snapshot_store"] = snap_info
+    except Exception as exc:
+        out["warnings"].append(f"snapshot_store: {exc}")
+
+    # api.bullwatch in-mem mirror
+    try:
+        from api import bullwatch as _bw
+        snap = _bw._cache_snapshot() if hasattr(_bw, "_cache_snapshot") else dict(_bw._CACHE)
+        items_count = len((snap.get("items") or {}).get("items") or [])
+        out["layers"]["bw_inmem_mirror"] = {
+            "items_count": items_count,
+            "stale_after": snap.get("stale_after"),
+            "running": snap.get("running"),
+            "as_of": snap.get("as_of"),
+        }
+    except Exception as exc:
+        out["warnings"].append(f"bw inmem: {exc}")
+
+    # Coherence checks — surface large age mismatches that suggest
+    # stale-while-revalidate is firing too often.
+    try:
+        snap = out["layers"].get("snapshot_store") or {}
+        bw_snap = snap.get("bullwatch") or {}
+        bw_age = bw_snap.get("age_sec")
+        if bw_age and bw_age > 3600:
+            out["warnings"].append(
+                f"bullwatch snapshot is {bw_age:.0f}s old (>1h) — refresh "
+                "loop may be hung or borsapy is rejecting"
+            )
+    except Exception:
+        pass
+
+    return success(out, extra_meta={"endpoint": "diag.cache_coherence"})
+
+
 @router.get("/api/diag/system")
 async def api_diag_system():
     """Sistem geneli sağlık özeti — kullanıcı /diag sayfasında self-debug

@@ -91,31 +91,44 @@ def _capture_reaction_baseline(rec: DisclosureRecord) -> None:
 # ── Plan C: cache invalidation ─────────────────────────────────────
 
 
-def _invalidate_caches_for_ticker(ticker: str) -> None:
+def _invalidate_caches_for_ticker(ticker: str) -> list[str]:
     """Drop every cached scoring artifact for `ticker` so the next read
     triggers a fresh borsapy fetch — which now sees the just-released
-    balance sheet."""
+    balance sheet.
+
+    Returns the list of cache layers that were touched (for telemetry /
+    testing). Empty list means nothing was found to invalidate.
+
+    Audit fix (Stage 3): now covers history_cache + uses the thread-safe
+    _cache_update helper for the api.bullwatch in-mem mirror so concurrent
+    scan + invalidation can't see partial state.
+    """
     sym = (ticker or "").upper().strip().replace(".IS", "")
     if not sym:
-        return
+        return []
 
-    n_dropped = 0
+    touched: list[str] = []
 
     # Raw + analysis L1/L2 caches (engine/analysis.py path)
     try:
-        from core.cache import raw_cache, analysis_cache, tech_cache
-        for cache in (raw_cache, analysis_cache, tech_cache):
+        from core.cache import raw_cache, analysis_cache, tech_cache, history_cache
+        for cache, name in (
+            (raw_cache, "raw_cache"),
+            (analysis_cache, "analysis_cache"),
+            (tech_cache, "tech_cache"),
+            # history_cache holds daily delta snapshots — Stage 3 audit fix
+            (history_cache, "history_cache"),
+        ):
             try:
                 # SafeCache supports both .delete(key) and .pop(key, None).
-                # We use whichever exists, otherwise fall back to manual L1.
                 if hasattr(cache, "delete"):
                     cache.delete(sym)
-                    n_dropped += 1
+                    touched.append(name)
                 elif hasattr(cache, "pop"):
                     cache.pop(sym, None)
-                    n_dropped += 1
+                    touched.append(name)
             except Exception as exc:
-                log.debug("invalidate %s on %s: %r", sym, cache, exc)
+                log.debug("invalidate %s on %s: %r", sym, name, exc)
     except Exception as exc:
         log.warning("invalidate core.cache import failed: %r", exc)
 
@@ -125,14 +138,14 @@ def _invalidate_caches_for_ticker(ticker: str) -> None:
         from data import bullwatch_cache
         if hasattr(bullwatch_cache, "invalidate"):
             bullwatch_cache.invalidate(sym)
-            n_dropped += 1
+            touched.append("bullwatch_cache")
         else:
             # Fall back to raw Redis delete on the well-known key.
             from core import redis_client
             client = redis_client.get_client()
             if client is not None:
                 client.delete(f"bullwatch:metrics:v3:{sym}")
-                n_dropped += 1
+                touched.append("bullwatch_cache_raw")
     except Exception as exc:
         log.debug("invalidate bullwatch_cache %s: %r", sym, exc)
 
@@ -143,16 +156,23 @@ def _invalidate_caches_for_ticker(ticker: str) -> None:
     # snapshot atomically.
     try:
         from api import bullwatch as _bw
-        items = (_bw._CACHE.get("items") or {}).get("items") or []
+        # Stage 3 audit fix: use thread-safe snapshot for read, and
+        # thread-safe _cache_update for write. Eski direct-dict access
+        # concurrent scan ile yarış kondisyonu yaratabiliyordu.
+        snap = _bw._cache_snapshot() if hasattr(_bw, "_cache_snapshot") else _bw._CACHE
+        items = (snap.get("items") or {}).get("items") or []
         if any((it.get("symbol") or "").upper() == sym for it in items):
-            # Force the next request to fall back to the snapshot or
-            # cold-start path, where freshened metrics will be picked up
-            _bw._CACHE["stale_after"] = 0.0
-            n_dropped += 1
+            if hasattr(_bw, "_cache_update"):
+                _bw._cache_update(stale_after=0.0)
+            else:
+                _bw._CACHE["stale_after"] = 0.0
+            touched.append("bullwatch_inmem_mirror")
     except Exception as exc:
         log.debug("invalidate api.bullwatch mirror %s: %r", sym, exc)
 
-    log.info("Plan C: invalidated %d cache layers for %s", n_dropped, sym)
+    log.info("Plan C: invalidated %d cache layers for %s (%s)",
+             len(touched), sym, ", ".join(touched) if touched else "—")
+    return touched
 
 
 # ── Faz 3: AI analysis pipeline ─────────────────────────────────────
