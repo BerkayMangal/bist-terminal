@@ -2949,7 +2949,10 @@ function _bwCard(item){
       <div style="text-align:right;flex-shrink:0">
         <div style="font-family:'JetBrains Mono',monospace;font-size:28px;font-weight:700;color:${z.col};line-height:1">${score}</div>
         <div style="font-size:9px;color:var(--t4);text-transform:uppercase;letter-spacing:1px;margin-top:2px">SCORE</div>
-        <button class="clk-t" style="background:none;border:0;cursor:pointer;font-size:10px;color:var(--gold);margin-top:6px;padding:2px 6px;background:rgba(255,179,0,.08);border:1px solid rgba(255,179,0,.25);border-radius:4px;font-family:'JetBrains Mono',monospace" onclick="event.stopPropagation();showBwExplainModal('${esc(item.symbol)}')" title="Niye bu skor? Tahtacı imzası ne kadar net?">🎯 Niye?</button>
+        <div style="display:flex;gap:4px;margin-top:6px">
+          <button class="clk-t" style="background:none;border:0;cursor:pointer;font-size:10px;color:var(--gold);padding:2px 6px;background:rgba(255,179,0,.08);border:1px solid rgba(255,179,0,.25);border-radius:4px;font-family:'JetBrains Mono',monospace" onclick="event.stopPropagation();showBwExplainModal('${esc(item.symbol)}')" title="Niye bu skor? Tahtacı imzası ne kadar net?">🎯 Niye?</button>
+          <button class="clk-t" style="background:none;border:0;cursor:pointer;font-size:10px;color:var(--grn);padding:2px 6px;background:rgba(38,194,129,.10);border:1px solid rgba(38,194,129,.30);border-radius:4px;font-family:'JetBrains Mono',monospace" onclick="event.stopPropagation();showBwOpenPositionModal('${esc(item.symbol)}', ${(item.metrics && item.metrics.last_price) || 'null'})" title="Pozisyon aç — sistem exit signal hesaplasın">+ Aldım</button>
+        </div>
       </div>
     </div>
     <div style="font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--t1);margin-top:6px;line-height:1.5;font-weight:600">${esc(item.pattern||'—')}</div>
@@ -4966,9 +4969,207 @@ Soru mu var? Sağ alttaki <span style="color:var(--acc);font-weight:700">Q</span
 </div>`;
 pg.innerHTML=h;}
 
+// ===== BULLWATCH TRADE TRACKER (Faz 5) =====
+// Server-side tahtacı pozisyonları + exit signals. Mevcut localStorage
+// portföy aşağıda BOZULMADAN duruyor — ikisi YAN YANA çalışıyor.
+async function loadBwTradePositions(){
+  try {
+    const r = await api('/api/portfolio/positions');
+    const v = (r && (r.value || r)) || {};
+    S.bwPositions = { items: v.items || [], fetched_at: Date.now() };
+  } catch(e) {
+    console.warn('positions fetch failed', e);
+    S.bwPositions = { items: [], error: String(e.message||e) };
+  }
+}
+
+async function loadBwPortfolioStats(){
+  try {
+    const r = await api('/api/portfolio/stats');
+    const v = (r && (r.value || r)) || {};
+    S.bwPortfolioStats = (v.stats || {});
+  } catch(e) {/* silent */}
+}
+
+// BullWatch "+ Aldım" — entry modal
+function showBwOpenPositionModal(ticker, suggestedPrice){
+  const existing = document.getElementById('bwOpenPosOv');
+  if (existing) existing.remove();
+  const ov = document.createElement('div');
+  ov.id = 'bwOpenPosOv';
+  ov.className = 'mov';
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(4px)';
+  ov.onclick = (e) => { if (e.target === ov) ov.remove(); };
+  const px = suggestedPrice != null ? Number(suggestedPrice).toFixed(2) : '';
+  ov.innerHTML = `<div style="background:var(--bg1);border:1px solid var(--bdr2);border-radius:var(--rad);max-width:440px;width:100%;padding:20px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+      <h3 style="font-family:'JetBrains Mono',monospace;color:var(--grn);font-size:16px">💼 ${esc(ticker)} — Pozisyon Aç</h3>
+      <button class="btn btn-sm" style="background:var(--bg3);color:var(--t2)" onclick="this.closest('.mov').remove()">✕</button>
+    </div>
+    <p style="font-size:11px;color:var(--t3);line-height:1.55;margin-bottom:14px">BullWatch tahtacı imzasıyla pozisyon aç. Sistem her scan'den sonra exit signal hesaplar — zone düşerse, tahtacı çekilirse, stop'a yaklaşırsa sana <b style="color:var(--orn)">"sat"</b> önerir.</p>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+      <div>
+        <div style="font-size:10px;color:var(--t3);margin-bottom:3px">GİRİŞ FİYATI (TL)</div>
+        <input id="bwPosPrice" type="number" step="0.01" value="${px}" inputmode="decimal" style="font-family:'JetBrains Mono',monospace;font-size:13px;padding:8px 10px;background:var(--bg0);border:1px solid var(--bdr);border-radius:var(--rad);color:var(--t1);outline:0;width:100%;min-height:44px">
+      </div>
+      <div>
+        <div style="font-size:10px;color:var(--t3);margin-bottom:3px">LOT (adet)</div>
+        <input id="bwPosLot" type="number" value="100" inputmode="numeric" style="font-family:'JetBrains Mono',monospace;font-size:13px;padding:8px 10px;background:var(--bg0);border:1px solid var(--bdr);border-radius:var(--rad);color:var(--t1);outline:0;width:100%;min-height:44px">
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+      <div>
+        <div style="font-size:10px;color:var(--t3);margin-bottom:3px">STOP LOSS (%)</div>
+        <input id="bwPosStop" type="number" step="0.5" value="-8" inputmode="decimal" style="font-family:'JetBrains Mono',monospace;font-size:13px;padding:8px 10px;background:var(--bg0);border:1px solid var(--bdr);border-radius:var(--rad);color:var(--t1);outline:0;width:100%;min-height:44px">
+      </div>
+      <div>
+        <div style="font-size:10px;color:var(--t3);margin-bottom:3px">HEDEF (%)</div>
+        <input id="bwPosTarget" type="number" step="0.5" value="15" inputmode="decimal" style="font-family:'JetBrains Mono',monospace;font-size:13px;padding:8px 10px;background:var(--bg0);border:1px solid var(--bdr);border-radius:var(--rad);color:var(--t1);outline:0;width:100%;min-height:44px">
+      </div>
+    </div>
+    <div style="margin-bottom:14px">
+      <div style="font-size:10px;color:var(--t3);margin-bottom:3px">NOT (opsiyonel)</div>
+      <input id="bwPosNotes" type="text" placeholder="Tahtacı imzası net + walk-up 7g..." maxlength="200" style="font-family:'JetBrains Mono',monospace;font-size:12px;padding:8px 10px;background:var(--bg0);border:1px solid var(--bdr);border-radius:var(--rad);color:var(--t1);outline:0;width:100%;min-height:40px">
+    </div>
+    <div id="bwPosError" style="display:none;color:var(--red);font-size:11px;margin-bottom:10px"></div>
+    <div style="display:flex;gap:6px;justify-content:flex-end">
+      <button class="btn btn-sm" style="background:var(--bg3);color:var(--t2)" onclick="this.closest('.mov').remove()">İptal</button>
+      <button id="bwPosSubmit" class="btn btn-sm btn-grn" onclick="submitBwOpenPosition('${esc(ticker)}', this)">💼 Pozisyonu Aç</button>
+    </div>
+  </div>`;
+  document.body.appendChild(ov);
+  setTimeout(() => { const inp = document.getElementById('bwPosLot'); if (inp) inp.focus(); }, 50);
+}
+
+async function submitBwOpenPosition(ticker, btn){
+  const price = parseFloat(document.getElementById('bwPosPrice').value);
+  const lot = parseFloat(document.getElementById('bwPosLot').value);
+  const stop = parseFloat(document.getElementById('bwPosStop').value);
+  const target = parseFloat(document.getElementById('bwPosTarget').value);
+  const notes = (document.getElementById('bwPosNotes').value || '').trim();
+  const err = document.getElementById('bwPosError');
+  err.style.display = 'none';
+  if (!price || price <= 0 || !lot || lot <= 0) {
+    err.textContent = 'Geçerli fiyat ve lot giriniz.'; err.style.display = 'block'; return;
+  }
+  if (stop >= 0) {
+    err.textContent = 'Stop loss negatif olmalı (örn: -8).'; err.style.display = 'block'; return;
+  }
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Açılıyor…'; }
+  try {
+    const r = await fetch('/api/portfolio/positions', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        ticker, entry_price: price, lot,
+        notes: notes || null,
+        stop_loss_pct: stop, take_profit_pct: target,
+      }),
+    });
+    const j = await r.json();
+    if (j.error || !r.ok) throw new Error(j.error || 'open failed');
+    // Success — close modal, drop position cache, ping success
+    document.getElementById('bwOpenPosOv').remove();
+    S.bwPositions = null;
+    // Subtle toast — re-use the snapshot toast pattern
+    const toast = document.createElement('div');
+    toast.style.cssText = 'position:fixed;bottom:20px;right:20px;z-index:10000;padding:12px 18px;background:var(--grn);color:#000;font-weight:700;border-radius:var(--rad);box-shadow:0 4px 20px rgba(34,197,94,.4)';
+    toast.textContent = `✓ ${ticker} pozisyonu açıldı (${lot} lot × ${price.toFixed(2)} TL)`;
+    document.body.appendChild(toast);
+    setTimeout(() => toast.remove(), 3500);
+  } catch(e) {
+    err.textContent = String(e.message || e);
+    err.style.display = 'block';
+    if (btn) { btn.disabled = false; btn.textContent = '💼 Pozisyonu Aç'; }
+  }
+}
+
+async function closeBwPosition(positionId, ticker){
+  const px = prompt(`${ticker} pozisyonu kapatılıyor. Çıkış fiyatı (TL):`);
+  if (!px) return;
+  const xp = parseFloat(px);
+  if (!xp || xp <= 0) { alert('Geçerli fiyat giriniz.'); return; }
+  const reason = prompt('Sebep (opsiyonel, örn: "exit signal", "manuel"):') || null;
+  try {
+    const r = await fetch('/api/portfolio/positions/' + encodeURIComponent(positionId) + '/close', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({exit_price: xp, exit_reason: reason}),
+    });
+    const j = await r.json();
+    if (j.error) { alert(j.error); return; }
+    S.bwPositions = null;
+    renderPortfoyPage();
+  } catch(e) { alert(String(e.message || e)); }
+}
+
+function _bwTradePositionsSection(){
+  const data = S.bwPositions;
+  if (!data) {
+    return `<div class="card" style="margin-bottom:18px"><div class="card-h"><span class="card-t">🎯 BullWatch Tahtacı Pozisyonları</span></div><div class="card-b"><div style="color:var(--t3);font-size:11px;padding:12px;text-align:center">Yükleniyor…</div></div></div>`;
+  }
+  const items = data.items || [];
+  if (!items.length) {
+    return `<div class="card" style="margin-bottom:18px"><div class="card-h"><span class="card-t">🎯 BullWatch Tahtacı Pozisyonları</span></div><div class="card-b">
+      <div style="padding:14px;color:var(--t3);font-size:12px;line-height:1.6">Henüz açık BullWatch pozisyonu yok. BullWatch listesinde bir hissenin <b style="color:var(--grn)">"+ Aldım"</b> butonuna tıklayarak pozisyon açabilirsin.<br><span style="color:var(--t4);font-size:10px">Sistem her scan'den sonra exit signal hesaplar — zone düşer, tahtacı çekilirse seni uyarır.</span></div>
+    </div></div>`;
+  }
+  const verdictStyle = {
+    sell:    {bg:'rgba(239,83,80,.10)', col:'var(--red)', ic:'🚪', lbl:'SAT'},
+    caution: {bg:'rgba(255,167,38,.10)', col:'var(--orn)', ic:'⚠️', lbl:'İZLE'},
+    hold:    {bg:'rgba(38,194,129,.08)', col:'var(--grn)', ic:'✓', lbl:'TUT'},
+  };
+  let h = `<div class="card" style="margin-bottom:18px"><div class="card-h"><span class="card-t">🎯 BullWatch Tahtacı Pozisyonları (${items.length})</span><button class="btn btn-sm" style="background:var(--bg3);color:var(--t2)" onclick="S.bwPositions=null;loadBwTradePositions().then(()=>renderPortfoyPage())">🔄</button></div><div class="card-b" style="padding:0">`;
+  items.forEach((it, i) => {
+    const sig = it.signal || {};
+    const v = sig.verdict || 'hold';
+    const vs = verdictStyle[v] || verdictStyle.hold;
+    const pnl = sig.pnl_pct;
+    const pnlCol = pnl == null ? 'var(--t3)' : pnl >= 0 ? 'var(--grn)' : 'var(--red)';
+    const pnlStr = pnl == null ? '—' : `${pnl > 0 ? '+' : ''}${pnl.toFixed(2)}%`;
+    const entryDate = it.entry_date ? new Date(it.entry_date).toLocaleDateString('tr-TR') : '';
+    const ago = it.entry_date ? _alarmTimeAgo(it.entry_date) : '';
+    const currentPx = sig.current_price;
+    const reasons = sig.reasons || [];
+    h += `<div style="padding:14px 16px;${i<items.length-1?'border-bottom:1px solid var(--bdr);':''};background:${vs.bg}">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">
+        <div style="flex:1;min-width:0">
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px">
+            <span class="clk-t" style="font-family:'JetBrains Mono',monospace;font-size:16px;font-weight:700;color:var(--cyn)" onclick="loadTicker('${esc(it.ticker)}')">${esc(it.ticker)}</span>
+            <span style="display:inline-flex;align-items:center;gap:3px;font-family:'JetBrains Mono',monospace;font-size:11px;color:${vs.col};font-weight:700;padding:2px 8px;background:${vs.bg};border:1px solid ${vs.col}55;border-radius:4px">${vs.ic} ${vs.lbl}</span>
+            <span style="font-size:10px;color:var(--t4)">${esc(entryDate)} · ${esc(ago)}</span>
+          </div>
+          <div style="font-size:11px;color:var(--t3);font-family:'JetBrains Mono',monospace">${it.lot} lot × ${(it.entry_price||0).toFixed(2)} = ${((it.lot||0)*(it.entry_price||0)).toFixed(0)} TL maliyet${currentPx?` · şimdi ${currentPx.toFixed(2)} TL`:''}</div>
+          ${(it.zone_at_entry || it.pattern_at_entry) ? `<div style="font-size:10.5px;color:var(--t4);margin-top:2px">Giriş: ${esc(it.zone_at_entry||'')} · ${esc((it.pattern_at_entry||'').slice(0, 60))}</div>` : ''}
+          ${reasons.length ? `<div style="margin-top:6px;font-size:10.5px;color:${vs.col};line-height:1.5">${reasons.slice(0, 3).map(r => '⚠ ' + esc(r)).join('<br>')}</div>` : ''}
+          ${it.notes ? `<div style="margin-top:6px;font-size:10.5px;color:var(--t3);font-style:italic">📝 ${esc(it.notes)}</div>` : ''}
+        </div>
+        <div style="text-align:right;flex-shrink:0">
+          <div style="font-family:'JetBrains Mono',monospace;font-size:22px;font-weight:700;color:${pnlCol};line-height:1">${pnlStr}</div>
+          <div style="font-size:9px;color:var(--t4);text-transform:uppercase;letter-spacing:1px;margin-top:2px">P&L</div>
+          <button class="btn btn-sm" style="background:var(--bg3);color:var(--t2);font-size:10px;padding:3px 8px;margin-top:8px" onclick="closeBwPosition('${esc(it.position_id)}', '${esc(it.ticker)}')">🚪 Kapat</button>
+        </div>
+      </div>
+    </div>`;
+  });
+  h += '</div></div>';
+  return h;
+}
+
 function renderPortfoyPage(){
 const pg=$('pg-portfoy');const pf=getPF();
+// Faz 5: Lazy-load BullWatch positions (server-tracked, with exit signals).
+// Mevcut localStorage portföy BOZULMADAN aşağıda kalıyor.
+if (!S.bwPositions && !S._bwPositionsLoading) {
+  S._bwPositionsLoading = true;
+  loadBwTradePositions().then(() => {
+    S._bwPositionsLoading = false;
+    renderPortfoyPage();
+  }).catch(() => { S._bwPositionsLoading = false; });
+}
 let h=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px"><div><h2 style="font-family:'JetBrains Mono',monospace;font-size:15px;color:var(--gold)">📒 Portföy Defteri</h2><p style="font-size:11px;color:var(--t3);margin-top:2px">Sanal portföyünüz — veriler localStorage'da saklanir</p></div><div style="display:flex;gap:6px"><button class="btn btn-sm btn-grn" onclick="showAddPF()">+ HISSE EKLE</button><button class="btn btn-sm btn-blu" onclick="askDedePortfoy()">🤖 Q'YA SOR</button></div></div>`;
+// BullWatch trade tracker section
+h += _bwTradePositionsSection();
 h+=`<div id="pfAddForm" style="display:none;margin-bottom:14px;padding:14px;background:var(--bg3);border:1px solid var(--bdr);border-radius:var(--rad)"><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end"><div style="flex:1;min-width:80px"><div style="font-size:10px;color:var(--t3);margin-bottom:3px">TICKER</div><input id="pfTicker" type="text" placeholder="THYAO" style="font-family:'JetBrains Mono',monospace;font-size:13px;padding:8px 10px;background:var(--bg0);border:1px solid var(--bdr);border-radius:var(--rad);color:var(--t1);outline:0;width:100%;text-transform:uppercase;min-height:44px"></div><div style="flex:1;min-width:60px"><div style="font-size:10px;color:var(--t3);margin-bottom:3px">LOT</div><input id="pfLot" type="number" placeholder="100" inputmode="numeric" style="font-family:'JetBrains Mono',monospace;font-size:13px;padding:8px 10px;background:var(--bg0);border:1px solid var(--bdr);border-radius:var(--rad);color:var(--t1);outline:0;width:100%;min-height:44px"></div><div style="flex:1;min-width:80px"><div style="font-size:10px;color:var(--t3);margin-bottom:3px">MALIYET (TL)</div><input id="pfAvg" type="number" step="0.01" placeholder="45.50" inputmode="decimal" style="font-family:'JetBrains Mono',monospace;font-size:13px;padding:8px 10px;background:var(--bg0);border:1px solid var(--bdr);border-radius:var(--rad);color:var(--t1);outline:0;width:100%;min-height:44px"></div><button class="btn btn-grn btn-sm" onclick="doAddPF()">EKLE</button><button class="btn btn-sm" style="background:var(--bg2);color:var(--t3)" onclick="$('pfAddForm').style.display='none'">IPTAL</button></div></div>`;
 h+=`<div id="pfDedeBox" style="display:none;margin-bottom:14px"></div>`;
 if(!pf.length){
