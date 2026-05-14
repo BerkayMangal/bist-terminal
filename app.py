@@ -199,6 +199,12 @@ async def lifespan(application: FastAPI):
         _bwm_init_db()
     except Exception as e:
         log.warning(f"BullWatch membership storage init skipped: {e}")
+    # VIOP snapshot storage — daily options/futures contract history
+    try:
+        from infra.viop_storage import init_db as _viop_init_db
+        _viop_init_db()
+    except Exception as e:
+        log.warning(f"VIOP storage init skipped: {e}")
     # Phase 1: refuse to boot without a real JWT_SECRET. Raises RuntimeError
     # (uvicorn will surface this as a startup failure) if the env var is
     # missing, too short, or still a placeholder string.
@@ -275,10 +281,21 @@ async def lifespan(application: FastAPI):
         log.info("Auto-refresh stale loop started")
     except Exception as e:
         log.warning(f"Auto-refresh loop not started: {e}")
+    # VIOP daily ingestion — snapshots options + futures into viop_snapshots
+    # so the UOA z-score engine (Faz 2) has a rolling baseline.
+    viop_task = None
+    try:
+        from engine.viop_feed import background_loop as _viop_loop
+        viop_task = asyncio.create_task(_viop_loop())
+        log.info("VIOP feed loop started")
+    except Exception as e:
+        log.warning(f"VIOP feed loop not started: {e}")
     yield
     task.cancel()
     if auto_refresh_task is not None:
         auto_refresh_task.cancel()
+    if viop_task is not None:
+        viop_task.cancel()
     if bullwatch_task is not None:
         bullwatch_task.cancel()
     if bullwatch_hot_task is not None:
@@ -378,6 +395,12 @@ try:
     app.include_router(activity_router)
 except Exception as _e:
     log.warning(f"Activity router not mounted: {_e}")
+# VIOP — options + futures snapshots, UOA engine (Faz 2+), Tahtacı overlay
+try:
+    from api.viop import router as viop_router
+    app.include_router(viop_router)
+except Exception as _e:
+    log.warning(f"VIOP router not mounted: {_e}")
 
 @app.exception_handler(RateLimitExceeded)
 async def _rate_limit_handler(request: Request, exc: RateLimitExceeded):
