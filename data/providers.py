@@ -873,7 +873,11 @@ def batch_download_history_v9(
     CHUNK = 25
     WORKERS = BATCH_HISTORY_WORKERS
     failed: list[str] = []
-    done_count = 0
+
+    # Stage 5 progress model: emit `len(result)` (= actual successful
+    # downloads so far) instead of "attempts processed". This way Pass 2
+    # retries continue to push the counter up rather than appearing to
+    # stall at 100% while retries are still chugging.
 
     # Pass 1: Chunk halinde indir
     for ci in range(0, len(symbols), CHUNK):
@@ -890,13 +894,12 @@ def batch_download_history_v9(
                             failed.append(sym)
                     except Exception:
                         pass
-                    done_count += 1
         except Exception:
             failed.extend(chunk)
-            done_count += len(chunk)
-        # Emit progress after each chunk completes — UI gets a steady
-        # heartbeat instead of a silent 0/N for the full pass.
-        _emit_progress(done_count)
+        # Progress = symbols actually downloaded so far. If Pass 1 has
+        # rate-limit issues and many symbols failed, the bar will reflect
+        # the true success count rather than pretending the work is done.
+        _emit_progress(len(result))
         if ci + CHUNK < len(symbols):
             _time.sleep(_CHUNK_SLEEP)
 
@@ -915,15 +918,15 @@ def batch_download_history_v9(
                             sym, df = fut.result(timeout=30)
                             if df is not None:
                                 result[sym] = df
-                                # Pass 2 successes claw back from the failed
-                                # bucket so progress callback emits the new
-                                # total (out of len(symbols)).
                             else:
                                 still_failed.append(sym)
                         except Exception:
                             pass
             except Exception:
                 still_failed.extend(chunk)
+            # Same success-count model — Pass 2 keeps moving the bar up
+            # as retries succeed, never backwards.
+            _emit_progress(len(result))
             _time.sleep(_CHUNK_SLEEP)
         failed = still_failed
 
