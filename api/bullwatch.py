@@ -732,6 +732,61 @@ async def api_bullwatch_watchlist_state(
     })
 
 
+@router.get("/api/bullwatch/pre-alarms")
+async def api_bullwatch_pre_alarms(
+    score_min: float = 70.0,
+    score_max: float = 75.0,
+    tahtaci_min: float = 0.30,
+    limit: int = 20,
+):
+    """Pre-alarm candidates — "tahtacı yaklaşıyor".
+
+    CONVICTION mantığını BOZMUYORUZ; mevcut alarmlar (score≥75 + zone +
+    ≥2 motor + data_quality=high) aynen kalır. Bu endpoint sadece
+    score 70-75 arasında olan AMA güçlü tahtacı sinyali (kap_activity +
+    ownership + group_boost + walkup) taşıyan adayları surface eder.
+
+    Read-only: bu adaylar alarm storage'a yazılmaz, sadece UI'de
+    "yaklaşan" panel olarak gösterilir. Kullanıcı CONVICTION'a girmeden
+    önce yakalayabilir.
+
+    Literal path BEFORE /bullwatch/{symbol} (route order lesson).
+    """
+    from engine.bullwatch_prealarm import find_pre_alarm_candidates
+
+    # Read live cache (or snapshot fallback) — same source as main list.
+    items = ((_CACHE.get("items") or {}).get("items")) or []
+    if not items:
+        snap = _read_snapshot_payload(limit=500)
+        items = (snap or {}).get("items") or []
+
+    candidates = await asyncio.get_event_loop().run_in_executor(
+        None,
+        find_pre_alarm_candidates,
+        items, score_min, score_max, tahtaci_min, ("CONFIRMED",), limit,
+    )
+    return success(
+        {"items": candidates, "count": len(candidates),
+         "score_min": score_min, "score_max": score_max,
+         "tahtaci_min": tahtaci_min},
+        extra_meta={"endpoint": "bullwatch.pre_alarms"},
+    )
+
+
+@router.get("/api/bullwatch/pre-alarms/summary")
+async def api_bullwatch_pre_alarms_summary():
+    """Banner aggregate — kaç hisse alarma yaklaşıyor."""
+    from engine.bullwatch_prealarm import get_pre_alarm_summary
+    items = ((_CACHE.get("items") or {}).get("items")) or []
+    if not items:
+        snap = _read_snapshot_payload(limit=500)
+        items = (snap or {}).get("items") or []
+    data = await asyncio.get_event_loop().run_in_executor(
+        None, get_pre_alarm_summary, items,
+    )
+    return success(data, extra_meta={"endpoint": "bullwatch.pre_alarms.summary"})
+
+
 @router.get("/api/bullwatch/explain/{symbol}")
 async def api_bullwatch_explain(symbol: str):
     """Score explainability for one ticker — "Niye bu skor / niye
