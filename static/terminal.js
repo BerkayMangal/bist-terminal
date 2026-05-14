@@ -2962,6 +2962,78 @@ function _bwCard(item){
     </div>`:''}
   </div>`;
 }
+// ===== BULLWATCH SECTOR ROTATION — "Tahtacılar hangi sektöre yöneldi?" =====
+// Mevcut alarm + membership storage'lardan beslenen sektör akış paneli.
+// CONVICTION mantığını bozmaz — sadece aggregate view.
+async function loadBwSectorRotation(){
+  const days = S._bwRotWindow || 7;
+  try {
+    const r = await api('/api/bullwatch/sector-rotation?window_days=' + days);
+    S.bwSectorRot = (r && (r.value || r)) || {};
+  } catch(e) {
+    console.warn('sector rotation fetch failed', e);
+    S.bwSectorRot = { sectors: [], error: String(e.message||e) };
+  }
+}
+
+function _bwSectorRotationPanel(){
+  const data = S.bwSectorRot;
+  if (!data || !data.sectors || !data.sectors.length) return '';
+  const sectors = data.sectors;
+  const days = data.window_days || 7;
+  // Max abs(net) for bar normalization
+  const maxAbs = Math.max(1, ...sectors.map(s => Math.abs(s.net_score || 0)));
+
+  const trendStyle = {
+    hot:      {ic:'🔥', col:'var(--red)',  bg:'rgba(239,83,80,.10)',  lbl:'ısınıyor'},
+    warm:     {ic:'⚡', col:'var(--orn)',  bg:'rgba(255,167,38,.08)', lbl:'uyanık'},
+    neutral:  {ic:'➡️', col:'var(--t3)',   bg:'var(--bg3)',           lbl:'sakin'},
+    cooling:  {ic:'❄️', col:'var(--cyn)',  bg:'rgba(34,211,238,.08)', lbl:'soğuyor'},
+  };
+
+  let h = `<div style="margin-bottom:14px;padding:12px 14px;background:var(--bg2);border:1px solid var(--bdr);border-left:3px solid var(--cyn);border-radius:0 var(--rad) var(--rad) 0">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px">
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--cyn);text-transform:uppercase;letter-spacing:.7px;font-weight:700">🌊 SEKTÖR ROTASYONU</span>
+        <span style="font-size:10px;color:var(--t4)">son ${days}g · ${data.total_events||0} olay · tahtacılar hangi sektöre yöneldi</span>
+      </div>
+      <div style="display:flex;gap:4px">
+        ${[7, 14, 30].map(d => {
+          const on = days === d;
+          return `<button class="btn btn-sm" style="${on?'background:var(--cyn)20;border:1px solid var(--cyn);color:var(--cyn)':'background:var(--bg3);color:var(--t3)'};font-size:10px;padding:3px 7px;min-height:24px" onclick="S._bwRotWindow=${d};S.bwSectorRot=null;loadBwSectorRotation().then(()=>renderBullwatchPage())">${d}g</button>`;
+        }).join('')}
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:5px">`;
+
+  sectors.forEach(s => {
+    const st = trendStyle[s.trend] || trendStyle.neutral;
+    const net = s.net_score || 0;
+    const widthPct = Math.min(100, (Math.abs(net) / maxAbs) * 100);
+    const isPositive = net >= 0;
+    // Bar centered at midline: positives go right, negatives go left
+    const tickers = (s.top_tickers || []).join(' · ') || '';
+    h += `<div style="display:grid;grid-template-columns:120px 1fr auto;gap:8px;align-items:center;padding:4px 0;font-size:11px">
+      <div style="font-family:'JetBrains Mono',monospace;color:${st.col};font-weight:600">${st.ic} ${esc(s.sector)}</div>
+      <div style="position:relative;height:18px;background:var(--bg3);border-radius:2px;overflow:hidden">
+        ${isPositive ?
+          `<div style="position:absolute;left:50%;width:${widthPct/2}%;height:100%;background:linear-gradient(90deg,${st.col}30,${st.col}90)"></div>` :
+          `<div style="position:absolute;right:50%;width:${widthPct/2}%;height:100%;background:linear-gradient(90deg,${st.col}90,${st.col}30)"></div>`}
+        <div style="position:absolute;left:50%;top:0;bottom:0;width:1px;background:var(--bdr)"></div>
+        <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--t1);font-weight:700">${isPositive ? '+' : ''}${net}</div>
+      </div>
+      <div style="font-family:'JetBrains Mono',monospace;font-size:9.5px;color:var(--t4);max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(tickers)}">${esc(tickers)}</div>
+    </div>`;
+  });
+  h += `</div>
+    <div style="margin-top:8px;font-size:10px;color:var(--t4);line-height:1.5">
+      Pozitif sinyaller: 🚨 CONVICTION alarmı (×3) · ⚡ Zone yükselişi (×1.5) · 🆕 Listeye giriş (×1)<br>
+      Negatif: 🔻 Listeden düşüş (×0.5) · 🔽 Zone düşüşü (×1)
+    </div>
+  </div>`;
+  return h;
+}
+
 // ===== BULLWATCH PRE-ALARM PANEL — "Tahtacı yaklaşıyor" =====
 // CONVICTION mantığı (score≥75 + ≥2 motor + data_quality=high) HİÇ
 // DEĞİŞMEDİ — bu sadece score 70-74 arasındaki güçlü tahtacı imzalı
@@ -3438,6 +3510,15 @@ function renderBullwatchPage(){
       renderBullwatchPage();
     }).catch(() => { S._bwPreAlarmsLoading = false; });
   }
+  // Faz 3: sektör rotasyonu — son N gün'de hangi sektöre tahtacı
+  // yöneldi aggregate paneli (alarm + membership storage'lardan).
+  if (!S.bwSectorRot && !S._bwSectorRotLoading) {
+    S._bwSectorRotLoading = true;
+    loadBwSectorRotation().then(() => {
+      S._bwSectorRotLoading = false;
+      renderBullwatchPage();
+    }).catch(() => { S._bwSectorRotLoading = false; });
+  }
   const bw=S.bullwatch;
   // Empty / error state — but ONLY if we have NO usable cards at all.
   // (If we have current results AND a refresh error, we keep the cards
@@ -3629,7 +3710,10 @@ function renderBullwatchPage(){
       h+='</div>';
     }
   }else{
-    // Faz 2: Pre-alarm panel ÜSTTE — "tahtacı yaklaşıyor" adayları.
+    // Faz 3: Sektör rotasyonu EN ÜSTTE — "tahtacılar hangi sektöre"
+    // soruyu cevaplayan aggregate panel.
+    h += _bwSectorRotationPanel();
+    // Faz 2: Pre-alarm panel — "tahtacı yaklaşıyor" adayları.
     // Mevcut shortlist + full grid BOZULMADI, sadece üstüne ek panel.
     h += _bwPreAlarmsPanel();
     // Phase A.10 Step 2-C: prepend shortlist section ABOVE the full grid.
