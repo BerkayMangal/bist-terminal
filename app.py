@@ -205,6 +205,12 @@ async def lifespan(application: FastAPI):
         _viop_init_db()
     except Exception as e:
         log.warning(f"VIOP storage init skipped: {e}")
+    # Portfolio storage — user's open positions + exit signal history
+    try:
+        from infra.portfolio_storage import init_db as _portfolio_init_db
+        _portfolio_init_db()
+    except Exception as e:
+        log.warning(f"Portfolio storage init skipped: {e}")
     # Phase 1: refuse to boot without a real JWT_SECRET. Raises RuntimeError
     # (uvicorn will surface this as a startup failure) if the env var is
     # missing, too short, or still a placeholder string.
@@ -401,6 +407,12 @@ try:
     app.include_router(viop_router)
 except Exception as _e:
     log.warning(f"VIOP router not mounted: {_e}")
+# Portfolio — açık pozisyonlar + exit signal engine
+try:
+    from api.portfolio import router as portfolio_router
+    app.include_router(portfolio_router)
+except Exception as _e:
+    log.warning(f"Portfolio router not mounted: {_e}")
 
 @app.exception_handler(RateLimitExceeded)
 async def _rate_limit_handler(request: Request, exc: RateLimitExceeded):
