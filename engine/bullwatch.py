@@ -1339,7 +1339,8 @@ def _diagnostic_fields(metrics: dict) -> dict:
 def score_symbol(metrics: dict,
                  df: Any = None,
                  ownership: Optional[dict] = None,
-                 cap_tl: Optional[float] = None) -> BullWatchResult:
+                 cap_tl: Optional[float] = None,
+                 scan_now: Optional[Any] = None) -> BullWatchResult:
     """
     Score a single symbol.
 
@@ -1478,7 +1479,7 @@ def score_symbol(metrics: dict,
     s_ka, r_ka = None, []
     try:
         from engine.bullwatch_kap_boost import compute_kap_boost
-        s_ka, r_ka, _ka_meta = compute_kap_boost(symbol)
+        s_ka, r_ka, _ka_meta = compute_kap_boost(symbol, scan_now=scan_now)
     except Exception as _exc:
         log.debug("kap_boost failed for %s: %r", symbol, _exc)
 
@@ -1590,7 +1591,7 @@ def score_symbol(metrics: dict,
     group_boost_meta: dict = {}
     try:
         from engine.bullwatch_group_activity import compute_group_activity_boost
-        group_boost_meta = compute_group_activity_boost(symbol)
+        group_boost_meta = compute_group_activity_boost(symbol, scan_now=scan_now)
         gb = float(group_boost_meta.get("boost") or 0.0)
         if gb > 0:
             score = min(100.0, score + gb)
@@ -1849,6 +1850,7 @@ def scan(symbols: list[str],
          include_ineligible: bool = False,
          cap_tl: Optional[float] = None,
          progress_callback: Optional[Callable[[int, int], None]] = None,
+         scan_now: Optional[Any] = None,
          ) -> list[BullWatchResult]:
     """
     Run BullWatch across a universe.
@@ -1857,7 +1859,20 @@ def scan(symbols: list[str],
     deterministic fakes. By default it uses the existing repo
     providers (data.providers.compute_metrics_v9 +
     engine.technical.batch_download_history).
+
+    DETERMINISM (audit fix, Stage 1):
+      scan_now is captured ONCE at scan start and threaded through
+      to every per-symbol score_symbol() call. This pins the KAP
+      and group-activity 14-day windows for the entire scan — without
+      it, a 20min scan ends up with a 20min-wide variance in window
+      boundaries (early symbols see different disclosures than late
+      ones). Callers that don't supply scan_now get the legacy
+      "now-at-each-call" behavior (backwards-compatible).
     """
+    import datetime as _dt2
+    # Capture scan_now ONCE — this is the heart of the determinism fix.
+    if scan_now is None:
+        scan_now = _dt2.datetime.now(_dt2.timezone.utc)
     # Resolve default providers lazily so that tests don't need to
     # have borsapy installed.
     if metrics_fn is None:
@@ -1904,7 +1919,8 @@ def scan(symbols: list[str],
             except Exception:
                 ownership = None
             try:
-                return score_symbol(metrics, df, ownership, cap_tl=cap_tl)
+                return score_symbol(metrics, df, ownership, cap_tl=cap_tl,
+                                     scan_now=scan_now)
             except Exception as exc:
                 log.warning("BullWatch %s: scoring failed: %r", sym, exc)
                 return None

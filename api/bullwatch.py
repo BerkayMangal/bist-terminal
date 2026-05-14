@@ -42,6 +42,40 @@ _CACHE: dict[str, Any] = {
     "total": 0,           # total symbols in the in-flight scan
     "scan_started_at": 0.0,
 }
+# Thread-safe lock for _CACHE writes. Multiple threads can write to this
+# dict simultaneously: the scan executor thread updates progress, the
+# refresh routine swaps items, the async health handler reads everything.
+# Without this lock, readers can see partial state during writes.
+# (Audit fix, Stage 1.)
+import threading as _threading
+_CACHE_LOCK = _threading.RLock()
+
+
+def _cache_set(key: str, value: Any) -> None:
+    """Thread-safe single-key setter for _CACHE."""
+    with _CACHE_LOCK:
+        _CACHE[key] = value
+
+
+def _cache_get(key: str, default: Any = None) -> Any:
+    """Thread-safe single-key getter for _CACHE."""
+    with _CACHE_LOCK:
+        return _CACHE.get(key, default)
+
+
+def _cache_update(**kwargs) -> None:
+    """Thread-safe batch updater — keeps writes atomic so readers see
+    either the old state or the new, never half."""
+    with _CACHE_LOCK:
+        _CACHE.update(kwargs)
+
+
+def _cache_snapshot() -> dict[str, Any]:
+    """Return a deep-enough copy of _CACHE for safe iteration outside
+    the lock. Items list is intentionally referenced (not deep-copied)
+    because callers don't mutate it."""
+    with _CACHE_LOCK:
+        return dict(_CACHE)
 _CACHE_TTL_SEC = 300  # 5 minutes — used for in-mem mirror freshness
 _SCAN_DONE: Optional[asyncio.Event] = None  # set by the runner, awaited by waiters
 _SCAN_MAX_WAIT_SEC = 300  # hard ceiling — even slow scans should fit (yfinance can be flaky)
@@ -93,13 +127,17 @@ def _run_scan(min_score: float = 0.0,
     from features.bullwatch_features import FLOAT_MARKET_CAP_CAP_TL
     universe = _resolve_universe()
     t0 = time.time()
-    _CACHE["scan_started_at"] = t0
-    _CACHE["progress"] = 0
-    _CACHE["total"] = len(universe)
+    # Thread-safe atomic init — the async health handler reads these
+    # concurrently with the scan thread that writes them.
+    _cache_update(
+        scan_started_at=t0,
+        progress=0,
+        total=len(universe),
+    )
 
     def _on_progress(done: int, total: int) -> None:
-        _CACHE["progress"] = done
-        _CACHE["total"] = total
+        # Atomic — readers see either old or new pair, never partial.
+        _cache_update(progress=done, total=total)
 
     # Always include_ineligible=True — it's just a filter on already-computed
     # results, no extra fetches. Lets us surface near_misses for free.
@@ -279,24 +317,28 @@ async def _refresh_and_persist(min_score: float = 0.0) -> Optional[dict]:
     scan is already in flight. Used by the background refresh loop and by
     the request-triggered `_schedule_background_refresh`."""
     global _SCAN_DONE
-    if _CACHE["running"]:
-        # Audit fix: if scan has been "running" for too long, it's
-        # almost certainly hung on borsapy stragglers. Force-reset
-        # the flag so a new scan can run.
-        started_at = _CACHE.get("scan_started_at") or 0
-        if started_at and (time.time() - started_at) > _SCAN_WATCHDOG_SEC:
-            log.warning(
-                "BullWatch scan watchdog: %.0fs elapsed (cap %ds), force-resetting",
-                time.time() - started_at, _SCAN_WATCHDOG_SEC,
-            )
-            _CACHE["running"] = False
-            if _SCAN_DONE is not None:
-                _SCAN_DONE.set()
-        else:
-            log.debug("BullWatch refresh: scan already in flight, skipping")
-            return None
-    _CACHE["running"] = True
-    _CACHE["scan_started_at"] = time.time()
+    # Read-test-act under lock so concurrent refresh requests don't
+    # both pass the `not running` check and start two scans.
+    with _CACHE_LOCK:
+        if _CACHE["running"]:
+            # Audit fix: if scan has been "running" for too long, it's
+            # almost certainly hung on borsapy stragglers. Force-reset
+            # the flag so a new scan can run.
+            started_at = _CACHE.get("scan_started_at") or 0
+            if started_at and (time.time() - started_at) > _SCAN_WATCHDOG_SEC:
+                log.warning(
+                    "BullWatch scan watchdog: %.0fs elapsed (cap %ds), "
+                    "force-resetting",
+                    time.time() - started_at, _SCAN_WATCHDOG_SEC,
+                )
+                _CACHE["running"] = False
+                if _SCAN_DONE is not None:
+                    _SCAN_DONE.set()
+            else:
+                log.debug("BullWatch refresh: scan already in flight, skipping")
+                return None
+        _CACHE["running"] = True
+        _CACHE["scan_started_at"] = time.time()
     _SCAN_DONE = asyncio.Event()
     try:
         t0 = time.time()
@@ -323,9 +365,13 @@ async def _refresh_and_persist(min_score: float = 0.0) -> Optional[dict]:
             # snapshot. Don't write a new partial — we don't trust it.
             return None
         scan_id = _persist_snapshot(payload)
-        _CACHE["items"] = payload
-        _CACHE["as_of"] = payload["as_of"]
-        _CACHE["stale_after"] = time.time() + _CACHE_TTL_SEC
+        # Atomic publish — readers waiting for new items see all three
+        # fields update at once, never a half-populated state.
+        _cache_update(
+            items=payload,
+            as_of=payload["as_of"],
+            stale_after=time.time() + _CACHE_TTL_SEC,
+        )
         # Membership events — detect entries/exits/zone changes vs prev.
         # Only when we actually had a previous list to diff against.
         if prev_items_for_diff:
@@ -356,7 +402,7 @@ async def _refresh_and_persist(min_score: float = 0.0) -> Optional[dict]:
     finally:
         if _SCAN_DONE is not None:
             _SCAN_DONE.set()
-        _CACHE["running"] = False
+        _cache_set("running", False)
 
 
 def _schedule_background_refresh() -> bool:

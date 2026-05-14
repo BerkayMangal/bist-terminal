@@ -63,6 +63,7 @@ TAG_LABELS: dict[str, str] = {
 def compute_kap_boost(
     ticker: str,
     lookback_days: int = LOOKBACK_DAYS,
+    scan_now: Optional[_dt.datetime] = None,
 ) -> tuple[Optional[float], list[str], dict[str, Any]]:
     """Return (sub_score, reasons, meta) for the KAP-activity engine.
 
@@ -74,6 +75,14 @@ def compute_kap_boost(
 
     meta carries the dominant tag and per-tag counts so the UI can
     surface "why" without re-running classification.
+
+    DETERMINISM (audit fix, Stage 1):
+      scan_now lets the caller pin the window cutoff to the SCAN START
+      timestamp — without it, each per-symbol call uses datetime.now()
+      and a 20min scan ends up with different 14-day windows across
+      its symbols (boundary disclosures included for early symbols,
+      excluded for late ones). Callers that don't care can omit it
+      and get the legacy "now"-at-call behavior.
     """
     sym = (ticker or "").upper().strip().replace(".IS", "")
     if not sym:
@@ -90,8 +99,12 @@ def compute_kap_boost(
         return None, [], {}
 
     # Window: only count disclosures in the recent lookback. Older
-    # signals decay fully.
-    cutoff = _dt.datetime.now(_dt.timezone.utc) - _dt.timedelta(days=lookback_days)
+    # signals decay fully. Use the caller-supplied scan_now if present
+    # so all symbols in a single scan share an identical window.
+    now_ref = scan_now if scan_now is not None else _dt.datetime.now(_dt.timezone.utc)
+    if now_ref.tzinfo is None:
+        now_ref = now_ref.replace(tzinfo=_dt.timezone.utc)
+    cutoff = now_ref - _dt.timedelta(days=lookback_days)
     tag_counts: dict[str, int] = {}
     reasons: list[str] = []
     seen_in_window = 0
