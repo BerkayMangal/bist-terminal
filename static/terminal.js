@@ -690,13 +690,16 @@ async function loadMacro(){try{S.macro=await cachedApi('/api/macro');const el=$(
 function renderTickerBar(items){const tb=$('tbar');const inner=items.map(m=>`<div class="tbar-i"><span style="color:var(--t2);font-weight:600">${esc(m.flag||'')} ${esc(m.key||m.name)}</span><span style="color:var(--t1)">${fN(m.price,m.key?.includes('TRY')?4:2)}</span><span style="color:${cC(m.change_pct)};font-size:10px">${cS(m.change_pct)}%</span></div>`).join('');tb.innerHTML=`<div class="tbar-inner">${inner}${inner}</div>`;}
 
 // ===== VIOP (options + futures, UOA + Tahtacı overlay) =====
-// 3 view: overlay (default, killer feature) / uoa / today (raw snapshot)
+// 3 view: overlay (killer) / uoa / today (raw snapshot)
+// Default view picker: if no overlay+uoa hits yet (baseline doluyor),
+// land on 'today' so the user sees the 200+ contract snapshot
+// immediately instead of an empty state.
 async function loadViop(force){
   const view = S._viopView || 'overlay';
   const cacheKey = '_viop_' + view;
   if (S[cacheKey] && !force) return S[cacheKey];
 
-  let url, payload;
+  let url;
   if (view === 'overlay') {
     url = '/api/viop/tahtaci-overlay?min_uoa_score=1.5&kap_window_days=14&limit=40';
   } else if (view === 'uoa') {
@@ -707,9 +710,10 @@ async function loadViop(force){
     const kind = S._viopKind || '';
     url = `/api/viop/today?limit=80${kind?'&kind='+kind:''}`;
   }
+  let payload;
   try {
     const [main, summary, health] = await Promise.all([
-      api(url),
+      api(url).catch(e => ({_err: String(e.message||e)})),
       api('/api/viop/tahtaci-overlay/summary').catch(()=>null),
       api('/api/viop/health').catch(()=>null),
     ]);
@@ -721,13 +725,57 @@ async function loadViop(force){
       summary: s,
       health: h,
       view, fetched_at: Date.now(),
+      error: main && main._err ? main._err : null,
     };
-    S[cacheKey] = payload;
   } catch(e) {
     console.warn('viop fetch failed', e);
     payload = { items: [], summary: {}, health: {}, view, error: String(e.message||e) };
   }
+  // ALWAYS write to cache — even on error — so renderViopPage doesn't
+  // see `!S[cacheKey]` and loop back into the skeleton-then-loadViop cycle.
+  S[cacheKey] = payload;
   return payload;
+}
+
+// Manual refresh — POST /api/viop/refresh + reload current view.
+async function viopManualRefresh(btn){
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Snapshot alınıyor…'; }
+  try {
+    const r = await fetch('/api/viop/refresh', {method: 'POST'});
+    const j = await r.json();
+    const v = j.value || j;
+    const cyc = v.cycle || {};
+    // Drop all caches so all 3 views re-render with fresh data
+    S._viop_overlay = null; S._viop_uoa = null; S._viop_today = null;
+    if (btn) {
+      btn.textContent = `✓ ${cyc.rows_persisted||0} contract`;
+      setTimeout(() => { btn.disabled = false; btn.textContent = '🔄 Snapshot Al'; }, 2500);
+    }
+    renderViopPage();
+  } catch(e) {
+    if (btn) {
+      btn.textContent = `✗ ${String(e.message||e).slice(0,30)}`;
+      setTimeout(() => { btn.disabled = false; btn.textContent = '🔄 Snapshot Al'; }, 3000);
+    }
+  }
+}
+
+// Baseline progress — UOA needs ≥5 days. Picks the most-snapshotted
+// contract to estimate where we are in the warmup window.
+function _viopBaselineProgress(health){
+  const last = (health && health.last_cycle) || null;
+  const stats = (health && health.stats) || {};
+  const today = stats.snap_date_latest;
+  if (!today) return null;
+  // We don't have a "days of history" counter on the health endpoint
+  // yet; until then, infer from snap_date_latest existence. This is a
+  // floor — server-side could provide an exact number later.
+  return {
+    snap_today: today,
+    contracts_today: stats.total_today || 0,
+    last_cycle_ok: last && (last.rows_persisted || 0) > 0,
+    last_cycle_at: last ? last.finished_at : null,
+  };
 }
 
 function _viopBadge(label, n, col) {
@@ -838,14 +886,41 @@ function renderViopPage(){
   const items = data.items || [];
   const summary = data.summary || {};
   const health = data.health || {};
+  const progress = _viopBaselineProgress(health);
+  // If user is on overlay/uoa view and it's empty BUT today snapshot
+  // exists, auto-flip to today view so they see SOMETHING immediately.
+  // Only do this on the FIRST encounter (track via flag to not undo
+  // user's deliberate switch back).
+  if ((view === 'overlay' || view === 'uoa')
+      && items.length === 0
+      && !S._viopAutoFlipped
+      && progress && progress.contracts_today > 0) {
+    S._viopAutoFlipped = true;
+    S._viopView = 'today';
+    renderViopPage();
+    return;
+  }
 
   let h = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px">
     <div>
       <h2 style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-lg);color:var(--gold)">🎲 VIOP — Tahtacı + UOA</h2>
       <p style="font-size:var(--fs-sm);color:var(--t3);margin-top:2px">Option flow + insider sinyalleri overlap'i · ${(health.stats||{}).total_today||0} contract takip ediliyor</p>
     </div>
-    <button class="btn btn-grn" onclick="S['_viop_'+(S._viopView||'overlay')]=null;loadViop(true).then(()=>renderViopPage())">🔄</button>
+    <div style="display:flex;gap:6px">
+      <button class="btn btn-sm" style="background:var(--bg3);color:var(--t2);font-size:11px" onclick="viopManualRefresh(this)">🔄 Snapshot Al</button>
+      <button class="btn btn-grn" onclick="S['_viop_'+(S._viopView||'overlay')]=null;loadViop(true).then(()=>renderViopPage())">↻</button>
+    </div>
   </div>`;
+
+  // Always-on baseline progress banner — explains the wait.
+  if (progress) {
+    const fc = progress.last_cycle_at
+      ? new Date(progress.last_cycle_at * 1000).toLocaleString('tr-TR', {hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short'})
+      : '—';
+    h += `<div style="margin-bottom:14px;padding:10px 14px;background:var(--bg3);border:1px solid var(--bdr);border-left:3px solid var(--cyn);border-radius:0 var(--rad) var(--rad) 0;font-size:11px;color:var(--t2);line-height:1.6">
+      <b style="color:var(--cyn)">📡 Pipeline durumu:</b> Son snapshot ${esc(fc)} · ${progress.contracts_today} contract bugün. UOA z-score için <b>≥5 gün baseline gerekiyor</b> — sistem her saat snapshot alıyor, baseline dolunca Overlay + UOA view'leri kendiliğinden dolar. Şu an raw snapshot için <b>📋 Tüm Snapshot</b> view'ine bak.
+    </div>`;
+  }
 
   // Summary banner (only for overlay view)
   if (view === 'overlay' && summary && (summary.n_overlays || 0) > 0) {
@@ -859,7 +934,8 @@ function renderViopPage(){
     </div>`;
   }
 
-  // View tabs
+  // View tabs. Setting _viopAutoFlipped=true so a deliberate user
+  // switch isn't immediately reversed by the auto-flip in render.
   const tabs = [
     ['overlay', '🔥 Overlay (Tahtacı + UOA)', 'var(--gold)'],
     ['uoa', '⚡ UOA (saf z-score)', 'var(--orn)'],
@@ -867,7 +943,7 @@ function renderViopPage(){
   ];
   h += `<div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap">${tabs.map(([k,l,c])=>{
     const on = view === k;
-    return `<button class="btn btn-sm" style="${on?`background:${c}20;border:1px solid ${c};color:${c}`:'background:var(--bg3);color:var(--t2)'};font-size:11px" onclick="S._viopView='${k}';S['_viop_'+(S._viopView||'overlay')]=null;loadViop(true).then(()=>renderViopPage())">${esc(l)}</button>`;
+    return `<button class="btn btn-sm" style="${on?`background:${c}20;border:1px solid ${c};color:${c}`:'background:var(--bg3);color:var(--t2)'};font-size:11px" onclick="S._viopAutoFlipped=true;S._viopView='${k}';loadViop().then(()=>renderViopPage())">${esc(l)}</button>`;
   }).join('')}</div>`;
 
   // Optional kind filter for uoa/today
@@ -889,12 +965,17 @@ function renderViopPage(){
   h += `<div style="padding:10px 14px;background:var(--bg3);border-radius:var(--rad);margin-bottom:12px;font-size:11px;color:var(--t2);line-height:1.55">${explainer}</div>`;
 
   if (!items.length) {
-    const tip = view === 'overlay'
-      ? 'Henüz Tahtacı × UOA overlap\'i yok. Pipeline yeni başladıysa baseline (≥5g) dolması gerekir. ⚡ UOA tabına bak — saf option flow sinyallerini görebilirsin.'
-      : view === 'uoa'
-        ? 'Bugün anormal option/future aktivitesi yok. Sistem yeni başlatılmışsa baseline dolması gerek (≥5g snapshot).'
-        : 'VIOP snapshot boş — feed loop henüz çalışmamış olabilir. POST /api/viop/refresh tetiklenebilir.';
-    h += `<div class="emp" style="padding:30px 20px;text-align:center"><h3 style="color:var(--t2);font-size:14px;margin-bottom:8px">Sinyal yok</h3><p style="color:var(--t4);font-size:11px;line-height:1.6">${esc(tip)}</p></div>`;
+    if (view === 'today') {
+      // 'today' empty == real problem: feed loop hasn't fetched yet
+      h += `<div class="emp" style="padding:30px 20px;text-align:center"><h3 style="color:var(--t2);font-size:14px;margin-bottom:8px">📡 Snapshot henüz alınmadı</h3>
+        <p style="color:var(--t4);font-size:11px;line-height:1.6;margin-bottom:14px">Background feed loop ilk fetch'i yapana kadar boş gelir. Sağ üstteki <b>"🔄 Snapshot Al"</b> butonu ile manuel tetikleyebilirsin (~5 saniye sürer).</p>
+        <button class="btn btn-grn" onclick="viopManualRefresh(this)">🔄 Şimdi Snapshot Al</button></div>`;
+    } else {
+      // overlay / uoa empty when today has data → baseline waiting
+      h += `<div class="emp" style="padding:30px 20px;text-align:center"><h3 style="color:var(--t2);font-size:14px;margin-bottom:8px">⏳ Baseline biriyor</h3>
+        <p style="color:var(--t4);font-size:11px;line-height:1.6;margin-bottom:10px">${view==='overlay' ? 'Tahtacı × UOA overlap' : 'UOA z-score anomaly'} için ≥5 gün snapshot baseline gerekiyor. Sistem her saat snapshot alıyor.</p>
+        <p style="color:var(--t4);font-size:11px;line-height:1.6">Şu an raw VIOP universe'ünü görmek için → <button class="btn btn-sm" style="background:var(--bg3);color:var(--cyn);font-size:11px" onclick="S._viopAutoFlipped=true;S._viopView='today';loadViop().then(()=>renderViopPage())">📋 Tüm Snapshot</button></p></div>`;
+    }
     pg.innerHTML = h;
     return;
   }
