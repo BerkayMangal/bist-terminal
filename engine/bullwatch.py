@@ -1207,28 +1207,88 @@ def _engine_fundamental_quality(metrics: dict) -> tuple[Optional[float], list[st
 # ================================================================
 # Zone classification — depends on which engines are firing.
 # ================================================================
-def _classify_zone(score: float,
-                   fp: Optional[float],
-                   rvol: Optional[float],
-                   ownership_score: Optional[float],
-                   pattern_count: int,
-                   compression_score: Optional[float]) -> str:
-    """
-    EARLY      — quiet footprint: compression + price calm, low score.
-    CONFIRMED  — multiple engines aligned (incl. tape or ownership), mid-high.
-    CONVICTION — breakout in progress (high RVOL or extreme float pressure).
-    """
+# Zone hysteresis (overhaul Stage 2) — buffer widths between entry/exit.
+# Once a ticker has earned a zone, it doesn't lose it unless the score
+# drops meaningfully (not just rounding noise at the boundary).
+# ENTRY threshold (going UP)   = standard cut
+# EXIT  threshold (going DOWN) = standard cut - HYSTERESIS_BUFFER
+HYSTERESIS_BUFFER = 2.0
+CONVICTION_ENTRY = 75.0
+CONVICTION_EXIT  = CONVICTION_ENTRY - HYSTERESIS_BUFFER   # 73.0
+CONFIRMED_ENTRY  = 60.0
+CONFIRMED_EXIT   = CONFIRMED_ENTRY - HYSTERESIS_BUFFER    # 58.0
+
+
+def _classify_zone_strict(score: float,
+                          fp: Optional[float],
+                          rvol: Optional[float],
+                          ownership_score: Optional[float],
+                          pattern_count: int,
+                          compression_score: Optional[float]) -> str:
+    """The original zone classifier — no hysteresis. Used both directly
+    (when no previous_zone is known) and by the hysteresis wrapper to
+    compute the "fresh" zone before deciding whether to keep the
+    previous one for buffer reasons."""
     high_rvol = rvol is not None and rvol >= RVOL_STRONG
     extreme_fp = fp is not None and fp >= FLOAT_PRESSURE_VERY_STRONG
-    if score >= 75 and (high_rvol or extreme_fp):
+    if score >= CONVICTION_ENTRY and (high_rvol or extreme_fp):
         return "CONVICTION"
-    if score >= 60 and (
+    if score >= CONFIRMED_ENTRY and (
         (ownership_score is not None and ownership_score >= 0.4)
         or pattern_count >= 2
         or (rvol is not None and rvol >= RVOL_EARLY)
     ):
         return "CONFIRMED"
     return "EARLY"
+
+
+def _classify_zone(score: float,
+                   fp: Optional[float],
+                   rvol: Optional[float],
+                   ownership_score: Optional[float],
+                   pattern_count: int,
+                   compression_score: Optional[float],
+                   previous_zone: Optional[str] = None) -> str:
+    """
+    EARLY      — quiet footprint: compression + price calm, low score.
+    CONFIRMED  — multiple engines aligned (incl. tape or ownership), mid-high.
+    CONVICTION — breakout in progress (high RVOL or extreme float pressure).
+
+    HYSTERESIS (overhaul Stage 2):
+      Once a ticker has earned a zone, the THRESHOLD to LEAVE is lower
+      than the threshold to ENTER. Prevents boundary tickers (score ~75)
+      from flipping CONVICTION → CONFIRMED → CONVICTION across rounding
+      noise (the user's "bazen başka outcome çıkıyor" complaint).
+
+      previous_zone=None → fall back to strict thresholds (backward-compat,
+                           used by tests + first-time scoring before any
+                           snapshot exists).
+    """
+    new_zone = _classify_zone_strict(
+        score, fp, rvol, ownership_score, pattern_count, compression_score,
+    )
+    if not previous_zone:
+        return new_zone
+
+    # CONVICTION hysteresis: keep it if score still ≥ CONVICTION_EXIT (73),
+    # even if the rvol/fp gate has lost its grip or score drifted below 75.
+    if previous_zone == "CONVICTION" and new_zone != "CONVICTION":
+        if score >= CONVICTION_EXIT:
+            return "CONVICTION"
+
+    # CONFIRMED hysteresis: keep it if score ≥ CONFIRMED_EXIT (58) AND
+    # at least one of the CONFIRMED qualifying conditions still holds.
+    # (Pure low score without ANY signal shouldn't sit in CONFIRMED on
+    # hysteresis alone.)
+    if previous_zone == "CONFIRMED" and new_zone == "EARLY":
+        if score >= CONFIRMED_EXIT and (
+            (ownership_score is not None and ownership_score >= 0.4)
+            or pattern_count >= 2
+            or (rvol is not None and rvol >= RVOL_EARLY)
+        ):
+            return "CONFIRMED"
+
+    return new_zone
 
 
 def _pattern_label(active_engines: list[str], patterns: dict,
@@ -1340,7 +1400,8 @@ def score_symbol(metrics: dict,
                  df: Any = None,
                  ownership: Optional[dict] = None,
                  cap_tl: Optional[float] = None,
-                 scan_now: Optional[Any] = None) -> BullWatchResult:
+                 scan_now: Optional[Any] = None,
+                 previous_zone: Optional[str] = None) -> BullWatchResult:
     """
     Score a single symbol.
 
@@ -1558,7 +1619,10 @@ def score_symbol(metrics: dict,
     # the sub-score past 0.2 naturally.
     if s_ka is not None and s_ka >= 0.20: active.append("KAP Activity")
     pattern = _pattern_label(active, patterns, s_ow)
-    zone = _classify_zone(score, fp, rvol, s_ow, patterns.get("count", 0), s_cm)
+    zone = _classify_zone(
+        score, fp, rvol, s_ow, patterns.get("count", 0), s_cm,
+        previous_zone=previous_zone,
+    )
 
     # ---- Reasons (de-duped, capped) ----
     reasons: list[str] = []
@@ -1851,6 +1915,7 @@ def scan(symbols: list[str],
          cap_tl: Optional[float] = None,
          progress_callback: Optional[Callable[[int, int], None]] = None,
          scan_now: Optional[Any] = None,
+         previous_zones: Optional[dict[str, str]] = None,
          ) -> list[BullWatchResult]:
     """
     Run BullWatch across a universe.
@@ -1918,9 +1983,18 @@ def scan(symbols: list[str],
                 ownership = ownership_fn(sym)
             except Exception:
                 ownership = None
+            # Pull previous zone for hysteresis — None if first scan or
+            # ticker wasn't in the prior snapshot.
+            prev_zone = None
+            if previous_zones:
+                prev_zone = previous_zones.get(sym) \
+                    or previous_zones.get(sym.upper()) \
+                    or previous_zones.get(sym.replace(".IS", ""))
             try:
-                return score_symbol(metrics, df, ownership, cap_tl=cap_tl,
-                                     scan_now=scan_now)
+                return score_symbol(
+                    metrics, df, ownership, cap_tl=cap_tl,
+                    scan_now=scan_now, previous_zone=prev_zone,
+                )
             except Exception as exc:
                 log.warning("BullWatch %s: scoring failed: %r", sym, exc)
                 return None

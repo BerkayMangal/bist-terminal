@@ -175,7 +175,8 @@ class TestScanScanNowPlumbing:
         from engine import bullwatch
         captured_scan_nows = []
 
-        def _spy_score_symbol(metrics, df, ownership, cap_tl=None, scan_now=None):
+        def _spy_score_symbol(metrics, df, ownership, cap_tl=None,
+                              scan_now=None, previous_zone=None, **_kw):
             captured_scan_nows.append(scan_now)
             from engine.bullwatch import BullWatchResult
             return BullWatchResult(
