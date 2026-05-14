@@ -115,7 +115,17 @@ HISTORY_CACHE_SIZE = 500
 # ================================================================
 SCAN_MAX_WORKERS = 8  # HOTFIX: 15→8 rate limit koruması
 RAW_PREFETCH_WORKERS = 10
-BATCH_HISTORY_WORKERS = 5  # HOTFIX: 10→5 rate limit koruması
+# Stage 5 (Great Overhaul): 5→8 — measured cold scan of 437 tickers took
+# >5 min in history_fetch alone with 5 workers; this puts the BullWatch
+# watchdog (8 min) under pressure. 8 workers matches the proven pattern
+# in providers.py:468 (parallel financial endpoint fetches) without
+# triggering borsapy rate limits in observed prod traffic.
+BATCH_HISTORY_WORKERS = 8
+# Stage 5: 1.0s → 0.3s. The original 1.0s was a defensive rate-limit
+# guard; borsapy's own pacing already covers this. 0.3s preserves a
+# small breath between chunks without compounding into multi-second
+# wait when there are 17+ chunks (437 / 25 ticker chunk size).
+BATCH_HISTORY_CHUNK_SLEEP_SEC = 0.3
 BACKGROUND_SCAN_INTERVAL_OPEN = 3600
 BACKGROUND_SCAN_INTERVAL_CLOSED = 10800
 BACKGROUND_SCAN_STARTUP_DELAY = 1

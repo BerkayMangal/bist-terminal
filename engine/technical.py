@@ -221,11 +221,20 @@ def batch_download_history(
     symbols: list[str],
     period: str = "1y",
     interval: str = "1d",
+    progress_callback=None,
 ) -> dict[str, pd.DataFrame]:
-    """borsapy ile toplu price history indir."""
+    """borsapy ile toplu price history indir.
+
+    Stage 5: optional ``progress_callback(done, total)`` propagates to
+    the underlying borsapy chunk loop so callers can update UI state
+    while a large fetch is in flight.
+    """
     if BORSAPY_AVAILABLE_TECH:
         from data.providers import batch_download_history_v9
-        result = batch_download_history_v9(symbols, period=period, interval=interval)
+        result = batch_download_history_v9(
+            symbols, period=period, interval=interval,
+            progress_callback=progress_callback,
+        )
         if result:
             log.info(f"batch_download (borsapy): {len(result)}/{len(symbols)} başarılı")
             return result
