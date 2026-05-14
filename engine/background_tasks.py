@@ -72,6 +72,14 @@ log = logging.getLogger("bistbull.bgtasks")
 HEATMAP_STARTUP_DELAY:    int = 180   # 3 minutes (was 900)
 HEATMAP_REFRESH_INTERVAL: int = 1800  # OPT: 600→1800 (10dk→30dk, API yükü -%66)
 
+# Stage 4 perf: heatmap fetcher tuning. 8 workers stays well under
+# borsapy's observed rate-limit ceiling (it tolerates ~25 concurrent
+# fast_info calls), per-ticker 6s prevents a single stuck symbol from
+# blocking the budget, total budget 30s caps worst-case wall-time.
+HEATMAP_FETCH_WORKERS:      int = 8
+HEATMAP_PER_TICKER_TIMEOUT: int = 6
+HEATMAP_FETCH_BUDGET_SEC:   int = 30
+
 # Paper trade: 90s startup delay, then every 5 min.
 PAPER_TRADE_STARTUP_DELAY:    int = 90   # 1.5 minutes
 PAPER_TRADE_INTERVAL:          int = 300  # 5 minutes
@@ -127,40 +135,67 @@ def _fetch_heatmap_data() -> list[dict]:
 
     Returns a flat list of stock dicts. Returns [] on total failure.
     This function is synchronous — always call via asyncio.to_thread().
+
+    Stage 4 (Great Overhaul): the per-ticker fetch is now parallelized
+    via ThreadPoolExecutor. Previously 108 tickers × ~500ms borsapy ≈
+    54s sequential; now ~7-8s with 8 workers. Per-ticker timeout caps
+    a single bad symbol at 6s.
     """
     items    = get_top10_items()
     item_map = {item["ticker"]: item for item in items}
     results: list[dict] = []
 
-    # ── 1. borsapy path ────────────────────────────────────────────
-    if BORSAPY_AVAILABLE:
-        try:
-            import borsapy as bp_m
-            for t in UNIVERSE:
+    # ── 1. borsapy path (parallel) ─────────────────────────────────
+    if not BORSAPY_AVAILABLE:
+        return results
+
+    try:
+        import borsapy as bp_m
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        from concurrent.futures import TimeoutError as _FutureTimeout
+
+        def _fetch_one(t: str) -> Optional[dict]:
+            try:
+                _tk  = bp_m.Ticker(t)
+                fi   = _tk.fast_info
+                last = getattr(fi, "last_price", None)
+                prev = getattr(fi, "previous_close", None)
+                mcap = getattr(fi, "market_cap", None)
+                if last is None or prev is None or prev <= 0:
+                    return None
+                chg = (last - prev) / prev * 100.0
+                si  = item_map.get(t)
+                return {
+                    "ticker":     t,
+                    "price":      round(float(last), 2),
+                    "change_pct": round(chg, 2),
+                    "market_cap": float(mcap) if mcap else None,
+                    "sector":     (si.get("sector", "Diger") if si else "Diger") or "Diger",
+                    "score":      si["overall"] if si else None,
+                }
+            except Exception:
+                return None
+
+        timeouts = 0
+        with ThreadPoolExecutor(max_workers=HEATMAP_FETCH_WORKERS) as pool:
+            futs = {pool.submit(_fetch_one, t): t for t in UNIVERSE}
+            for fut in as_completed(futs, timeout=HEATMAP_FETCH_BUDGET_SEC):
                 try:
-                    _tk  = bp_m.Ticker(t)
-                    fi   = _tk.fast_info
-                    last = getattr(fi, "last_price", None)
-                    prev = getattr(fi, "previous_close", None)
-                    mcap = getattr(fi, "market_cap", None)
-                    if last is not None and prev is not None and prev > 0:
-                        chg = (last - prev) / prev * 100.0
-                        si  = item_map.get(t)
-                        results.append({
-                            "ticker":     t,
-                            "price":      round(float(last), 2),
-                            "change_pct": round(chg, 2),
-                            "market_cap": float(mcap) if mcap else None,
-                            "sector":     (si.get("sector", "Diger") if si else "Diger") or "Diger",
-                            "score":      si["overall"] if si else None,
-                        })
+                    row = fut.result(timeout=HEATMAP_PER_TICKER_TIMEOUT)
+                except _FutureTimeout:
+                    timeouts += 1
+                    continue
                 except Exception:
                     continue
-            if results:
-                log.debug(f"Heatmap borsapy: {len(results)} hisse")
-                return results
-        except Exception as e:
-            log.warning(f"Heatmap borsapy hatasi: {e}")
+                if row is not None:
+                    results.append(row)
+        if timeouts:
+            log.info("Heatmap: %d ticker timed out (>%ds)",
+                     timeouts, HEATMAP_PER_TICKER_TIMEOUT)
+        if results:
+            log.debug(f"Heatmap borsapy: {len(results)} hisse (parallel)")
+    except Exception as e:
+        log.warning(f"Heatmap borsapy hatasi: {e}")
 
     return results
 
