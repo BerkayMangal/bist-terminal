@@ -3,7 +3,7 @@
 // ===== STATE =====
 const S={page:'home',scan:null,cross:null,macro:null,dash:null,takas:null,social:null,hero:null,quote:null,book:null,wl:JSON.parse(localStorage.getItem('bb_wl')||'[]'),seen:JSON.parse(localStorage.getItem('bb_seen')||'[]'),_alerts:[]};
 const QT=['ASELS','THYAO','BIMAS','KCHOL','TUPRS','AKBNK','GARAN','FROTO','TOASO','PGSUS'];
-const PAGES=[{id:'nasil',label:'Nasıl?',icon:'❓'},{id:'home',label:'Ana Sayfa',icon:'🏠'},{id:'akis',label:'Akış',icon:'📰'},{id:'radar',label:'Radar',icon:'📡'},{id:'bullwatch',label:'BullWatch',icon:'🐂'},{id:'alarmlar',label:'Alarmlar',icon:'🚨'},{id:'bullalfa',label:'BullAlfa',icon:'🎯'},{id:'viop',label:'VIOP',icon:'🎲'},{id:'bilancolar',label:'Bilançolar',icon:'📊'},{id:'makro',label:'Makro',icon:'🌍'},{id:'portfoy',label:'Portföy',icon:'💼'}];
+const PAGES=[{id:'nasil',label:'Nasıl?',icon:'❓'},{id:'home',label:'Ana Sayfa',icon:'🏠'},{id:'akis',label:'Akış',icon:'📰'},{id:'radar',label:'Radar',icon:'📡'},{id:'bullwatch',label:'BullWatch',icon:'🐂'},{id:'alarmlar',label:'Alarmlar',icon:'🚨'},{id:'bullalfa',label:'BullAlfa',icon:'🎯'},{id:'viop',label:'VIOP',icon:'🎲'},{id:'bilancolar',label:'Bilançolar',icon:'📊'},{id:'makro',label:'Makro',icon:'🌍'},{id:'portfoy',label:'Portföy',icon:'💼'},{id:'diag',label:'Tanı',icon:'🔧'}];
 const $=s=>document.getElementById(s);
 
 // ===== XSS SANITIZER =====
@@ -257,6 +257,7 @@ function goPage(id){
   if(id==='home')renderHome();
   if(id==='akis')renderAkisPage();
   if(id==='viop')renderViopPage();
+  if(id==='diag')renderDiagPage();
   if(id==='radar')renderRadarPage();
   if(id==='cross'){goPage('bullalfa');BullAlfa&&BullAlfa._setMode&&BullAlfa._setMode('__SIGNALS__');return;}
   if(id==='bullwatch')renderBullwatchPage();
@@ -993,6 +994,166 @@ function renderViopPage(){
   }
 
   pg.innerHTML = h;
+}
+
+// ===== TANI / DIAGNOSTIC PAGE =====
+// Kullanıcı "BullWatch dönüyor birşey gelmiyor", "+ Aldım kaybettim" gibi
+// problemleri self-debug edebilsin. /api/diag/system tüm critical state'i
+// tek bir endpointte topluyor.
+async function loadDiag(){
+  try {
+    const r = await api('/api/diag/system');
+    S.diagSystem = (r && (r.value || r)) || {};
+  } catch(e) {
+    S.diagSystem = { error: String(e.message||e) };
+  }
+}
+
+async function forceBwReset(btn){
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Sıfırlanıyor…'; }
+  try {
+    const r = await fetch('/api/diag/bullwatch/force-reset', {method:'POST'});
+    const j = await r.json();
+    alert(`BullWatch scan reset: was_running=${j.was_running}, reset=${j.reset}`);
+    S.diagSystem = null;
+    renderDiagPage();
+  } catch(e) {
+    alert('Hata: ' + (e.message || e));
+    if (btn) { btn.disabled = false; btn.textContent = '🛑 BullWatch Scan Reset'; }
+  }
+}
+
+function renderDiagPage(){
+  const pg = $('pg-diag');
+  if (!S.diagSystem) {
+    pg.innerHTML = '<div class="ld"><div class="sp"></div><div class="ld-t">Sistem durumu kontrol ediliyor…</div></div>';
+    loadDiag().then(() => renderDiagPage());
+    return;
+  }
+  const d = S.diagSystem;
+  if (d.error) {
+    pg.innerHTML = `<div class="emp"><h3 style="color:var(--red)">Tanı yüklenemedi: ${esc(d.error)}</h3></div>`;
+    return;
+  }
+  const bw = d.bullwatch || {};
+  const kap = d.kap || {};
+  const pf = d.portfolio || {};
+  const viop = d.viop || {};
+  const ar = d.auto_refresh || {};
+
+  let h = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px">
+    <div>
+      <h2 style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-lg);color:var(--cyn)">🔧 Sistem Tanı</h2>
+      <p style="font-size:var(--fs-sm);color:var(--t3);margin-top:2px">Critical state'lerin tek bakışta sağlık raporu.</p>
+    </div>
+    <button class="btn btn-grn" onclick="S.diagSystem=null;loadDiag().then(()=>renderDiagPage())">🔄 Yenile</button>
+  </div>`;
+
+  // BullWatch state
+  const bwCol = bw.hung ? 'var(--red)' : bw.scan_running ? 'var(--ylw)' : bw.cache_populated ? 'var(--grn)' : 'var(--t3)';
+  const bwIcon = bw.hung ? '✕' : bw.scan_running ? '⏳' : bw.cache_populated ? '✓' : '?';
+  const bwLbl = bw.hung ? 'SCAN SIKIŞTI' : bw.scan_running ? 'SCAN ÇALIŞIYOR' : bw.cache_populated ? 'HAZIR' : 'BOŞ';
+  h += `<div class="card" style="margin-bottom:14px;border-left:3px solid ${bwCol}">
+    <div class="card-h"><span class="card-t">🐂 BullWatch</span><span style="color:${bwCol};font-weight:700;font-family:'JetBrains Mono',monospace;font-size:12px">${bwIcon} ${esc(bwLbl)}</span></div>
+    <div class="card-b" style="font-size:12px;line-height:1.6;font-family:'JetBrains Mono',monospace">
+      Cache: ${bw.items_count||0} item · ${bw.cache_populated?'populated':'boş'}<br>
+      ${bw.scan_running ? `Scan: <b>${bw.scan_progress||0}/${bw.scan_total||0}</b> · <b>${(bw.scan_elapsed_sec||0).toFixed(0)}s</b> geçti` : 'Scan: durdu'}
+      ${bw.hung ? `<br><span style="color:var(--red);font-weight:700">⚠️ 8+ dakikadır scan'a yanıt yok. Force reset gerekebilir.</span><br><button class="btn btn-sm" style="background:var(--redd);color:var(--red);margin-top:8px" onclick="forceBwReset(this)">🛑 BullWatch Scan Reset</button>` : ''}
+    </div>
+  </div>`;
+
+  // KAP feed
+  const kapAge = kap.newest_publish_date ? Math.round((Date.now() - new Date(kap.newest_publish_date).getTime())/3600000) : null;
+  const kapCol = kapAge != null && kapAge < 12 ? 'var(--grn)' : kapAge != null && kapAge < 48 ? 'var(--ylw)' : 'var(--red)';
+  h += `<div class="card" style="margin-bottom:14px;border-left:3px solid ${kapCol}">
+    <div class="card-h"><span class="card-t">📰 KAP Feed</span></div>
+    <div class="card-b" style="font-size:12px;line-height:1.6;font-family:'JetBrains Mono',monospace">
+      SQLite: ${kap.total_in_sqlite||0} kayıt · Redis: ${kap.total_in_redis||0}<br>
+      Son disclosure: ${kapAge != null ? kapAge + ' saat önce' : '—'}
+    </div>
+  </div>`;
+
+  // Portfolio
+  h += `<div class="card" style="margin-bottom:14px;border-left:3px solid var(--grn)">
+    <div class="card-h"><span class="card-t">💼 Portfolio</span></div>
+    <div class="card-b" style="font-size:12px;line-height:1.6;font-family:'JetBrains Mono',monospace">
+      Açık: <b>${pf.open_count||0}</b> · Kapalı: ${pf.closed_count||0} (${pf.winners||0}W / ${pf.losers||0}L)<br>
+      Toplam P&L: ${(pf.total_pnl_pct||0).toFixed(1)}% · Win rate: ${pf.win_rate!=null?pf.win_rate+'%':'—'}
+    </div>
+  </div>`;
+
+  // VIOP
+  h += `<div class="card" style="margin-bottom:14px;border-left:3px solid var(--gold)">
+    <div class="card-h"><span class="card-t">🎲 VIOP</span></div>
+    <div class="card-b" style="font-size:12px;line-height:1.6;font-family:'JetBrains Mono',monospace">
+      Bugün: ${viop.total_today||0} contract · Son snap: ${esc(viop.snap_date_latest||'—')}
+    </div>
+  </div>`;
+
+  // Auto-refresh
+  const lc = (ar.last_cycle) || null;
+  h += `<div class="card" style="margin-bottom:14px;border-left:3px solid var(--cyn)">
+    <div class="card-h"><span class="card-t">🔄 Auto-Refresh</span></div>
+    <div class="card-b" style="font-size:12px;line-height:1.6;font-family:'JetBrains Mono',monospace">
+      ${lc ? `Son cycle: ${(lc.duration_sec||0).toFixed(0)}s · ${lc.succeeded||0}/${lc.attempted||0} OK · ${lc.score_change_count||0} skor değişti` : 'Henüz çalışmadı'}
+    </div>
+  </div>`;
+
+  // Quick action probes
+  h += `<div class="card" style="margin-bottom:14px">
+    <div class="card-h"><span class="card-t">🧪 Hızlı Test</span></div>
+    <div class="card-b" style="font-size:12px;line-height:1.6">
+      <p style="color:var(--t3);margin-bottom:10px">Self-debug için bir test "+ Aldım" sırası çalıştırır — bug raporu için kullan.</p>
+      <button class="btn btn-sm btn-grn" onclick="runPortfolioE2ETest(this)">🧪 Portfolio E2E (test pozisyon aç+listele+kapat)</button>
+      <div id="diagE2EOut" style="margin-top:12px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--t2);line-height:1.6"></div>
+    </div>
+  </div>`;
+  pg.innerHTML = h;
+}
+
+async function runPortfolioE2ETest(btn){
+  const out = document.getElementById('diagE2EOut');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Çalışıyor…'; }
+  out.innerHTML = '';
+  const log = (msg, ok) => {
+    out.innerHTML += `<div style="color:${ok?'var(--grn)':'var(--red)'}">${ok?'✓':'✕'} ${esc(msg)}</div>`;
+  };
+  const ticker = 'TST' + Math.floor(Math.random()*900+100);
+  try {
+    // Step 1: Open
+    const r1 = await fetch('/api/portfolio/positions', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ticker, entry_price: 10.5, lot: 100, notes: 'e2e diag'}),
+    });
+    const j1 = await r1.json();
+    if (!j1.position) throw new Error('open failed: ' + JSON.stringify(j1));
+    const pid = j1.position.position_id;
+    log(`POST açıldı: ${ticker} (id ${pid.slice(0,8)}...)`, true);
+
+    // Step 2: List & check appearance
+    const r2 = await api('/api/portfolio/positions');
+    const found = (r2.items || []).find(p => p.ticker === ticker);
+    log(`GET listede ${found?'BULDU':'BULAMADI'}: ${ticker}`, !!found);
+    if (!found) throw new Error('NOT IN LIST — backend bug!');
+    if (!found.signal) throw new Error('signal field missing');
+    log(`Signal verdict: ${found.signal.verdict}`, true);
+
+    // Step 3: Close (cleanup)
+    const r3 = await fetch('/api/portfolio/positions/' + pid + '/close', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({exit_price: 11.0, exit_reason: 'e2e cleanup'}),
+    });
+    const j3 = await r3.json();
+    log(`POST close: ok=${j3.ok}`, !!j3.ok);
+
+    log('🎉 Tüm flow tamam — portfolio sistemi sağlıklı.', true);
+  } catch(e) {
+    log('HATA: ' + (e.message || e), false);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '🧪 Portfolio E2E (test pozisyon aç+listele+kapat)'; }
+  }
 }
 
 // ===== AKIŞ (UNIFIED ACTIVITY FEED) =====
@@ -5068,20 +5229,57 @@ async function submitBwOpenPosition(ticker, btn){
     });
     const j = await r.json();
     if (j.error || !r.ok) throw new Error(j.error || 'open failed');
-    // Success — close modal, drop position cache, ping success
+    // Success — close modal, drop position cache, build a CLEAR toast.
     document.getElementById('bwOpenPosOv').remove();
     S.bwPositions = null;
-    // Subtle toast — re-use the snapshot toast pattern
+    // Toast with action button — kullanıcı pozisyonun nereye gittiğini
+    // anlamadığı için (audit feedback) explicit "Portföy'e Git" linki
+    // ve yeterli süre.
     const toast = document.createElement('div');
-    toast.style.cssText = 'position:fixed;bottom:20px;right:20px;z-index:10000;padding:12px 18px;background:var(--grn);color:#000;font-weight:700;border-radius:var(--rad);box-shadow:0 4px 20px rgba(34,197,94,.4)';
-    toast.textContent = `✓ ${ticker} pozisyonu açıldı (${lot} lot × ${price.toFixed(2)} TL)`;
+    toast.id = 'bwPosToast';
+    toast.style.cssText = 'position:fixed;bottom:20px;right:20px;z-index:10000;padding:14px 16px;background:var(--grn);color:#000;font-weight:700;border-radius:var(--rad);box-shadow:0 6px 24px rgba(34,197,94,.45);max-width:340px;font-size:13px;line-height:1.4';
+    toast.innerHTML = `<div style="margin-bottom:10px">✓ ${esc(ticker)} pozisyonu açıldı<br><span style="font-weight:500;opacity:.9;font-size:11px">${lot} lot × ${price.toFixed(2)} TL = ${(lot*price).toFixed(0)} TL maliyet</span></div>
+      <div style="display:flex;gap:6px;justify-content:flex-end">
+        <button onclick="this.parentElement.parentElement.remove()" style="background:transparent;border:1px solid #000;color:#000;padding:5px 10px;border-radius:4px;font-size:11px;font-weight:700;cursor:pointer">Tamam</button>
+        <button onclick="this.parentElement.parentElement.remove();goPage('portfoy')" style="background:#000;color:var(--grn);border:0;padding:5px 12px;border-radius:4px;font-size:11px;font-weight:700;cursor:pointer">📂 Portföy'e Git →</button>
+      </div>`;
     document.body.appendChild(toast);
-    setTimeout(() => toast.remove(), 3500);
+    // Auto-dismiss longer (8s instead of 3.5) so user has time to react
+    setTimeout(() => { const t = document.getElementById('bwPosToast'); if (t) t.remove(); }, 8000);
+    // Update the nav badge so user knows there's a new position
+    _bumpPortfolioBadge();
   } catch(e) {
     err.textContent = String(e.message || e);
     err.style.display = 'block';
     if (btn) { btn.disabled = false; btn.textContent = '💼 Pozisyonu Aç'; }
   }
+}
+
+// Nav "Portföy" tab'ına küçük yeşil nokta ekle — kullanıcı yeni pozisyonun
+// orada olduğunu anlasın. Portföy sayfasını açtığında nokta kaybolur.
+function _bumpPortfolioBadge(){
+  try {
+    const btn = document.querySelector("[onclick*=\"goPage('portfoy')\"]");
+    if (btn && !btn.querySelector('.pf-badge-dot')) {
+      const dot = document.createElement('span');
+      dot.className = 'pf-badge-dot';
+      dot.style.cssText = 'display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--grn);margin-left:5px;box-shadow:0 0 8px var(--grn);animation:pfPulse 1.5s infinite';
+      btn.appendChild(dot);
+      // Inject @keyframes once
+      if (!document.getElementById('pfBadgeKf')) {
+        const st = document.createElement('style');
+        st.id = 'pfBadgeKf';
+        st.textContent = '@keyframes pfPulse{0%,100%{opacity:1}50%{opacity:.4}}';
+        document.head.appendChild(st);
+      }
+    }
+  } catch(e) {}
+}
+
+function _clearPortfolioBadge(){
+  try {
+    document.querySelectorAll('.pf-badge-dot').forEach(d => d.remove());
+  } catch(e) {}
 }
 
 async function closeBwPosition(positionId, ticker){
@@ -5158,6 +5356,8 @@ function _bwTradePositionsSection(){
 
 function renderPortfoyPage(){
 const pg=$('pg-portfoy');const pf=getPF();
+// Audit fix: kullanıcı portföye geldi, badge'i temizle.
+_clearPortfolioBadge();
 // Faz 5: Lazy-load BullWatch positions (server-tracked, with exit signals).
 // Mevcut localStorage portföy BOZULMADAN aşağıda kalıyor.
 if (!S.bwPositions && !S._bwPositionsLoading) {

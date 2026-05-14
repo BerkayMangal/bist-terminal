@@ -59,24 +59,52 @@ def _current_bw_items() -> dict[str, dict[str, Any]]:
     return out
 
 
-def _current_prices(tickers: list[str]) -> dict[str, float]:
-    """Cheap last-price fetch via borsapy fast_info. Falls back silently
-    on per-ticker errors."""
+def _current_prices(
+    tickers: list[str],
+    *,
+    timeout_per_ticker: float = 3.0,
+    max_workers: int = 4,
+) -> dict[str, float]:
+    """Cheap last-price fetch via borsapy fast_info. PARALLEL — eski
+    serial loop her ticker için 3-10s sürüyordu ve /api/portfolio/positions
+    endpoint'inin client tarafında timeout etmesine neden oluyordu.
+
+    Per-ticker timeout: borsapy bazen yanıt vermez; 3s'de kessin.
+    """
     out: dict[str, float] = {}
+    if not tickers:
+        return out
     try:
         import borsapy as bp
     except Exception:
         return out
-    for t in tickers:
-        sym = (t or "").upper().strip().replace(".IS", "")
+    syms = [
+        (t or "").upper().strip().replace(".IS", "")
+        for t in tickers if t
+    ]
+    syms = [s for s in syms if s]
+    if not syms:
+        return out
+
+    def _fetch_one(sym: str) -> tuple[str, Optional[float]]:
         try:
             tk = bp.Ticker(sym)
             fi = tk.fast_info
             lp = getattr(fi, "last_price", None)
-            if lp is not None:
-                out[sym] = float(lp)
+            return sym, float(lp) if lp is not None else None
         except Exception:
-            continue
+            return sym, None
+
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    with ThreadPoolExecutor(max_workers=min(max_workers, len(syms))) as pool:
+        futures = {pool.submit(_fetch_one, s): s for s in syms}
+        for fut in as_completed(futures, timeout=timeout_per_ticker * 2):
+            try:
+                sym, price = fut.result(timeout=timeout_per_ticker)
+                if price is not None:
+                    out[sym] = price
+            except Exception:
+                continue
     return out
 
 
@@ -118,24 +146,35 @@ async def api_portfolio_open(req: OpenPositionRequest):
 
 
 @router.get("/api/portfolio/positions")
-async def api_portfolio_list(refresh_prices: bool = True):
-    """Açık pozisyonlar + her biri için güncel exit signal."""
+async def api_portfolio_list(refresh_prices: bool = False):
+    """Açık pozisyonlar + her biri için güncel exit signal.
+
+    refresh_prices DEFAULT FALSE (audit fix) — borsapy fiyat fetch
+    network'e bağlı bekletiyordu, kullanıcı UI'de "+ Aldım sonra
+    portföyde gözükmedi" diyordu. Artık list call lokalde anında
+    döner; price refresh ayrı endpoint'te (POST .../refresh-prices).
+    """
     from infra import portfolio_storage
     from engine.portfolio_signals import compute_signals_for_open_positions
 
     positions = await asyncio.to_thread(portfolio_storage.get_open, 200)
     items = _current_bw_items()
     prices: dict[str, float] = {}
+    # Cheap path: only use prices from live BullWatch cache (no extra
+    # network fetch). User can hit explicit refresh-prices endpoint
+    # if they want fresh live prices.
+    for sym, it in items.items():
+        lp = (it.get("metrics") or {}).get("last_price")
+        if lp is not None:
+            try:
+                prices[sym] = float(lp)
+            except (TypeError, ValueError):
+                pass
+    # Optional: explicit refresh_prices=true → do the slow borsapy fetch
     if refresh_prices and positions:
-        # Only fetch prices for tickers we have positions in
         tickers = list({(p.get("ticker") or "").upper() for p in positions})
-        prices = await asyncio.to_thread(_current_prices, tickers)
-        # Also try the BW item's last_price if available
-        for sym, it in items.items():
-            if sym not in prices:
-                lp = (it.get("metrics") or {}).get("last_price")
-                if lp is not None:
-                    prices[sym] = float(lp)
+        live_prices = await asyncio.to_thread(_current_prices, tickers)
+        prices.update(live_prices)
     enriched = await asyncio.to_thread(
         compute_signals_for_open_positions,
         positions, items, prices,
@@ -143,6 +182,32 @@ async def api_portfolio_list(refresh_prices: bool = True):
     return success(
         {"items": enriched, "count": len(enriched)},
         extra_meta={"endpoint": "portfolio.list"},
+    )
+
+
+@router.post("/api/portfolio/positions/refresh-prices")
+async def api_portfolio_refresh_prices():
+    """Tüm açık pozisyonlar için borsapy'den fresh fiyat çek. Yavaş
+    olabilir (her ticker 1-3s) — kullanıcı isterse manuel tetikler."""
+    from infra import portfolio_storage
+    from engine.portfolio_signals import compute_signals_for_open_positions
+    positions = await asyncio.to_thread(portfolio_storage.get_open, 200)
+    if not positions:
+        return success(
+            {"items": [], "count": 0, "refreshed": 0},
+            extra_meta={"endpoint": "portfolio.refresh_prices"},
+        )
+    tickers = list({(p.get("ticker") or "").upper() for p in positions})
+    prices = await asyncio.to_thread(_current_prices, tickers)
+    items = _current_bw_items()
+    enriched = await asyncio.to_thread(
+        compute_signals_for_open_positions,
+        positions, items, prices,
+    )
+    return success(
+        {"items": enriched, "count": len(enriched),
+         "refreshed": len(prices)},
+        extra_meta={"endpoint": "portfolio.refresh_prices"},
     )
 
 

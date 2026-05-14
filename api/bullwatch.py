@@ -268,24 +268,60 @@ def _read_snapshot_payload(
         return None
 
 
+# Watchdog: scan'ler bazen borsapy timeout'ları yüzünden 427/437'de
+# takılı kalabiliyor — production'da 491s sonucu olmadan asılı kaldığı
+# gözlemlendi. Bu cap'i geçen scan'ı zorla bitir ve partial sonuç publish et.
+_SCAN_WATCHDOG_SEC = 8 * 60        # 8 min hard cap
+
+
 async def _refresh_and_persist(min_score: float = 0.0) -> Optional[dict]:
     """Run one full scan and persist it. Idempotent — returns None if a
     scan is already in flight. Used by the background refresh loop and by
     the request-triggered `_schedule_background_refresh`."""
     global _SCAN_DONE
     if _CACHE["running"]:
-        log.debug("BullWatch refresh: scan already in flight, skipping")
-        return None
+        # Audit fix: if scan has been "running" for too long, it's
+        # almost certainly hung on borsapy stragglers. Force-reset
+        # the flag so a new scan can run.
+        started_at = _CACHE.get("scan_started_at") or 0
+        if started_at and (time.time() - started_at) > _SCAN_WATCHDOG_SEC:
+            log.warning(
+                "BullWatch scan watchdog: %.0fs elapsed (cap %ds), force-resetting",
+                time.time() - started_at, _SCAN_WATCHDOG_SEC,
+            )
+            _CACHE["running"] = False
+            if _SCAN_DONE is not None:
+                _SCAN_DONE.set()
+        else:
+            log.debug("BullWatch refresh: scan already in flight, skipping")
+            return None
     _CACHE["running"] = True
+    _CACHE["scan_started_at"] = time.time()
     _SCAN_DONE = asyncio.Event()
     try:
         t0 = time.time()
         # Snapshot the previous in-mem items BEFORE we overwrite them,
         # so the membership detector can diff old-vs-new.
         prev_items_for_diff = list(((_CACHE.get("items") or {}).get("items")) or [])
-        payload = await asyncio.get_event_loop().run_in_executor(
-            None, _run_scan, min_score, None, None, False,
-        )
+        # Wrap _run_scan in an asyncio timeout so a hung scan can't pin
+        # the running flag indefinitely. SCAN_TIMEOUT_SEC (1200) is the
+        # inner hard cap; we add our own watchdog at 8 min.
+        try:
+            payload = await asyncio.wait_for(
+                asyncio.get_event_loop().run_in_executor(
+                    None, _run_scan, min_score, None, None, False,
+                ),
+                timeout=_SCAN_WATCHDOG_SEC,
+            )
+        except asyncio.TimeoutError:
+            log.warning(
+                "BullWatch scan exceeded %ds watchdog — publishing partial "
+                "from previous snapshot",
+                _SCAN_WATCHDOG_SEC,
+            )
+            # Best-effort: keep the user's UI working with the LAST good
+            # snapshot. Don't write a new partial — we don't trust it.
+            return None
         scan_id = _persist_snapshot(payload)
         _CACHE["items"] = payload
         _CACHE["as_of"] = payload["as_of"]

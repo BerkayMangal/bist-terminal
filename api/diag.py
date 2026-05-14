@@ -75,6 +75,89 @@ async def api_diag_fundamentals_summary(
     )
 
 
+@router.get("/api/diag/system")
+async def api_diag_system():
+    """Sistem geneli sağlık özeti — kullanıcı /diag sayfasında self-debug
+    yapabilsin diye. Critical state'leri tek endpointte topluyor:
+      - BullWatch scan running mi, ne kadar oldu, sıkıştı mı
+      - Cache populated mi, snapshot var mı
+      - Background loops çalışıyor mu
+      - Portfolio + VIOP + KAP storage counts
+    """
+    import time as _t
+    out: dict = {
+        "ok": True,
+        "timestamp": _t.time(),
+        "bullwatch": {},
+        "kap": {},
+        "portfolio": {},
+        "viop": {},
+        "auto_refresh": {},
+    }
+    # BullWatch
+    try:
+        from api.bullwatch import _CACHE
+        running = bool(_CACHE.get("running"))
+        started = _CACHE.get("scan_started_at") or 0
+        elapsed = (_t.time() - started) if (running and started) else None
+        items = ((_CACHE.get("items") or {}).get("items")) or []
+        out["bullwatch"] = {
+            "cache_populated": bool(items),
+            "items_count": len(items),
+            "scan_running": running,
+            "scan_elapsed_sec": round(elapsed, 1) if elapsed else None,
+            "scan_progress": _CACHE.get("progress"),
+            "scan_total": _CACHE.get("total"),
+            "hung": bool(elapsed and elapsed > 480),  # 8 min watchdog
+        }
+    except Exception as exc:
+        out["bullwatch"] = {"error": str(exc)}
+    # KAP storage
+    try:
+        from infra import kap_storage
+        out["kap"] = kap_storage.get_stats()
+    except Exception as exc:
+        out["kap"] = {"error": str(exc)}
+    # Portfolio
+    try:
+        from infra import portfolio_storage
+        out["portfolio"] = portfolio_storage.get_stats()
+    except Exception as exc:
+        out["portfolio"] = {"error": str(exc)}
+    # VIOP
+    try:
+        from infra import viop_storage
+        out["viop"] = viop_storage.get_stats()
+    except Exception as exc:
+        out["viop"] = {"error": str(exc)}
+    # Auto-refresh
+    try:
+        from engine.auto_refresh_stale import get_last_cycle
+        out["auto_refresh"] = {"last_cycle": get_last_cycle()}
+    except Exception as exc:
+        out["auto_refresh"] = {"error": str(exc)}
+    return success(out, extra_meta={"endpoint": "diag.system"})
+
+
+@router.post("/api/diag/bullwatch/force-reset")
+async def api_diag_bw_force_reset():
+    """Admin emergency — BullWatch scan hung olduğunda zorla reset et.
+    Watchdog 8 dakika bekler ama bazen kullanıcı manuel resetlemek
+    isteyebilir."""
+    from api.bullwatch import _CACHE, _SCAN_DONE
+    out: dict = {"reset": False, "was_running": False}
+    if _CACHE.get("running"):
+        out["was_running"] = True
+        _CACHE["running"] = False
+        out["reset"] = True
+        try:
+            if _SCAN_DONE is not None:
+                _SCAN_DONE.set()
+        except Exception:
+            pass
+    return success(out, extra_meta={"endpoint": "diag.bw.force_reset"})
+
+
 @router.get("/api/diag/auto-refresh/status")
 async def api_diag_auto_refresh_status():
     """Last cycle telemetry from engine.auto_refresh_stale.
