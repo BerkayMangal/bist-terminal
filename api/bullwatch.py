@@ -732,6 +732,45 @@ async def api_bullwatch_watchlist_state(
     })
 
 
+@router.get("/api/bullwatch/sector-rotation")
+async def api_bullwatch_sector_rotation(
+    window_days: int = 7,
+    include_alarms: bool = True,
+    include_membership: bool = True,
+):
+    """Tahtacı sektör rotasyonu — hangi sektör ısınıyor, hangisi soğuyor.
+
+    Mevcut alarm storage + membership events üzerinden per-sektör net
+    aktivite skoru hesaplar. Read-only — yan etki yok.
+
+    Trend bands:
+      ≥6  → 🔥 hot      (sektör ısınıyor)
+      ≥2  → ⚡ warm
+      -2..2 → ➡️ neutral
+      ≤-2 → ❄️ cooling
+    """
+    from engine.bullwatch_sector_rotation import compute_rotation
+    if window_days < 1 or window_days > 90:
+        window_days = 7
+    data = await asyncio.get_event_loop().run_in_executor(
+        None, compute_rotation,
+        window_days, include_alarms, include_membership,
+    )
+    return success(data, extra_meta={"endpoint": "bullwatch.sector_rotation"})
+
+
+@router.get("/api/bullwatch/sector-rotation/summary")
+async def api_bullwatch_sector_rotation_summary(window_days: int = 7):
+    """Banner aggregate — kaç sektör ısınıyor / soğuyor."""
+    from engine.bullwatch_sector_rotation import get_rotation_summary
+    if window_days < 1 or window_days > 90:
+        window_days = 7
+    data = await asyncio.get_event_loop().run_in_executor(
+        None, get_rotation_summary, window_days,
+    )
+    return success(data, extra_meta={"endpoint": "bullwatch.sector_rotation.summary"})
+
+
 @router.get("/api/bullwatch/pre-alarms")
 async def api_bullwatch_pre_alarms(
     score_min: float = 70.0,
