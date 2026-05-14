@@ -83,6 +83,53 @@ async def api_viop_history(
     )
 
 
+@router.get("/api/viop/uoa")
+async def api_viop_uoa(
+    kind: Optional[str] = Query(
+        None, description="option | future (default: both)"
+    ),
+    min_score: float = Query(
+        2.0, ge=0.0, le=20.0,
+        description="Minimum z-score for inclusion (2.0 = ~95th percentile)",
+    ),
+    include_tentative: bool = Query(
+        False, description="Include contracts with < 5 baseline days",
+    ),
+    baseline_days: int = Query(30, ge=5, le=180),
+    limit: int = Query(50, ge=1, le=200),
+):
+    """Today's unusual options activity — top z-score contracts.
+
+    BistBull's BIST analog of Unusual Whales / Cheddar Flow. Each
+    contract scored against ITS OWN rolling baseline (so a thin
+    option's small spike still ranks against its history, not against
+    the universe's mean).
+    """
+    from engine.viop_uoa import get_today_anomalies
+    items = await asyncio.to_thread(
+        get_today_anomalies,
+        kind, min_score, include_tentative, baseline_days, limit,
+    )
+    return success(
+        {"items": items, "count": len(items),
+         "min_score": min_score, "baseline_days": baseline_days},
+        extra_meta={"endpoint": "viop.uoa"},
+    )
+
+
+@router.get("/api/viop/uoa/summary")
+async def api_viop_uoa_summary(
+    min_score: float = Query(2.0, ge=0.0, le=20.0),
+    baseline_days: int = Query(30, ge=5, le=180),
+):
+    """Top-line UOA stats for the VIOP tab banner."""
+    from engine.viop_uoa import get_summary
+    data = await asyncio.to_thread(
+        get_summary, baseline_days, min_score,
+    )
+    return success(data, extra_meta={"endpoint": "viop.uoa.summary"})
+
+
 @router.post("/api/viop/refresh")
 async def api_viop_refresh():
     """Manual ingest trigger — same code path as the background loop.
