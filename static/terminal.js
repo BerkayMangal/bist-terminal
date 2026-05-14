@@ -3,7 +3,7 @@
 // ===== STATE =====
 const S={page:'home',scan:null,cross:null,macro:null,dash:null,takas:null,social:null,hero:null,quote:null,book:null,wl:JSON.parse(localStorage.getItem('bb_wl')||'[]'),seen:JSON.parse(localStorage.getItem('bb_seen')||'[]'),_alerts:[]};
 const QT=['ASELS','THYAO','BIMAS','KCHOL','TUPRS','AKBNK','GARAN','FROTO','TOASO','PGSUS'];
-const PAGES=[{id:'nasil',label:'Nasıl?',icon:'❓'},{id:'home',label:'Ana Sayfa',icon:'🏠'},{id:'akis',label:'Akış',icon:'📰'},{id:'radar',label:'Radar',icon:'📡'},{id:'bullwatch',label:'BullWatch',icon:'🐂'},{id:'alarmlar',label:'Alarmlar',icon:'🚨'},{id:'bullalfa',label:'BullAlfa',icon:'🎯'},{id:'bilancolar',label:'Bilançolar',icon:'📊'},{id:'makro',label:'Makro',icon:'🌍'},{id:'portfoy',label:'Portföy',icon:'💼'}];
+const PAGES=[{id:'nasil',label:'Nasıl?',icon:'❓'},{id:'home',label:'Ana Sayfa',icon:'🏠'},{id:'akis',label:'Akış',icon:'📰'},{id:'radar',label:'Radar',icon:'📡'},{id:'bullwatch',label:'BullWatch',icon:'🐂'},{id:'alarmlar',label:'Alarmlar',icon:'🚨'},{id:'bullalfa',label:'BullAlfa',icon:'🎯'},{id:'viop',label:'VIOP',icon:'🎲'},{id:'bilancolar',label:'Bilançolar',icon:'📊'},{id:'makro',label:'Makro',icon:'🌍'},{id:'portfoy',label:'Portföy',icon:'💼'}];
 const $=s=>document.getElementById(s);
 
 // ===== XSS SANITIZER =====
@@ -256,6 +256,7 @@ function goPage(id){
   try { window.scrollTo({top:0, behavior:'instant'}); } catch (e) { window.scrollTo(0,0); }
   if(id==='home')renderHome();
   if(id==='akis')renderAkisPage();
+  if(id==='viop')renderViopPage();
   if(id==='radar')renderRadarPage();
   if(id==='cross'){goPage('bullalfa');BullAlfa&&BullAlfa._setMode&&BullAlfa._setMode('__SIGNALS__');return;}
   if(id==='bullwatch')renderBullwatchPage();
@@ -687,6 +688,231 @@ async function loadBook(){try{S.book=await api('/api/book');}catch(e){}}
 async function loadMarketStatus(){try{S.marketStatus=await api('/api/market-status');}catch(e){}}
 async function loadMacro(){try{S.macro=await cachedApi('/api/macro');const el=$('macMini');if(el)el.innerHTML=renderMacMini(S.macro.items||[]);const ng=$('nabGrid');if(ng)ng.innerHTML=renderNabiz(S.macro.items||[]);renderTickerBar(S.macro.items||[]);loadHomeAction();}catch(e){console.error('macro:',e);}}
 function renderTickerBar(items){const tb=$('tbar');const inner=items.map(m=>`<div class="tbar-i"><span style="color:var(--t2);font-weight:600">${esc(m.flag||'')} ${esc(m.key||m.name)}</span><span style="color:var(--t1)">${fN(m.price,m.key?.includes('TRY')?4:2)}</span><span style="color:${cC(m.change_pct)};font-size:10px">${cS(m.change_pct)}%</span></div>`).join('');tb.innerHTML=`<div class="tbar-inner">${inner}${inner}</div>`;}
+
+// ===== VIOP (options + futures, UOA + Tahtacı overlay) =====
+// 3 view: overlay (default, killer feature) / uoa / today (raw snapshot)
+async function loadViop(force){
+  const view = S._viopView || 'overlay';
+  const cacheKey = '_viop_' + view;
+  if (S[cacheKey] && !force) return S[cacheKey];
+
+  let url, payload;
+  if (view === 'overlay') {
+    url = '/api/viop/tahtaci-overlay?min_uoa_score=1.5&kap_window_days=14&limit=40';
+  } else if (view === 'uoa') {
+    const minS = S._viopMinScore || 2.0;
+    const kind = S._viopKind || '';
+    url = `/api/viop/uoa?min_score=${minS}&include_tentative=false&limit=60${kind?'&kind='+kind:''}`;
+  } else {
+    const kind = S._viopKind || '';
+    url = `/api/viop/today?limit=80${kind?'&kind='+kind:''}`;
+  }
+  try {
+    const [main, summary, health] = await Promise.all([
+      api(url),
+      api('/api/viop/tahtaci-overlay/summary').catch(()=>null),
+      api('/api/viop/health').catch(()=>null),
+    ]);
+    const v = (main && (main.value || main)) || {};
+    const s = (summary && (summary.value || summary)) || {};
+    const h = (health && (health.value || health)) || {};
+    payload = {
+      items: v.items || [],
+      summary: s,
+      health: h,
+      view, fetched_at: Date.now(),
+    };
+    S[cacheKey] = payload;
+  } catch(e) {
+    console.warn('viop fetch failed', e);
+    payload = { items: [], summary: {}, health: {}, view, error: String(e.message||e) };
+  }
+  return payload;
+}
+
+function _viopBadge(label, n, col) {
+  return `<span style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:var(--rad);background:${col}15;color:${col};font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700">${esc(label)} <b style="margin-left:2px">${n}</b></span>`;
+}
+
+function _viopOverlayRow(it, i, total) {
+  const u = it.uoa || {};
+  const ov = it.overlay || {};
+  const sigs = ov.signals || [];
+  const score = (ov.overlay_score || 0).toFixed(1);
+  const uoaScore = (u.score || 0).toFixed(1);
+  const ratio = u.ratio ? `${u.ratio.toFixed(1)}×` : '—';
+  const code = it.code || '';
+  const contract = it.contract || '';
+  const underlying = it.underlying || '?';
+  const sideCol = it.side === 'C' ? 'var(--grn)' : it.side === 'P' ? 'var(--red)' : 'var(--cyn)';
+  const sideTxt = it.side === 'C' ? 'CALL' : it.side === 'P' ? 'PUT' : 'FUT';
+  const strike = it.strike != null ? `@ ${it.strike}` : '';
+  // KAP signal pills
+  const sigPills = sigs.map(s => {
+    const tagLabel = {
+      INSIDER: '🚨 INSIDER', KAP_ALERT: '⚠️ KAP', MNA: '🤝 M&A',
+      BUYBACK: '💰 BUYBACK', CAPITAL_CHANGE: '📈 CAPITAL',
+      MGMT_CHANGE: '👤 MGMT',
+    }[s.tag] || s.tag;
+    return `<span style="display:inline-flex;align-items:center;font-family:'JetBrains Mono',monospace;font-size:9px;padding:1px 6px;background:rgba(239,83,80,.12);color:var(--red);border:1px solid rgba(239,83,80,.3);border-radius:3px" title="${esc(s.subject||'')} · ${s.age_days||0}g önce">${esc(tagLabel)} · ${(s.age_days||0).toFixed(0)}g</span>`;
+  }).join(' ');
+  return `<div style="padding:11px 14px;${i<total-1?'border-bottom:1px solid var(--bdr);':''}cursor:pointer;transition:background .1s" onclick="loadTicker('${esc(underlying)}')" onmouseover="this.style.background='var(--bg3)'" onmouseout="this.style.background=''">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
+      <div style="flex:1;min-width:0">
+        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:3px">
+          <span style="font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:700;color:var(--cyn)">${esc(underlying)}</span>
+          <span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:${sideCol};font-weight:700;padding:1px 6px;background:${sideCol}15;border-radius:3px">${esc(sideTxt)} ${esc(strike)}</span>
+          <span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--t3)">${esc(it.expiry||'')}</span>
+        </div>
+        <div style="font-size:11px;color:var(--t3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;line-height:1.4">${esc(contract)}</div>
+        ${sigs.length ? `<div style="margin-top:6px;display:flex;gap:4px;flex-wrap:wrap">${sigPills}</div>` : ''}
+      </div>
+      <div style="text-align:right;font-size:10px;color:var(--t4);font-family:'JetBrains Mono',monospace;flex-shrink:0">
+        <div style="font-size:18px;font-weight:700;color:var(--gold)">${score}</div>
+        <div style="color:var(--t3)">UOA z=${uoaScore} · ${esc(ratio)}</div>
+        <div style="color:var(--t4);margin-top:2px">vol ${u.today_tl ? (u.today_tl/1e6).toFixed(1)+'M' : '—'}</div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function _viopUoaRow(it, i, total) {
+  const u = it.uoa || {};
+  const score = (u.score || 0).toFixed(1);
+  const ratio = u.ratio ? `${u.ratio.toFixed(1)}×` : '—';
+  const underlying = it.underlying || '?';
+  const sideCol = it.side === 'C' ? 'var(--grn)' : it.side === 'P' ? 'var(--red)' : 'var(--cyn)';
+  const sideTxt = it.side === 'C' ? 'CALL' : it.side === 'P' ? 'PUT' : 'FUT';
+  const strike = it.strike != null ? `@ ${it.strike}` : '';
+  return `<div style="padding:10px 14px;${i<total-1?'border-bottom:1px solid var(--bdr);':''}cursor:pointer" onclick="loadTicker('${esc(underlying)}')" onmouseover="this.style.background='var(--bg3)'" onmouseout="this.style.background=''">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+      <div style="flex:1;min-width:0">
+        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:2px">
+          <span style="font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:700;color:var(--cyn)">${esc(underlying)}</span>
+          <span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:${sideCol};font-weight:700;padding:1px 5px;background:${sideCol}15;border-radius:3px">${esc(sideTxt)} ${esc(strike)}</span>
+          <span style="font-family:'JetBrains Mono',monospace;font-size:9.5px;color:var(--t4)">${esc(it.expiry||'')} · ${esc(it.code)}</span>
+        </div>
+      </div>
+      <div style="text-align:right;font-family:'JetBrains Mono',monospace;flex-shrink:0">
+        <div style="font-size:16px;font-weight:700;color:var(--orn)">z=${score}</div>
+        <div style="font-size:10px;color:var(--t3)">${esc(ratio)} normalin · vol ${u.today_tl ? (u.today_tl/1e6).toFixed(1)+'M' : '—'}</div>
+        <div style="font-size:9.5px;color:var(--t4)">avg ${u.baseline_avg_tl ? (u.baseline_avg_tl/1e6).toFixed(2)+'M' : '—'} · ${u.baseline_days||0}g</div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function _viopTodayRow(it, i, total) {
+  const underlying = it.underlying || '?';
+  const sideCol = it.side === 'C' ? 'var(--grn)' : it.side === 'P' ? 'var(--red)' : 'var(--cyn)';
+  const sideTxt = it.side === 'C' ? 'CALL' : it.side === 'P' ? 'PUT' : 'FUT';
+  const strike = it.strike != null ? `@ ${it.strike}` : '';
+  const ch = it.change || 0;
+  const chCol = ch > 0 ? 'var(--grn)' : ch < 0 ? 'var(--red)' : 'var(--t3)';
+  const chSign = ch > 0 ? '+' : '';
+  return `<div style="padding:8px 14px;${i<total-1?'border-bottom:1px solid var(--bdr);':''}cursor:pointer" onclick="loadTicker('${esc(underlying)}')" onmouseover="this.style.background='var(--bg3)'" onmouseout="this.style.background=''">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:11px">
+      <div style="flex:1;min-width:0;display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+        <span style="font-family:'JetBrains Mono',monospace;font-weight:700;color:var(--cyn)">${esc(underlying)}</span>
+        <span style="font-family:'JetBrains Mono',monospace;font-size:9.5px;color:${sideCol};padding:1px 4px;background:${sideCol}15;border-radius:3px">${esc(sideTxt)} ${esc(strike)}</span>
+        <span style="font-family:'JetBrains Mono',monospace;font-size:9.5px;color:var(--t4)">${esc(it.expiry||'')}</span>
+      </div>
+      <div style="text-align:right;font-family:'JetBrains Mono',monospace;flex-shrink:0">
+        <span style="color:var(--t1)">${it.price != null ? it.price.toFixed(2) : '—'}</span>
+        <span style="color:${chCol};margin-left:6px;font-weight:700">${chSign}${ch.toFixed(2)}</span>
+        <span style="color:var(--t3);margin-left:6px;font-size:10px">${it.volume_tl ? (it.volume_tl/1e6).toFixed(1)+'M TL' : '—'}</span>
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderViopPage(){
+  const pg = $('pg-viop');
+  const view = S._viopView || 'overlay';
+  if (!S['_viop_'+view]) {
+    pg.innerHTML = _skelHeader('🎲 VIOP — yükleniyor…') + _skelList(8);
+    loadViop().then(() => renderViopPage());
+    return;
+  }
+  const data = S['_viop_'+view];
+  const items = data.items || [];
+  const summary = data.summary || {};
+  const health = data.health || {};
+
+  let h = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px">
+    <div>
+      <h2 style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-lg);color:var(--gold)">🎲 VIOP — Tahtacı + UOA</h2>
+      <p style="font-size:var(--fs-sm);color:var(--t3);margin-top:2px">Option flow + insider sinyalleri overlap'i · ${(health.stats||{}).total_today||0} contract takip ediliyor</p>
+    </div>
+    <button class="btn btn-grn" onclick="S['_viop_'+(S._viopView||'overlay')]=null;loadViop(true).then(()=>renderViopPage())">🔄</button>
+  </div>`;
+
+  // Summary banner (only for overlay view)
+  if (view === 'overlay' && summary && (summary.n_overlays || 0) > 0) {
+    h += `<div style="margin-bottom:14px;padding:12px 14px;background:linear-gradient(135deg,rgba(255,179,0,.12),rgba(255,179,0,.04));border:1px solid var(--gold);border-radius:var(--rad)">
+      <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-size:var(--fs-sm);color:var(--t2)">
+        <span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--gold);text-transform:uppercase;letter-spacing:.5px;font-weight:700">🔥 DOUBLE SMART MONEY</span>
+        ${_viopBadge('Overlaps', summary.n_overlays||0, 'var(--gold)')}
+        ${_viopBadge('Hisse', summary.unique_underlyings||0, 'var(--cyn)')}
+        ${_viopBadge('Top z×kap', (summary.top_score||0).toFixed(1), 'var(--grn)')}
+      </div>
+    </div>`;
+  }
+
+  // View tabs
+  const tabs = [
+    ['overlay', '🔥 Overlay (Tahtacı + UOA)', 'var(--gold)'],
+    ['uoa', '⚡ UOA (saf z-score)', 'var(--orn)'],
+    ['today', '📋 Tüm Snapshot', 'var(--cyn)'],
+  ];
+  h += `<div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap">${tabs.map(([k,l,c])=>{
+    const on = view === k;
+    return `<button class="btn btn-sm" style="${on?`background:${c}20;border:1px solid ${c};color:${c}`:'background:var(--bg3);color:var(--t2)'};font-size:11px" onclick="S._viopView='${k}';S['_viop_'+(S._viopView||'overlay')]=null;loadViop(true).then(()=>renderViopPage())">${esc(l)}</button>`;
+  }).join('')}</div>`;
+
+  // Optional kind filter for uoa/today
+  if (view !== 'overlay') {
+    const curK = S._viopKind || '';
+    const kindChips = [['', 'Tümü'], ['option', '🎯 Opsiyon'], ['future', '📊 Vadeli']];
+    h += `<div style="display:flex;gap:4px;margin-bottom:12px;flex-wrap:wrap;font-size:10px">${kindChips.map(([k,l])=>{
+      const on = curK === k;
+      return `<button class="btn btn-sm" style="${on?'background:var(--bg4);color:var(--t1);border:1px solid var(--t3)':'background:var(--bg3);color:var(--t3)'};font-size:10px;padding:3px 8px;min-height:26px" onclick="S._viopKind='${k}';S['_viop_'+(S._viopView||'overlay')]=null;loadViop(true).then(()=>renderViopPage())">${esc(l)}</button>`;
+    }).join('')}</div>`;
+  }
+
+  // Explainer banner
+  const explainer = {
+    overlay: '🔥 <b style="color:var(--gold)">Double smart money:</b> aynı hissede son 14g KAP operator signal (insider/M&A/buyback...) + bugün option/futures UOA z-score birleşimi. Overlay = UOA × (1 + KAP strength). En nadir ve en güçlü sinyal.',
+    uoa: '⚡ <b style="color:var(--orn)">Unusual Options Activity:</b> bugünkü hacim, contract\'ın 30g rolling baseline\'ına karşı z-score. ≥2.0 = ~95. percentile anomaly. Stdev floor ile dead-flat baseline\'lar normalize.',
+    today: '📋 <b style="color:var(--cyn)">Tüm snapshot:</b> bugünkü tüm VIOP contract\'ları, hacim büyüğünden küçüğe. UOA hesaplanmadan ham veri görmek için.',
+  }[view] || '';
+  h += `<div style="padding:10px 14px;background:var(--bg3);border-radius:var(--rad);margin-bottom:12px;font-size:11px;color:var(--t2);line-height:1.55">${explainer}</div>`;
+
+  if (!items.length) {
+    const tip = view === 'overlay'
+      ? 'Henüz Tahtacı × UOA overlap\'i yok. Pipeline yeni başladıysa baseline (≥5g) dolması gerekir. ⚡ UOA tabına bak — saf option flow sinyallerini görebilirsin.'
+      : view === 'uoa'
+        ? 'Bugün anormal option/future aktivitesi yok. Sistem yeni başlatılmışsa baseline dolması gerek (≥5g snapshot).'
+        : 'VIOP snapshot boş — feed loop henüz çalışmamış olabilir. POST /api/viop/refresh tetiklenebilir.';
+    h += `<div class="emp" style="padding:30px 20px;text-align:center"><h3 style="color:var(--t2);font-size:14px;margin-bottom:8px">Sinyal yok</h3><p style="color:var(--t4);font-size:11px;line-height:1.6">${esc(tip)}</p></div>`;
+    pg.innerHTML = h;
+    return;
+  }
+
+  h += '<div class="card"><div class="card-b" style="padding:0">';
+  const rowFn = view === 'overlay' ? _viopOverlayRow : view === 'uoa' ? _viopUoaRow : _viopTodayRow;
+  items.forEach((it, i) => { h += rowFn(it, i, items.length); });
+  h += '</div></div>';
+
+  // Help footer
+  if (view === 'overlay') {
+    h += `<div style="margin-top:14px;padding:10px 14px;background:var(--bg3);border-radius:var(--rad);font-size:11px;color:var(--t3);line-height:1.6">
+      💡 <b style="color:var(--t2)">Skor okuması:</b> büyük altın rakam = overlay (UOA × KAP boost). Sağında "UOA z=X" raw z-score, "Nx normalin" ratio. INSIDER pill'i en güçlü tag (1.0×), BUYBACK 0.55×, MGMT_CHANGE 0.35×. Yaşlandıkça (14g pencere) decay olur.
+    </div>`;
+  }
+
+  pg.innerHTML = h;
+}
 
 // ===== AKIŞ (UNIFIED ACTIVITY FEED) =====
 // Tek chronological feed: CONVICTION alarm + listeye giriş/çıkış +
