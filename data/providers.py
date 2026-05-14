@@ -819,15 +819,23 @@ def batch_download_history_v9(
     period: str = "1y",
     interval: str = "1d",
     progress_callback: Optional[Callable[[int, int], None]] = None,
+    use_cache: bool = True,
 ) -> dict[str, pd.DataFrame]:
-    """borsapy ile toplu price history. Chunk+retry+cache fallback.
+    """borsapy ile toplu price history. Cache-first + chunk+retry.
 
     Stage 5 (Great Overhaul):
       - Optional progress_callback(done, total) fires after each chunk
-        finishes (Pass 1 + Pass 2). Lets the UI report ``Tarihsel veri:
-        X/Y``  instead of staying at 0/N for several minutes.
-      - WORKERS / inter-chunk sleep come from config so they can be tuned
-        without code edits.
+        finishes (Pass 1 + Pass 2).
+      - WORKERS / inter-chunk sleep come from config.
+
+    Stage 6a (Great Overhaul, persistent history cache):
+      - PRIMARY cache lookup happens BEFORE borsapy. Symbols still
+        within history_cache TTL (default 24h) skip the network entirely
+        — a subsequent refresh within that window returns in ~seconds.
+      - Only the cache-miss symbols hit the chunk fetcher.
+      - Fresh borsapy results are written back to history_cache so the
+        next refresh benefits.
+      - ``use_cache=False`` forces a full refetch (admin escape hatch).
     """
     if not BORSAPY_AVAILABLE:
         return {}
@@ -872,6 +880,53 @@ def batch_download_history_v9(
         _CHUNK_SLEEP = 0.3
     CHUNK = 25
     WORKERS = BATCH_HISTORY_WORKERS
+
+    # ── Stage 6a: PRIMARY cache lookup ─────────────────────────────
+    # Before this stage, history_cache was only consulted as Pass 3
+    # fallback after both borsapy passes failed. Now we drain warm
+    # entries up-front so the network only sees the cold misses. This
+    # turns "every refresh fast" into reality once the cache is hot.
+    cold_symbols: list[str] = list(symbols)
+    if use_cache:
+        try:
+            from core.cache import history_cache as _hc
+            warm_count = 0
+            cold_symbols = []
+            for sym in symbols:
+                cached = _hc.get(sym)
+                # Same shape check we apply to fresh borsapy fetches —
+                # tolerate a stale cache only if it still has enough bars
+                # for downstream technical indicators (>= 20).
+                if cached is not None and len(cached) >= 20:
+                    result[sym] = cached
+                    warm_count += 1
+                else:
+                    cold_symbols.append(sym)
+            if warm_count:
+                log.info(
+                    "batch_history cache-first: %d/%d warm hits, "
+                    "%d cold to fetch",
+                    warm_count, len(symbols), len(cold_symbols),
+                )
+                # Emit progress immediately so the UI sees a jump from
+                # 0 → warm_count at the start of the phase, rather than
+                # waiting for the first cold chunk to finish.
+                _emit_progress(warm_count)
+        except Exception as exc:
+            log.debug("history_cache primary lookup unavailable: %r", exc)
+            cold_symbols = list(symbols)
+
+    # If everything was warm, skip the entire chunk pipeline. CB is
+    # already marked "before_call" but nothing happened — still safe to
+    # call on_success() because no error was raised.
+    if not cold_symbols:
+        try:
+            cb_borsapy.on_success()
+        except Exception:
+            pass
+        log.info("batch_history (cache-only): %d/%d", len(result), len(symbols))
+        return result
+
     failed: list[str] = []
 
     # Stage 5 progress model: emit `len(result)` (= actual successful
@@ -879,9 +934,12 @@ def batch_download_history_v9(
     # retries continue to push the counter up rather than appearing to
     # stall at 100% while retries are still chugging.
 
-    # Pass 1: Chunk halinde indir
-    for ci in range(0, len(symbols), CHUNK):
-        chunk = symbols[ci:ci+CHUNK]
+    # Stage 6a: Track fresh fetches so we can write them back to cache.
+    fresh_results: dict[str, pd.DataFrame] = {}
+
+    # Pass 1: Chunk halinde indir — only cold symbols now (Stage 6a)
+    for ci in range(0, len(cold_symbols), CHUNK):
+        chunk = cold_symbols[ci:ci+CHUNK]
         try:
             with ThreadPoolExecutor(max_workers=WORKERS) as pool:
                 futs = [pool.submit(_fetch_one, s) for s in chunk]
@@ -890,17 +948,17 @@ def batch_download_history_v9(
                         sym, df = fut.result(timeout=30)
                         if df is not None:
                             result[sym] = df
+                            fresh_results[sym] = df
                         else:
                             failed.append(sym)
                     except Exception:
                         pass
         except Exception:
             failed.extend(chunk)
-        # Progress = symbols actually downloaded so far. If Pass 1 has
-        # rate-limit issues and many symbols failed, the bar will reflect
-        # the true success count rather than pretending the work is done.
+        # Progress = symbols actually downloaded so far (across both
+        # cache hits and fresh fetches), against the full input size.
         _emit_progress(len(result))
-        if ci + CHUNK < len(symbols):
+        if ci + CHUNK < len(cold_symbols):
             _time.sleep(_CHUNK_SLEEP)
 
     # Pass 2: Retry başarısızlar
@@ -918,6 +976,7 @@ def batch_download_history_v9(
                             sym, df = fut.result(timeout=30)
                             if df is not None:
                                 result[sym] = df
+                                fresh_results[sym] = df
                             else:
                                 still_failed.append(sym)
                         except Exception:
@@ -930,20 +989,49 @@ def batch_download_history_v9(
             _time.sleep(_CHUNK_SLEEP)
         failed = still_failed
 
-    # Pass 3: Cache fallback
+    # Pass 3: Cache fallback (use_cache=False kullanıcılarda da işler)
+    # Stage 6a: this layer now mainly catches the use_cache=False path
+    # since the primary lookup already drained warm entries; still useful
+    # as a "borsapy completely failed but we have a cached snapshot"
+    # safety net.
     if failed:
-        from core.cache import history_cache
-        recovered = 0
-        for sym in failed:
-            cached = history_cache.get(sym)
-            if cached is not None and len(cached) >= 20:
-                result[sym] = cached
-                recovered += 1
-        if recovered:
-            log.info(f"batch_history cache fallback: {recovered}/{len(failed)} kurtarıldı")
+        try:
+            from core.cache import history_cache
+            recovered = 0
+            for sym in failed:
+                cached = history_cache.get(sym)
+                if cached is not None and len(cached) >= 20:
+                    result[sym] = cached
+                    recovered += 1
+            if recovered:
+                log.info(
+                    "batch_history cache fallback: %d/%d kurtarıldı",
+                    recovered, len(failed),
+                )
+        except Exception as exc:
+            log.debug("Pass 3 cache fallback unavailable: %r", exc)
+
+    # Stage 6a: write fresh fetches back to cache so the next refresh
+    # benefits. Done after both passes complete so we only persist
+    # successful results.
+    if fresh_results:
+        try:
+            from core.cache import history_cache as _hc
+            for sym, df in fresh_results.items():
+                _hc.set(sym, df)
+            log.info(
+                "batch_history: cached %d fresh entries (TTL applies)",
+                len(fresh_results),
+            )
+        except Exception as exc:
+            log.debug("history_cache write-back failed: %r", exc)
 
     if result:
         cb_borsapy.on_success()
-    log.info(f"batch_history: {len(result)}/{len(symbols)} başarılı")
+    log.info(
+        "batch_history: %d/%d başarılı (cache hits: %d, fresh: %d)",
+        len(result), len(symbols),
+        len(result) - len(fresh_results), len(fresh_results),
+    )
     return result
 

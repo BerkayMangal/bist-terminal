@@ -308,10 +308,10 @@ class TestProvidersDeadCodeRemoved:
         )
         with open(path, "r", encoding="utf-8") as fh:
             n = sum(1 for _ in fh)
-        assert n < 970, (
+        assert n < 1080, (
             f"data/providers.py has {n} lines — dead code may have "
             "regressed (was 1005 with duplicate before Stage 1; "
-            "~946 expected after Stage 5)"
+            "~1037 expected after Stage 6a cache-first plumbing)"
         )
 
     def test_no_duplicate_fetch_one_in_batch(self):
