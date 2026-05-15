@@ -66,7 +66,14 @@ def _ordered_providers(discovered: list[str]) -> list[str]:
     return list(discovered)
 
 
-AI_PROVIDERS: list[str] = _ordered_providers(_DISCOVERED)
+# AI Consolidation (2026-05): Claude is the ONLY provider. Even if a
+# stale GROK / OPENAI / PERPLEXITY key lingers in the environment we do
+# NOT call them — their credit is gone and their Turkish financial
+# output was lower quality. _ordered_providers / _DISCOVERED stay in
+# place (dormant) so a future multi-provider revival is a one-line
+# change, but the live list is hard-pinned to anthropic.
+_ANTHROPIC_LIVE = "anthropic" in _DISCOVERED
+AI_PROVIDERS: list[str] = ["anthropic"] if _ANTHROPIC_LIVE else []
 AI_AVAILABLE: bool = len(AI_PROVIDERS) > 0
 
 

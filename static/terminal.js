@@ -2111,8 +2111,9 @@ h+=`<div style="margin-bottom:14px;padding:16px;background:linear-gradient(135de
 h+=`<div style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-xs);color:var(--acc);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">📋 Bugün Ne Yapmalı?</div>`;
 h+=`<div style="font-size:var(--fs-base);color:var(--t1);line-height:1.7">${esc(d.action_summary)}</div>`;
 h+=`</div>`;}
-// AI ROLES BUTTON
-h+=`<div style="margin-bottom:14px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-sm btn-blu" onclick="loadMacroRoles()">🤖 4 Farklı Bakış — AI Yorumları</button><button class="btn btn-sm" style="background:var(--bg3);border:1px solid var(--bdr);color:var(--t2)" onclick="loadExternalBrief()">🌍 Harici Piyasa Özeti</button></div><div id="macroRolesBlock"></div><div id="externalBriefBlock"></div>`;
+// AI ROLES BUTTON — AI Consolidation: single Claude, "external brief"
+// (Perplexity) button removed since that provider is retired.
+h+=`<div style="margin-bottom:14px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-sm btn-blu" onclick="loadMacroRoles()">🤖 AI Makro Yorumu</button></div><div id="macroRolesBlock"></div>`;
 // FRESHNESS
 if(d.freshness&&d.freshness.length){
 h+=`<div style="margin-top:8px;padding:10px;background:var(--bg3);border-radius:var(--rad)"><div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--t4);text-transform:uppercase;margin-bottom:6px">Veri Kaynakları</div><div style="display:flex;flex-wrap:wrap;gap:6px">`;
@@ -2126,7 +2127,7 @@ box.innerHTML=h;
 }catch(e){console.error('macro decision:',e);box.innerHTML=`<div class="card" style="margin-bottom:14px;border-color:var(--ylw)"><div class="card-b"><span style="color:var(--ylw)">Karar motoru yüklenemedi</span></div></div>`;}}
 async function loadMacroRoles(){
 const box=$('macroRolesBlock');if(!box)return;
-box.innerHTML='<div class="ld" style="padding:20px"><div class="sp"></div><div class="ld-t">3 AI perspektifi hazırlanıyor...</div></div>';
+box.innerHTML='<div class="ld" style="padding:20px"><div class="sp"></div><div class="ld-t">Claude makro yorumu hazırlıyor...</div></div>';
 try{
 const d=await api('/api/macro/ai-roles');
 if(!d.roles||d.error){box.innerHTML=`<div class="aib" style="margin-bottom:14px;border-color:var(--ylw)"><div class="aib-tx" style="color:var(--ylw)">${esc(d.error||'AI kullanılamıyor')}</div></div>`;return;}
@@ -2145,14 +2146,8 @@ h+='</div>';
 box.innerHTML=h;
 }catch(e){box.innerHTML='';console.error('macro roles:',e);}}
 async function loadMacroAI(){/* DEPRECATED — replaced by loadMacroRoles */}
-async function loadExternalBrief(){
-const box=$('externalBriefBlock');if(!box)return;
-box.innerHTML='<div class="ld" style="padding:14px"><div class="sp"></div><div class="ld-t">Perplexity ile piyasa taranıyor...</div></div>';
-try{
-const d=await api('/api/macro/external-brief');
-if(!d.available||!d.brief){box.innerHTML=`<div style="padding:10px;background:var(--bg3);border:1px solid var(--bdr);border-radius:var(--rad);font-size:var(--fs-sm);color:var(--t3)">${esc(d.reason||d.disclaimer||'Harici özet alınamadı')}</div>`;return;}
-box.innerHTML=`<div style="margin-bottom:14px;padding:14px;background:var(--bg3);border:1px solid var(--bdr);border-radius:var(--rad)"><div style="display:flex;align-items:center;gap:6px;margin-bottom:8px"><span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--cyn);text-transform:uppercase">🌍 ${esc(d.label||'Harici Özet')}</span><span style="font-family:'JetBrains Mono',monospace;font-size:7px;color:var(--ylw);padding:1px 4px;border:1px solid var(--ylw);border-radius:2px">Karar motoruna girmez</span></div><div style="font-size:var(--fs-sm);color:var(--t1);line-height:1.7">${esc(d.brief).replace(/\n/g,'<br>')}</div><div style="margin-top:6px;font-size:8px;color:var(--t4)">Kaynak: ${esc(d.source||'Web')}</div></div>`;
-}catch(e){box.innerHTML='';console.error('brief:',e);}}
+// loadExternalBrief removed — the Perplexity-backed "Harici Piyasa
+// Özeti" was retired in the AI Consolidation (Claude-only).
 
 // ===== RADAR PAGE =====
 // Veri Tazeliği summary banner — Radar üstüne fresh/old/stale dağılımını
@@ -4187,9 +4182,9 @@ $('dp').innerHTML=`<div class="dp-h" style="background:linear-gradient(135deg,va
     <div class="card-b" id="sig-explain-host" data-symbol="${esc(t)}"><div class="ld"><div class="sp"></div><div class="ld-t">Sinyaller hazırlanıyor...</div></div></div>
   </div>
 
-  <!-- PHASE 5.2.3 — AI Multi-Model Showdown (lazy-loaded) -->
-  <div class="card" style="margin-top:14px"><div class="card-h"><span class="card-t">🤖 AI Konsensüs</span></div>
-    <div class="card-b" id="ai-consensus-host" data-symbol="${esc(t)}"><div class="ld"><div class="sp"></div><div class="ld-t">4 model paralel çağrılıyor...</div></div></div>
+  <!-- AI Analizi — Claude (lazy-loaded) -->
+  <div class="card" style="margin-top:14px"><div class="card-h"><span class="card-t">🤖 AI Analizi</span></div>
+    <div class="card-b" id="ai-consensus-host" data-symbol="${esc(t)}"><div class="ld"><div class="sp"></div><div class="ld-t">Claude analiz ediyor...</div></div></div>
   </div>
 
   <!-- 3 RING SCORES + KEY METRICS -->
@@ -4710,59 +4705,34 @@ async function loadSignalExplanations(symbol) {
 }
 
 // 5.2.3 — AI Multi-Model Showdown
+// AI Consolidation (2026-05): the multi-model "consensus" is gone —
+// the site runs a single model (Claude). This renders Claude's single
+// analysis cleanly: no per-model breakdown, no agreement %, no error
+// rows for dead providers.
 function renderAiConsensus(consensus) {
   if (!consensus) return '';
-  const isSplit = consensus.is_split === true;
-  const badgeCls = isSplit ? 'ai-consensus-badge split' : 'ai-consensus-badge';
-  const badgeLabel = isSplit ? '🤔 Modeller bölünmüş' : '⭐ Konsensüs Lider';
-  const dist = consensus.sentiment_distribution || {};
-  const distText = `${dist.bullish || 0}↑ ${dist.neutral || 0}● ${dist.bearish || 0}↓`;
-
-  const others = (consensus.per_model || []).filter(m =>
-    m.provider !== consensus.leader && !m.has_error
-  );
-  const errored = (consensus.per_model || []).filter(m => m.has_error);
-
-  let html = `<div class="ai-consensus-wrap" data-testid="ai-consensus">`;
-  if (consensus.leader) {
-    html += `<div class="ai-consensus-leader">
-      <span class="${badgeCls}">${badgeLabel}</span>
-      <div class="ai-consensus-leader-name">${esc(consensus.leader)} · uzlaşı: ${(consensus.agreement_score * 100).toFixed(0)}% · dağılım: ${distText}</div>
-      <div class="ai-consensus-text">${esc(consensus.leader_text || '')}</div>
-    </div>`;
+  const text = consensus.leader_text || consensus.analysis || '';
+  if (!text) {
+    return '<p style="color:var(--t3);font-size:12px;padding:12px">AI yorum hazırlanamadı.</p>';
   }
-  if (others.length) {
-    html += `<details class="ai-consensus-others">
-      <summary>Diğer modeller ne diyor? (${others.length})</summary>`;
-    others.forEach(m => {
-      // Find the text in the original responses — for now just show meta
-      html += `<div class="ai-consensus-other">
-        <div class="ai-consensus-other-head"><b>${esc(m.provider)}</b><span class="conf">güven: ${(m.confidence * 100).toFixed(0)}% · ${esc(m.sentiment)}</span></div>
-      </div>`;
-    });
-    html += `</details>`;
-  }
-  if (errored.length) {
-    html += `<details class="ai-consensus-others">
-      <summary>Yanıt vermeyen modeller (${errored.length})</summary>`;
-    errored.forEach(m => {
-      html += `<div class="ai-consensus-other"><div class="ai-consensus-other-head"><b>${esc(m.provider)}</b> · ${esc(m.error || 'hata')}</div></div>`;
-    });
-    html += `</details>`;
-  }
-  html += `</div>`;
-  return html;
+  return `<div class="ai-consensus-wrap" data-testid="ai-consensus">
+    <div class="ai-consensus-leader">
+      <span class="ai-consensus-badge">🤖 Claude AI Analizi</span>
+      <div class="ai-consensus-text">${esc(text).replace(/\n/g,'<br>')}</div>
+    </div>
+  </div>`;
 }
 
 async function loadAiConsensus(symbol) {
   try {
     const d = await api(`/api/ai/${encodeURIComponent(symbol)}/consensus`);
-    if (!d || !d.consensus) {
+    const c = d && (d.consensus || d);
+    if (!c) {
       return '<p style="color:var(--t3);font-size:12px;padding:12px">AI yorum hazırlanamadı.</p>';
     }
-    return renderAiConsensus(d.consensus);
+    return renderAiConsensus(c);
   } catch (e) {
-    return '<p style="color:var(--red);font-size:12px;padding:12px">AI consensus yüklenemedi.</p>';
+    return '<p style="color:var(--red);font-size:12px;padding:12px">AI analizi yüklenemedi.</p>';
   }
 }
 
