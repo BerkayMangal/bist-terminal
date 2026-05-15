@@ -604,42 +604,47 @@ async def api_cross_explain(symbol: str):
 
 
 # ================================================================
-# Phase 5.2.3 — /api/ai/{symbol}/consensus
+# /api/ai/{symbol}/consensus
 #
-# Multi-model AI showdown — calls Perplexity + Grok + OpenAI + Anthropic
-# IN PARALLEL with the same prompt (built via ai/prompts.py — Rule 8: that
-# module is dokunulmaz). Returns leader text + per-model scores +
-# agreement metric.
-#
-# Opt-in via ?consensus=1 query parameter so default response shape of the
-# legacy /api/ai-summary endpoint stays byte-identical (Rule 6).
+# AI Consolidation (2026-05): formerly a 4-model showdown. The site now
+# runs a single model (Claude), so this returns ONE Claude analysis.
+# The endpoint path + the `consensus` response key are kept so the UI
+# (renderAiConsensus) doesn't need a contract change — `consensus`
+# carries {leader, leader_text} with leader pinned to "anthropic".
 # ================================================================
 @app.get("/api/ai/{symbol}/consensus")
 async def api_ai_consensus(symbol: str, request: Request):
     try:
-        from engine.ai_consensus import call_all_providers, compute_consensus
         sym = normalize_symbol(symbol or "")
         if not sym:
             return error("symbol gerekli", status_code=400)
-        # Build prompt via existing trader_summary infrastructure — DO NOT
-        # modify ai/prompts.py. We only call its existing builders.
         try:
             from ai.prompts import trader_summary_prompt
             r = analysis_cache.get(sym) or analyze_symbol(sym)
             prompt = trader_summary_prompt(r)
         except Exception as e:
-            log.warning(f"consensus: prompt build failed: {e}")
+            log.warning(f"ai analysis: prompt build failed: {e}")
             return error("Prompt hazırlanamadı", status_code=500)
 
-        responses = await asyncio.to_thread(call_all_providers, prompt, 220, 18.0)
-        consensus = compute_consensus(responses)
+        # Single Claude call. 600 tokens — the old 220-token budget
+        # truncated the thesis mid-sentence (a source of the "saçma
+        # sapan" complaint).
+        from ai.engine import ai_call
+        text = await asyncio.to_thread(ai_call, prompt, 600)
+        if not text:
+            return success({
+                "symbol": sym,
+                "consensus": {"leader": None, "leader_text": ""},
+            }, as_of=now_iso())
         return success({
             "symbol": sym,
-            "consensus": consensus,
-            "raw_responses": [{"provider": r.get("provider"), "has_text": bool(r.get("text")), "error": r.get("error")} for r in responses],
+            "consensus": {
+                "leader": "anthropic",
+                "leader_text": text,
+            },
         }, as_of=now_iso())
     except Exception as e:
-        log.error(f"ai_consensus: {e}"); return error("AI consensus hatası", status_code=500)
+        log.error(f"ai analysis: {e}"); return error("AI analizi hatası", status_code=500)
 
 
 # ================================================================
@@ -772,23 +777,10 @@ async def api_macro_calendar():
     except Exception as e:
         log.error(f"calendar: {e}"); return error("Takvim yüklenemedi", status_code=500)
 
-@app.get("/api/macro/external-brief")
-async def api_macro_external_brief():
-    """External market context via Perplexity web search. NOT part of decision engine."""
-    try:
-        from ai.perplexity import fetch_external_brief, PERPLEXITY_AVAILABLE
-        if not PERPLEXITY_AVAILABLE:
-            return success({
-                "brief": None, "available": False,
-                "label": "Harici Piyasa Özeti",
-                "disclaimer": "PERPLEXITY_API_KEY ayarlanmamış.",
-                "feeds_decision": False,
-            })
-        result = await asyncio.to_thread(fetch_external_brief)
-        return success(result)
-    except Exception as e:
-        log.warning(f"external brief: {e}")
-        return success({"brief": None, "available": False, "error": str(e)})
+# /api/macro/external-brief removed in the AI Consolidation (2026-05).
+# It was backed by Perplexity web-search, which is retired now that the
+# site runs Claude-only. The macro AI roles endpoint (/api/macro/ai-roles)
+# fully covers macro commentary.
 
 
 # ================================================================
