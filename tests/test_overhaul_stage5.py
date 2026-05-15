@@ -47,8 +47,9 @@ class TestConfigTunables:
         from config import BATCH_HISTORY_WORKERS
         # 5 was the old hotfix value — we deliberately bumped it.
         assert BATCH_HISTORY_WORKERS >= 6
-        # Sanity ceiling — 16 would risk borsapy rate limits.
-        assert BATCH_HISTORY_WORKERS <= 12
+        # Sanity ceiling — Stage 8 (Railway Pro) raised this to 16;
+        # going much beyond would risk borsapy rate limits.
+        assert BATCH_HISTORY_WORKERS <= 20
 
     def test_chunk_sleep_constant_exists(self):
         from config import BATCH_HISTORY_CHUNK_SLEEP_SEC
