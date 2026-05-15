@@ -120,6 +120,22 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg0);color:var(
 /* LOADING */
 .ld{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:50px 20px;gap:12px}.sp{width:28px;height:28px;border:3px solid var(--bdr);border-top-color:var(--acc);border-radius:50%;animation:spn .7s linear infinite}@keyframes spn{to{transform:rotate(360deg)}}.ld-t{font-family:'JetBrains Mono',monospace;font-size:var(--fs-sm);color:var(--t3)}
 
+/* Skeleton loaders — perceived performance > spinner. Reusable across
+   list-style pages (Alarmlar, Bilançolar, BullWatch). Each block has
+   a shimmer animation that telegraphs "content coming" while the API
+   call lands. */
+.skel{background:linear-gradient(90deg,var(--bg3) 0%,var(--bg4) 50%,var(--bg3) 100%);background-size:200% 100%;animation:shimmer 1.4s ease-in-out infinite;border-radius:4px}
+.skel-card{background:var(--bg2);border:1px solid var(--bdr);border-radius:var(--rad2);padding:14px;margin-bottom:10px}
+.skel-line{height:11px;margin-bottom:6px}
+.skel-line.lg{height:16px}
+.skel-line.short{width:30%}
+.skel-line.medium{width:60%}
+.skel-line.long{width:85%}
+.skel-pill{display:inline-block;height:18px;width:60px;margin-right:6px;border-radius:3px;vertical-align:middle}
+.skel-ring{width:80px;height:80px;border-radius:50%}
+.skel-row-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.skel-row-tickerblock{flex:1}
+
 /* MISC */
 .emp{text-align:center;padding:40px 20px}.emp h3{color:var(--t2);font-size:15px;margin-bottom:6px}.emp p{color:var(--t3);font-size:12px}.chart-img{width:100%;border-radius:var(--rad);border:1px solid var(--bdr)}
 .drv{display:inline-block;font-size:var(--fs-sm);padding:3px 8px;border-radius:3px;margin:2px 3px 2px 0}.drv-p{background:var(--grnd);color:var(--grn)}.drv-n{background:var(--redd);color:var(--red)}
@@ -183,3 +199,204 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg0);color:var(
   .hero-wrap{padding:12px}
   .nav-b{padding:8px 12px}
 }
+
+/* ===== KAP / BİLANÇOLAR MOBILE POLISH ===== */
+/* Each disclosure row uses `.kap-row` (assigned in renderBilancolarPage).
+   Subject line gets line-clamp on phones so long titles don't push the
+   card to 5 lines; footer (reactions + AI button) wraps cleanly. */
+.kap-row-subj{
+  display:-webkit-box;
+  -webkit-line-clamp:2;
+  -webkit-box-orient:vertical;
+  overflow:hidden;
+  word-break:break-word;
+}
+@media(max-width:600px){
+  /* Bilanço modali: full-screen on mobile so the 6-section AI summary
+     has room to breathe and the iOS keyboard / nav-bar don't clip it. */
+  #kapAnalysisOv{padding:0!important;align-items:flex-start!important}
+  #kapAnalysisOv > div{
+    max-width:100%!important;
+    width:100%!important;
+    max-height:100vh!important;
+    max-height:100dvh!important;
+    min-height:100vh;
+    min-height:100dvh;
+    border-radius:0!important;
+    padding:16px 14px!important;
+  }
+  /* AI summary sections: tighter padding, smaller body text */
+  #kapAnalysisOv h3{font-size:14px!important}
+  /* Bilançolar disclosure card: tighter padding, card body has full width. */
+  #pg-bilancolar .card-b{padding:0!important}
+  .kap-row{padding:9px 11px!important}
+  /* Subject clamp tighter on phone — 2 lines is enough */
+  .kap-row-subj{-webkit-line-clamp:2;font-size:11px!important;line-height:1.35!important}
+  /* Footer row stacks gracefully; pill font-size shrinks */
+  .kap-row-footer{gap:4px!important}
+  .kap-row-footer > div > span{font-size:9px!important;padding:1px 4px!important}
+  .kap-row-footer button{font-size:10px!important;padding:3px 7px!important}
+  /* Filter chips: horizontal scroll instead of wrap if too many */
+  #pg-bilancolar > div:nth-child(2){overflow-x:auto;-webkit-overflow-scrolling:touch}
+}
+/* Even smaller phones */
+@media(max-width:380px){
+  .kap-row{padding:8px 10px!important}
+  .kap-row-subj{-webkit-line-clamp:2;font-size:10.5px!important}
+  .kap-row-footer button{font-size:9.5px!important}
+}
+
+/* ===== TICKER DETAIL MOBILE POLISH ===== */
+@media(max-width:600px){
+  /* The 3-ring header (TEMEL / V13 DEĞER after Plan A) reads better
+     in a single row on narrow screens. Reduce ring size + gap. */
+  .dp-h .ring{transform:scale(.85);transform-origin:center}
+  /* Metric box grid: 2 cols on phones (was already 1fr 1fr in dp-h block) */
+  .dp-h .mg{gap:6px}
+  /* Detail page typography: tighten body */
+  .dp-body{padding:12px 10px!important}
+  .dp{border-radius:0!important}
+}
+
+/* ===== HEADER LOGO + NAV ===== */
+@media(max-width:480px){
+  /* Logo small text already hidden ≤480; trim main padding too */
+  .hdr{padding:6px 10px}
+  .main{padding:10px 10px 80px}  /* extra bottom padding so the last card
+                                     clears safe-area / browser chrome */
+}
+
+/* ===== TOOLTIP REPOSITION (touch devices) ===== */
+@media(hover:none){
+  /* Suppress the desktop-only hover tooltip — on touch it lingers and
+     blocks taps. The same info lives in the modal / card detail. */
+  #bbTip{display:none!important}
+}
+/* ===== PHASE 5.1.1 — HEATMAP SKELETON SHIMMER ===== */
+.heat-skel-wrap{padding:8px;background:var(--bg2);border:1px solid var(--bdr);border-radius:var(--rad)}
+.heat-skel-grid{display:flex;flex-wrap:wrap;gap:4px;width:100%;max-width:750px;margin-bottom:8px}
+.heat-skel-cell{background:linear-gradient(90deg,var(--bg3) 0%,var(--bg4) 50%,var(--bg3) 100%);background-size:200% 100%;animation:heatShimmer 1.4s ease-in-out infinite;border-radius:2px;border:0.5px solid rgba(0,0,0,0.35)}
+.heat-skel-caption{color:var(--t4);font-size:12px;margin-top:8px;text-align:center}
+@keyframes heatShimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+
+/* ===== PHASE 5.1.3 — MOBILE-FIRST BREAKPOINTS ===== */
+/* Default: phones 320-480px. min-width queries scale up. */
+.is-mobile-only{display:block}
+.is-tablet-only,.is-desktop-only{display:none}
+
+/* Tap targets — every interactive element ≥44px on mobile */
+.btn,.btn-sm,.btn-orn,.btn-blu,.btn-dim,button,.nav-b,.qtk,.disc-chip{min-height:44px;min-width:44px}
+
+/* Sticky bottom nav (mobile) — fits 7 tabs via horizontal scroll */
+.mob-bnav{position:fixed;bottom:0;left:0;right:0;height:calc(56px + var(--safe-b));padding-bottom:var(--safe-b);background:var(--bg1);border-top:1px solid var(--bdr);display:flex;justify-content:flex-start;align-items:stretch;z-index:90;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;-ms-overflow-style:none}
+.mob-bnav::-webkit-scrollbar{display:none}
+.mob-bnav-item{flex:0 0 auto;min-width:72px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;color:var(--t3);font-family:'JetBrains Mono',monospace;font-size:9px;text-transform:uppercase;letter-spacing:0.5px;cursor:pointer;border:0;background:0;padding:6px 8px;min-height:56px;white-space:nowrap}
+.mob-bnav-item .ico{font-size:20px;line-height:1}
+.mob-bnav-item.on{color:var(--acc)}
+.mob-bnav-item.on .ico{transform:scale(1.1)}
+.mob-bnav-item:hover{color:var(--t1)}
+
+/* Heatmap mobile list-view alternative */
+.heat-list-mobile{display:none}
+.heat-list-row{display:flex;align-items:center;gap:8px;padding:8px;border-bottom:1px solid var(--bdr);font-family:'JetBrains Mono',monospace;font-size:12px;min-height:44px}
+.heat-list-row .tk{color:var(--cyn);font-weight:700;min-width:60px}
+.heat-list-row .pr{color:var(--t1);text-align:right;flex:1}
+.heat-list-row .ch{font-weight:700;min-width:60px;text-align:right}
+
+/* mobile breakpoint: show list view, hide grid */
+@media(max-width:480px){
+  .heat-grid-mobile-hide{display:none!important}
+  .heat-list-mobile{display:block}
+  /* Top nav stays visible on mobile (already overflow-x:auto from ≤900px rules)
+     — we tried a bottom nav but top scroll-tabs are familiar and use less chrome */
+  .hdr{padding:8px 12px;gap:8px}
+  .nav-b{padding:6px 10px;font-size:11px;letter-spacing:0;min-height:40px}
+  .logo{font-size:12px}
+  .logo svg{width:24px;height:24px}
+  .logo small{display:none}
+  /* BullWatch cards: single column on small phones */
+  .bw-grid{grid-template-columns:1fr!important;gap:10px!important}
+  /* BullWatch near-misses: hide table view, JS will render card view */
+  .bw-near-table{display:none}
+  .bw-near-cards{display:block!important}
+}
+@media(min-width:481px){
+  .bw-near-cards{display:none}
+}
+
+/* Bottom mobile nav was prototyped but not adopted — top nav with horizontal
+   scroll is the chosen pattern. Keep .mob-bnav hidden everywhere. */
+.mob-bnav{display:none!important}
+
+/* Tablet (768px+) tweaks */
+@media(min-width:768px){
+  .g2{grid-template-columns:1fr 1fr}
+  .g3{grid-template-columns:1fr 1fr 1fr}
+  .g4{grid-template-columns:repeat(4,1fr)}
+}
+
+/* ===== PHASE 5.2.1 — TURKEY 4 FILTER SECTION ===== */
+.tr-filter-section{background:linear-gradient(135deg,#0d1628,var(--bg3));border:1px solid var(--bdr2);border-radius:var(--rad2);padding:18px;margin-top:16px;margin-bottom:16px}
+.tr-filter-title{display:flex;align-items:center;gap:8px;font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:700;color:var(--acc);text-transform:uppercase;letter-spacing:1.2px;margin-bottom:14px}
+.tr-filter-title .info{margin-left:auto;color:var(--t4);font-size:11px;cursor:pointer;background:0;border:0;padding:4px 8px;min-height:32px;min-width:32px}
+.tr-filter-title .info:hover{color:var(--acc)}
+.tr-filter-row{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--bdr)}
+.tr-filter-row:last-child{border-bottom:0}
+.tr-filter-icon{font-size:22px;flex-shrink:0;width:32px;text-align:center}
+.tr-filter-body{flex:1;min-width:0}
+.tr-filter-name{font-family:'DM Sans',sans-serif;font-size:14px;font-weight:600;color:var(--t1);margin-bottom:4px;display:flex;align-items:center;gap:8px}
+.tr-filter-grade{font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;padding:2px 6px;border-radius:3px;background:var(--bg3);color:var(--t2)}
+.tr-filter-grade.A{background:var(--grnd);color:var(--grn)}
+.tr-filter-grade.B{background:var(--grnd);color:var(--grn);opacity:0.8}
+.tr-filter-grade.C{background:var(--ylwd);color:var(--ylw)}
+.tr-filter-grade.D{background:var(--redd);color:var(--red);opacity:0.8}
+.tr-filter-grade.F{background:var(--redd);color:var(--red)}
+.tr-filter-bar-wrap{height:6px;background:var(--bg4);border-radius:3px;overflow:hidden;margin-bottom:4px;position:relative}
+.tr-filter-bar{height:100%;border-radius:3px;transition:width .4s}
+.tr-filter-bar.up{background:linear-gradient(90deg,var(--grn2),var(--grn))}
+.tr-filter-bar.down{background:linear-gradient(90deg,var(--red),#ff7676)}
+.tr-filter-bar.flat{background:var(--t4)}
+.tr-filter-mid{position:absolute;left:50%;top:0;bottom:0;width:1px;background:var(--bdr2)}
+.tr-filter-mult{font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;min-width:48px;text-align:right}
+.tr-filter-mult.up{color:var(--grn)}
+.tr-filter-mult.down{color:var(--red)}
+.tr-filter-mult.flat{color:var(--t3)}
+.tr-filter-explanation{font-size:11px;color:var(--t3);line-height:1.4}
+.tr-filter-summary{margin-top:14px;padding:10px 12px;background:var(--accd);border:1px solid rgba(255,179,0,0.2);border-radius:var(--rad);font-size:12px;color:var(--t1);line-height:1.5}
+
+/* ===== PHASE 5.2.2 — SIGNAL EXPLANATION CARDS ===== */
+.sig-explain-card{background:var(--bg2);border:1px solid var(--bdr);border-radius:var(--rad);padding:12px 14px;margin-bottom:8px}
+.sig-explain-head{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.sig-explain-name{font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;color:var(--t1)}
+.sig-explain-rel{margin-left:auto;font-size:11px}
+.sig-explain-body{font-size:12px;color:var(--t2);line-height:1.5;margin-bottom:6px}
+.sig-explain-meta{display:flex;gap:12px;flex-wrap:wrap;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--t4)}
+.sig-explain-meta .tag{padding:2px 6px;border-radius:3px;background:var(--bg3);border:1px solid var(--bdr);color:var(--t2)}
+.sig-explain-action{margin-top:8px;padding:6px 10px;background:var(--accd);border-radius:4px;font-size:11px;color:var(--acc);font-weight:600}
+
+/* ===== PHASE 5.2.3 — AI MULTI-MODEL SHOWDOWN ===== */
+.ai-consensus-wrap{background:var(--bg2);border:1px solid var(--bdr);border-radius:var(--rad2);padding:0;overflow:hidden}
+.ai-consensus-leader{padding:14px 16px;background:linear-gradient(135deg,var(--accd),transparent);border-bottom:1px solid var(--bdr)}
+.ai-consensus-badge{display:inline-flex;align-items:center;gap:6px;font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;color:var(--acc);text-transform:uppercase;letter-spacing:1px;padding:3px 8px;background:var(--accd);border:1px solid rgba(255,179,0,0.25);border-radius:4px;margin-bottom:8px}
+.ai-consensus-badge.split{color:var(--ylw);background:var(--ylwd);border-color:rgba(245,158,11,0.25)}
+.ai-consensus-leader-name{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--t3);margin-bottom:8px}
+.ai-consensus-text{font-size:13px;color:var(--t1);line-height:1.6}
+.ai-consensus-others{padding:0}
+.ai-consensus-others summary{padding:10px 16px;cursor:pointer;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--t3);user-select:none;border-top:1px solid var(--bdr)}
+.ai-consensus-others summary:hover{background:var(--bg3);color:var(--t1)}
+.ai-consensus-other{padding:10px 16px;border-top:1px solid var(--bdr);background:var(--bg1)}
+.ai-consensus-other-head{display:flex;align-items:center;gap:8px;margin-bottom:6px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--t3)}
+.ai-consensus-other-head .conf{margin-left:auto}
+.ai-consensus-other-text{font-size:12px;color:var(--t2);line-height:1.5}
+
+/* ===== PHASE 5.2.4 — SCORE EXPLAIN MODAL ===== */
+.score-help-btn{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:50%;background:var(--bg3);border:1px solid var(--bdr);color:var(--t3);font-size:11px;font-weight:700;cursor:pointer;margin-left:6px;font-family:'JetBrains Mono',monospace}
+.score-help-btn:hover{color:var(--acc);border-color:var(--acc)}
+.score-modal-bd{padding:18px;font-size:13px;color:var(--t2);line-height:1.7}
+.score-modal-bd h4{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--acc);text-transform:uppercase;letter-spacing:1px;margin:14px 0 6px}
+.score-modal-bd .num{font-family:'JetBrains Mono',monospace;font-size:14px;color:var(--t1);font-weight:700}
+
+/* ===== PHASE 5.4 — TRADINGVIEW WIDGET CONTAINERS ===== */
+.tv-widget{background:var(--bg2);border:1px solid var(--bdr);border-radius:var(--rad2);overflow:hidden;min-height:200px;position:relative}
+.tv-widget-loading{display:flex;align-items:center;justify-content:center;min-height:200px;color:var(--t4);font-family:'JetBrains Mono',monospace;font-size:11px}
+.tv-widget-error{padding:14px;color:var(--red);font-family:'JetBrains Mono',monospace;font-size:11px;text-align:center}

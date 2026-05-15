@@ -115,7 +115,17 @@ HISTORY_CACHE_SIZE = 500
 # ================================================================
 SCAN_MAX_WORKERS = 8  # HOTFIX: 15→8 rate limit koruması
 RAW_PREFETCH_WORKERS = 10
-BATCH_HISTORY_WORKERS = 5  # HOTFIX: 10→5 rate limit koruması
+# Stage 5 (Great Overhaul): 5→8 — measured cold scan of 437 tickers took
+# >5 min in history_fetch alone with 5 workers; this puts the BullWatch
+# watchdog (8 min) under pressure. 8 workers matches the proven pattern
+# in providers.py:468 (parallel financial endpoint fetches) without
+# triggering borsapy rate limits in observed prod traffic.
+BATCH_HISTORY_WORKERS = 8
+# Stage 5: 1.0s → 0.3s. The original 1.0s was a defensive rate-limit
+# guard; borsapy's own pacing already covers this. 0.3s preserves a
+# small breath between chunks without compounding into multi-second
+# wait when there are 17+ chunks (437 / 25 ticker chunk size).
+BATCH_HISTORY_CHUNK_SLEEP_SEC = 0.3
 BACKGROUND_SCAN_INTERVAL_OPEN = 3600
 BACKGROUND_SCAN_INTERVAL_CLOSED = 10800
 BACKGROUND_SCAN_STARTUP_DELAY = 1
@@ -203,13 +213,14 @@ UNIVERSE_EXTRA: list[str] = [
 ]
 
 UNIVERSE_EXTENDED: list[str] = [
-    "AKENR", "AKFYE", "AKGRT", "ALCTL", "ALKIM", "ARDYZ", "ARENA", "ASUZU",
+    # Existing 150
+    "AKENR", "AKFYE", "AKGRT", "ALCTL", "ALGYO", "ALKIM", "ARDYZ", "ARENA", "ASUZU",
     "ATAGY", "ATATP", "AVOD", "AVTUR", "BANVT", "BEYAZ", "BFREN", "BIENY", "BINHO", "BIOEN",
-    "BMSTL", "BRMEN", "BURVA", "CEMAS", "CONSE", "CRFSA", "DAGI", "DESA",
+    "BMSTL", "BORSK", "BRMEN", "BURVA", "CEMAS", "CMENT", "CONSE", "CRFSA", "DAGI", "DESA",
     "DESPC", "DGATE", "DOKTA", "DYOBY", "EDATA", "EGGUB", "EMNIS", "ESCOM", "ESEN", "ETILR",
     "FADE", "FMIZP", "FONET", "GEDIK", "GENIL", "GLCVY", "GOODY", "GWIND", "HATEK", "HDFGS",
     "HEDEF", "HTTBT", "HUNER", "ICBCT", "IHAAS", "INGRM", "INTEM", "ISBIR", "ISFIN",
-    "IZENR", "KAREL", "KARSN", "KATMR", "KENT", "KFEIN", "KGYO", "KLMSN",
+    "IZENR", "IZINV", "IZMDC", "KAPLM", "KAREL", "KARSN", "KATMR", "KENT", "KFEIN", "KGYO", "KLMSN",
     "KLNMA", "KONYA", "KRVGD", "KSTUR", "KUYAS", "LINK", "LMKDC", "LUKSK",
     "MAALT", "MAGEN", "MARTI", "MEGAP", "MERCN", "MOBTL", "MRGYO", "MRSHL",
     "MSGYO", "MTRKS", "MTRYO", "NATEN", "NTHOL", "NUGYO", "OSMEN", "OYLUM", "OYYAT",
@@ -217,13 +228,67 @@ UNIVERSE_EXTENDED: list[str] = [
     "RAYSG", "SAFKR", "SEKUR", "SELEC", "SILVR", "SMART", "SNGYO", "SUNTK",
     "SUWEN", "TATGD", "TBORG", "TEKTU", "TKNSA", "TMPOL", "TNZTP", "TRGYO",
     "TRILC", "TUCLK", "TUKAS", "TUREX", "UFUK", "ULUUN", "USAK", "VAKKO",
-    "VERTU", "VKGYO", "VKING", "YAPRK", "YEOTK", "YKSLN", "YONGA", "YUNSA", "YYAPI",
+    "VERTU", "VISMD", "VKGYO", "VKING", "YAPRK", "YEOTK", "YKSLN", "YONGA", "YUNSA", "YYAPI",
     "ZEDUR", "ZELOT",
+
+    # PHASE 9 — BIST tüm pay expansion (industrial/mining/consumer focus)
+    # These are real tickers traded on Yıldız + Ana + Alt pazar.
+    # Sources: BIST-listed companies tracked on KAP, anapara.com,
+    # gcmyatirim, investing.com (cross-referenced).
+    "ACSEL", "ADANA", "ADBGR", "ADEL", "ADESE", "AFYON", "AGHOL", "AKCNS",
+    "AKMGY", "AKSA", "ALCAR", "ALFAS", "ALKA", "ANELE", "ARASE", "ARCLK",
+    "ARMDA", "ARSAN", "ATEKS", "AVHOL", "AYCES", "AYDEM",
+    "BAGFS", "BAKAB", "BANTL", "BARMA", "BASCM", "BASGZ", "BAYRK", "BERA",
+    "BIGCH", "BIMAS", "BJKAS", "BLCYT", "BNTAS", "BOSSA", "BRISA", "BRKO",
+    "BRKVY", "BRLSM", "BRSAN", "BRYAT", "BSOKE", "BTCIM", "BUCIM", "BURCE",
+    "CANTE", "CCOLA", "CELHA", "CEMTS", "CIMSA", "CLEBI", "CRDFA", "CUSAN",
+    "DAPGM", "DARDL", "DENGE", "DERHL", "DEVA", "DGGYO", "DGNMO", "DITAS",
+    "DMSAS", "DOAS", "DOBUR", "DOCO", "DURDO", "DZGYO",
+    "EBEBK", "ECILC", "ECZYT", "EDIP", "EGEEN", "EGEPO", "EGSER", "EKGYO",
+    "EKIZ", "ENJSA", "ENKAI", "ERBOS", "EREGL", "ERSU", "ESGYO", "EUREN", "EYGYO",
+    "FENER", "FLAP", "FORMT", "FORTE", "FROTO",
+    "GARFA", "GENTS", "GEREL", "GLBMD", "GMTAS", "GOLTS", "GOZDE",
+    "GRSEL", "GRTHO", "GSDDE", "GSDHO", "GSRAY", "GUBRF",
+    "HEKTS", "HKTM", "HLGYO", "IDGYO", "IEYHO", "IHEVA", "IHGZT", "IHLAS", "IHLGM",
+    "IMASM", "INFO", "INVES", "ISDMR", "ISGSY", "ISGYO", "ISKPL", "ISMEN",
+    "JANTS", "KARTN", "KARYE", "KCAER", "KCHOL", "KIMMR", "KLGYO", "KLKIM",
+    "KLRHO", "KMPUR", "KNFRT", "KONKA", "KONTR", "KOPOL", "KORDS", "KOTON",
+    "KOZAA", "KOZAL", "KRDMA", "KRDMB", "KRDMD", "KRGYO", "KRONT",
+    "KRSTL", "KRTEK", "KUTPO", "KZBGY", "LIDFA", "LIDER", "LILAK", "LKMNH",
+    "LRSHO", "MAKIM", "MAKTK", "MARKA", "MAVI", "MEDTR", "MEGMT", "MEKAG",
+    "MEPET", "MERKO", "METRO", "METUR", "MIATK", "MIPAZ", "MNDRS", "MNDTR",
+    "MOGAN", "MPARK", "MUTLU", "NETAS", "NTGAZ", "NUHCM", "ODAS",
+    "OFSYM", "OLMIP", "ONCSM", "ORGE", "ORMA", "OSTIM", "OTKAR", "OTOKC", "OYAYO",
+    "PAMEL", "PANEL", "PAPIL", "PASEU", "PATEK", "PEKGY", "PENTA", "PETKM",
+    "PETUN", "PGSUS", "PKENT", "PNLSN", "PNSUT", "POLHO", "POLTK", "PRDGS",
+    "PSDTC", "QUAGR", "RALYH", "RNPOL", "RTALB", "RUBNS", "RYGYO", "RYSAS",
+    "SAMAT", "SANEL", "SANFM", "SANKO", "SARKY", "SASA", "SAYAS", "SDTTR",
+    "SEKFK", "SELGD", "SELVA", "SERVE", "SEYKM", "SISE", "SKBNK", "SKTAS",
+    "SMRTG", "SNICA", "SODSN", "SOKE", "SOKM", "SONME",
+    "TARKM", "TATEN", "TCELL", "TCKRC", "TDGYO", "TERA", "TGSAS", "THYAO",
+    "TKFEN", "TLMAN", "TMSN", "TOASO", "TRCAS", "TSGYO", "TSPOR", "TTKOM",
+    "TTRAK", "TUPRS", "TURGG", "TURSG", "ULAS", "ULKER", "UNLU", "VAKBN",
+    "VANGD", "VBTYZ", "VERUS", "VESBE", "VESTL", "VOLTS",
+    "YATAS", "YAYLA", "YBTAS", "YESIL", "YGYO", "YKBNK", "ZOREN",
 ]
 
 UNIVERSE: list[str] = UNIVERSE_BIST30 + UNIVERSE_EXTRA
-# UNIVERSE_EXTENDED kaldırıldı — 241→108 hisse
-# Küçük hisseler arama yapınca on-demand çekilir (analyze_symbol)
+# Legacy "active" alias = BIST30 + EXTRA = 108. Used by /api/scan, heatmap,
+# watchlist, ticker_resolver, technical computation, etc.
+# UNIVERSE_EXTENDED IS still actively used — by BullWatch (api/bullwatch.py
+# scans EXTRA + EXTENDED). The earlier "kaldırıldı" note was misleading.
+
+# ================================================================
+# FULL_BIST — canonical deduplicated universe across all modules.
+# 437 unique tickers = dedup(BIST30 ∪ EXTRA ∪ EXTENDED). Used by the
+# shared snapshot pipeline as the single source of truth so per-module
+# scanners can compute their own filters without maintaining separate
+# universe lists. Per-module scan inputs may still narrow this (e.g.
+# BullWatch intentionally excludes BIST30) — see api/bullwatch.py.
+# ================================================================
+FULL_BIST: list[str] = list(dict.fromkeys(
+    UNIVERSE_BIST30 + UNIVERSE_EXTRA + UNIVERSE_EXTENDED
+))
 
 # ================================================================
 # FA SCORE AĞIRLIKLARI

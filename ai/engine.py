@@ -140,6 +140,12 @@ _CALLERS = {
 }
 
 
+# Phase A.10 Step 2-B: throttle quota-exhausted log spam. The CB layer
+# already trips fast and logs once at OPEN; this set ensures the
+# "AI <provider> failed: ..." warning at this layer also fires once.
+_QUOTA_LOGGED: set[str] = set()
+
+
 # ================================================================
 # PUBLIC API — single entry point for all AI calls
 # ================================================================
@@ -155,6 +161,25 @@ def ai_call(prompt: str, max_tokens: int = 200) -> Optional[str]:
             log.info(f"AI {provider} CB OPEN — skip to next")
             continue
         except Exception as e:
-            log.warning(f"AI {provider} failed: {e}")
+            err_lower = str(e).lower()
+            is_quota = any(s in err_lower for s in (
+                "insufficient_quota",
+                "exceeded your current quota",
+                "all available credits",
+                "spending limit",
+                "quota exhausted",
+            ))
+            if is_quota:
+                # Phase A.10 Step 2-B: log ONCE per provider per process.
+                # The CB trip log already covers the fact; subsequent
+                # failures are silent so they don't pollute BullWatch logs.
+                if provider not in _QUOTA_LOGGED:
+                    log.warning(
+                        f"AI {provider} disabled: quota/credits exhausted "
+                        f"(suppressing further failure logs from this provider)"
+                    )
+                    _QUOTA_LOGGED.add(provider)
+            else:
+                log.warning(f"AI {provider} failed: {e}")
             continue
     return None

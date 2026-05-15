@@ -72,9 +72,45 @@ log = logging.getLogger("bistbull.bgtasks")
 HEATMAP_STARTUP_DELAY:    int = 180   # 3 minutes (was 900)
 HEATMAP_REFRESH_INTERVAL: int = 1800  # OPT: 600→1800 (10dk→30dk, API yükü -%66)
 
+# Stage 4 perf: heatmap fetcher tuning. 8 workers stays well under
+# borsapy's observed rate-limit ceiling (it tolerates ~25 concurrent
+# fast_info calls), per-ticker 6s prevents a single stuck symbol from
+# blocking the budget, total budget 30s caps worst-case wall-time.
+HEATMAP_FETCH_WORKERS:      int = 8
+HEATMAP_PER_TICKER_TIMEOUT: int = 6
+HEATMAP_FETCH_BUDGET_SEC:   int = 30
+
 # Paper trade: 90s startup delay, then every 5 min.
 PAPER_TRADE_STARTUP_DELAY:    int = 90   # 1.5 minutes
 PAPER_TRADE_INTERVAL:          int = 300  # 5 minutes
+
+# BullWatch snapshot refresh — tiered cadence (D.3).
+#   Cold (full universe, ~437 tickers): every 30 min, the canonical source.
+#   Hot  (top 50 from cold snapshot):    every  5 min, subset re-scan.
+# Hot tier writes a separate `bullwatch_hot` snapshot consumed via
+# /api/bullwatch?tier=hot. Default endpoint behavior is unchanged.
+BULLWATCH_REFRESH_STARTUP_DELAY: int = 240   # cold tier startup delay
+BULLWATCH_REFRESH_INTERVAL:      int = 1800  # cold tier — 30 min
+BULLWATCH_RETRY_AFTER_ERROR:     int = 300
+
+BULLWATCH_HOT_STARTUP_DELAY:     int = 480   # ~8 min — wait for first cold scan
+BULLWATCH_HOT_INTERVAL:          int = 180   # hot tier — 3 min (was 5min)
+BULLWATCH_HOT_SIZE:              int = 50    # how many top tickers to refresh
+
+# KAP disclosure feed (Faz 1). Cadence is market-hours aware: peak
+# announcement windows in Türkiye are 18:00–21:00 and 08:00–09:30 local
+# time. Off-hours we relax to KAP_INTERVAL_OFFHOURS so we don't beat on
+# KAP servers overnight for nothing.
+KAP_FEED_STARTUP_DELAY:    int = 120   # 2 min — let the rest of boot settle
+KAP_FEED_INTERVAL_PEAK:    int = 300   # 5 min during peak announcement windows
+KAP_FEED_INTERVAL_OFFHOURS: int = 1800  # 30 min overnight
+KAP_FEED_RETRY_AFTER_ERROR: int = 600   # back off 10 min on hard error
+
+# Reaction tracker refresh — runs once per day (after Borsa İstanbul
+# close). Backfills 1d/1w/1m reactions on disclosures that have aged
+# enough.
+KAP_REACTIONS_STARTUP_DELAY: int = 900   # 15 min after boot
+KAP_REACTIONS_INTERVAL:      int = 86400  # daily
 
 # ================================================================
 # DATA SOURCE IMPORTS — borsapy only
@@ -99,40 +135,67 @@ def _fetch_heatmap_data() -> list[dict]:
 
     Returns a flat list of stock dicts. Returns [] on total failure.
     This function is synchronous — always call via asyncio.to_thread().
+
+    Stage 4 (Great Overhaul): the per-ticker fetch is now parallelized
+    via ThreadPoolExecutor. Previously 108 tickers × ~500ms borsapy ≈
+    54s sequential; now ~7-8s with 8 workers. Per-ticker timeout caps
+    a single bad symbol at 6s.
     """
     items    = get_top10_items()
     item_map = {item["ticker"]: item for item in items}
     results: list[dict] = []
 
-    # ── 1. borsapy path ────────────────────────────────────────────
-    if BORSAPY_AVAILABLE:
-        try:
-            import borsapy as bp_m
-            for t in UNIVERSE:
+    # ── 1. borsapy path (parallel) ─────────────────────────────────
+    if not BORSAPY_AVAILABLE:
+        return results
+
+    try:
+        import borsapy as bp_m
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        from concurrent.futures import TimeoutError as _FutureTimeout
+
+        def _fetch_one(t: str) -> Optional[dict]:
+            try:
+                _tk  = bp_m.Ticker(t)
+                fi   = _tk.fast_info
+                last = getattr(fi, "last_price", None)
+                prev = getattr(fi, "previous_close", None)
+                mcap = getattr(fi, "market_cap", None)
+                if last is None or prev is None or prev <= 0:
+                    return None
+                chg = (last - prev) / prev * 100.0
+                si  = item_map.get(t)
+                return {
+                    "ticker":     t,
+                    "price":      round(float(last), 2),
+                    "change_pct": round(chg, 2),
+                    "market_cap": float(mcap) if mcap else None,
+                    "sector":     (si.get("sector", "Diger") if si else "Diger") or "Diger",
+                    "score":      si["overall"] if si else None,
+                }
+            except Exception:
+                return None
+
+        timeouts = 0
+        with ThreadPoolExecutor(max_workers=HEATMAP_FETCH_WORKERS) as pool:
+            futs = {pool.submit(_fetch_one, t): t for t in UNIVERSE}
+            for fut in as_completed(futs, timeout=HEATMAP_FETCH_BUDGET_SEC):
                 try:
-                    _tk  = bp_m.Ticker(t)
-                    fi   = _tk.fast_info
-                    last = getattr(fi, "last_price", None)
-                    prev = getattr(fi, "previous_close", None)
-                    mcap = getattr(fi, "market_cap", None)
-                    if last is not None and prev is not None and prev > 0:
-                        chg = (last - prev) / prev * 100.0
-                        si  = item_map.get(t)
-                        results.append({
-                            "ticker":     t,
-                            "price":      round(float(last), 2),
-                            "change_pct": round(chg, 2),
-                            "market_cap": float(mcap) if mcap else None,
-                            "sector":     (si.get("sector", "Diger") if si else "Diger") or "Diger",
-                            "score":      si["overall"] if si else None,
-                        })
+                    row = fut.result(timeout=HEATMAP_PER_TICKER_TIMEOUT)
+                except _FutureTimeout:
+                    timeouts += 1
+                    continue
                 except Exception:
                     continue
-            if results:
-                log.debug(f"Heatmap borsapy: {len(results)} hisse")
-                return results
-        except Exception as e:
-            log.warning(f"Heatmap borsapy hatasi: {e}")
+                if row is not None:
+                    results.append(row)
+        if timeouts:
+            log.info("Heatmap: %d ticker timed out (>%ds)",
+                     timeouts, HEATMAP_PER_TICKER_TIMEOUT)
+        if results:
+            log.debug(f"Heatmap borsapy: {len(results)} hisse (parallel)")
+    except Exception as e:
+        log.warning(f"Heatmap borsapy hatasi: {e}")
 
     return results
 
@@ -322,3 +385,250 @@ async def paper_trade_loop() -> None:
             log.error(f"PaperTrade loop hatasi: {e}", exc_info=True)
 
         await asyncio.sleep(PAPER_TRADE_INTERVAL)
+
+
+# ================================================================
+# BULLWATCH SNAPSHOT REFRESH LOOP
+# ================================================================
+
+async def bullwatch_refresh_loop() -> None:
+    """Refresh the BullWatch snapshot store at fixed Istanbul times.
+
+    Stage 7a (Great Overhaul):
+      Replaces the old "every 30 min around the clock" cadence with a
+      clock-anchored schedule (09:30 + 13:30 Istanbul, weekdays only).
+      Why: the 30-min cadence burned borsapy quota even at 03:00 when
+      BIST is closed. Anchoring to market-relevant times gives users
+      fresh data when they actually look and lets the system idle
+      overnight.
+
+    Startup behavior:
+      First run still kicks ~4 min after boot so a deployed instance
+      isn't dead until the next scheduled slot. After that, the loop
+      sleeps until the next scheduled time per engine.scan_schedule.
+    """
+    from engine.scan_schedule import seconds_until_next_scan
+
+    log.info(
+        "BullWatch refresh loop: first run in %ds, then clock-anchored "
+        "(09:30 + 13:30 Istanbul, weekdays)",
+        BULLWATCH_REFRESH_STARTUP_DELAY,
+    )
+    await asyncio.sleep(BULLWATCH_REFRESH_STARTUP_DELAY)
+
+    while True:
+        # ── Run the scan ───────────────────────────────────────────
+        try:
+            from api.bullwatch import _refresh_and_persist as _bw_refresh
+            payload = await _bw_refresh()
+            if payload is None:
+                # Scan-in-flight skip or hard failure. Don't ride the
+                # error all the way to the next schedule slot — wait a
+                # short cool-down and re-evaluate.
+                log.debug("BullWatch refresh returned None; brief cool-down")
+                await asyncio.sleep(BULLWATCH_RETRY_AFTER_ERROR)
+                continue
+        except asyncio.CancelledError:
+            log.info("BullWatch refresh loop cancelled")
+            raise
+        except Exception as e:
+            log.warning("BullWatch refresh loop tick failed: %r", e)
+            await asyncio.sleep(BULLWATCH_RETRY_AFTER_ERROR)
+            continue
+
+        # ── Sleep until next scheduled slot ────────────────────────
+        sleep_for, label = seconds_until_next_scan()
+        log.info(
+            "BullWatch refresh: next slot %s in %.0fs (~%.1f h)",
+            label, sleep_for, sleep_for / 3600.0,
+        )
+        await asyncio.sleep(sleep_for)
+
+
+# ================================================================
+# BULLWATCH HOT TIER LOOP (D.3, Tier 1)
+# ================================================================
+
+async def bullwatch_hot_tier_loop() -> None:
+    """Re-scan the top N tickers from the latest cold snapshot every
+    HOT_INTERVAL seconds and persist the result under module
+    `bullwatch_hot`.
+
+    Reads the canonical bullwatch snapshot, narrows the universe to the
+    top BULLWATCH_HOT_SIZE tickers, calls engine.bullwatch.scan on that
+    subset (with fundamental cache warm from the cold scan, this is
+    typically a 30–60 s job), and writes a separate snapshot. The
+    /api/bullwatch endpoint serves the hot snapshot when called with
+    `?tier=hot`; default behavior is unchanged.
+
+    Why a separate snapshot module: keeping cold and hot in separate
+    namespaces preserves the atomicity guarantees of SnapshotStore.
+    No partial-write merging across tiers, no scan_id mismatches.
+    """
+    log.info(
+        "BullWatch hot tier loop scheduled — first run in %ds, then every %ds (top %d)",
+        BULLWATCH_HOT_STARTUP_DELAY, BULLWATCH_HOT_INTERVAL, BULLWATCH_HOT_SIZE,
+    )
+    await asyncio.sleep(BULLWATCH_HOT_STARTUP_DELAY)
+
+    while True:
+        sleep_for = BULLWATCH_HOT_INTERVAL
+        try:
+            payload = await asyncio.to_thread(_run_bullwatch_hot_tier)
+            if payload is None:
+                # No cold snapshot to base on yet — back off briefly
+                sleep_for = BULLWATCH_RETRY_AFTER_ERROR
+        except asyncio.CancelledError:
+            log.info("BullWatch hot tier loop cancelled")
+            raise
+        except Exception as e:
+            log.warning("BullWatch hot tier loop tick failed: %r", e)
+            sleep_for = BULLWATCH_RETRY_AFTER_ERROR
+        await asyncio.sleep(sleep_for)
+
+
+def _run_bullwatch_hot_tier() -> Optional[dict]:
+    """Subset-scan the top N tickers and persist as `bullwatch_hot`.
+
+    Returns the new snapshot payload, None when no cold snapshot exists
+    yet (boot race) or there's nothing scoreable.
+    """
+    from core.snapshot_store import get_default_store
+    store = get_default_store()
+    top = store.read_top("bullwatch", BULLWATCH_HOT_SIZE)
+    if not top:
+        log.debug("hot tier: no cold snapshot yet, skipping")
+        return None
+    tickers = [t for t, _ in top]
+
+    from engine.bullwatch import scan as _bw_scan
+    results = _bw_scan(
+        tickers,
+        include_ineligible=True,
+        max_workers=8,
+    )
+    items = [r.to_dict() for r in results if r.eligible]
+    if not items:
+        log.info("hot tier: no eligible items in subset (universe=%d)", len(tickers))
+        return None
+
+    scored = [
+        (it.get("symbol"), float(it.get("score") or 0), it)
+        for it in items
+        if it.get("symbol")
+    ]
+    scan_id = store.write_snapshot(
+        "bullwatch_hot",
+        scored,
+        meta={
+            "universe_size": len(tickers),
+            "source_module": "bullwatch",
+            "tier": "hot",
+            "size_target": BULLWATCH_HOT_SIZE,
+        },
+    )
+    log.info(
+        "hot tier: wrote %d items as %s (subset of bullwatch top %d)",
+        len(items), scan_id, BULLWATCH_HOT_SIZE,
+    )
+    return {"scan_id": scan_id, "items": items}
+
+
+# ================================================================
+# KAP DISCLOSURE FEED LOOP (Faz 1)
+# ================================================================
+
+
+def _in_peak_window() -> bool:
+    """Return True during the two daily windows when KAP announcements
+    spike: 08:00-09:30 local and 18:00-21:00 local."""
+    now = dt.datetime.now()  # local time on the deploy host
+    h, m = now.hour, now.minute
+    if h == 8 or (h == 9 and m <= 30):
+        return True
+    if 18 <= h < 21:
+        return True
+    return False
+
+
+async def kap_feed_loop() -> None:
+    """Periodically poll KAP for new disclosures and fan out side
+    effects (Plan C cache invalidation; Faz 3 AI queue).
+
+    Errors are isolated to one cycle — the loop never dies on a
+    bad day at kap.org.tr. Cadence switches between peak and
+    off-hours intervals based on local time.
+    """
+    log.info(
+        "KAP feed loop scheduled — first run in %ds, then %ds peak / %ds off-hours",
+        KAP_FEED_STARTUP_DELAY, KAP_FEED_INTERVAL_PEAK, KAP_FEED_INTERVAL_OFFHOURS,
+    )
+    await asyncio.sleep(KAP_FEED_STARTUP_DELAY)
+
+    while True:
+        sleep_for = (
+            KAP_FEED_INTERVAL_PEAK if _in_peak_window()
+            else KAP_FEED_INTERVAL_OFFHOURS
+        )
+        try:
+            from engine.kap_feed import run_one_cycle
+            await asyncio.to_thread(run_one_cycle)
+        except asyncio.CancelledError:
+            log.info("KAP feed loop cancelled")
+            raise
+        except Exception as exc:
+            log.warning("KAP feed cycle raised: %r", exc)
+            sleep_for = KAP_FEED_RETRY_AFTER_ERROR
+        await asyncio.sleep(sleep_for)
+
+
+# ================================================================
+# KAP REACTION REFRESH LOOP (Faz 4)
+# ================================================================
+
+
+async def kap_reactions_loop() -> None:
+    """Once-per-day backfill of 1d/1w/1m post-announcement price
+    reactions on KAP disclosures."""
+    log.info(
+        "KAP reactions loop scheduled — first run in %ds, then daily",
+        KAP_REACTIONS_STARTUP_DELAY,
+    )
+    await asyncio.sleep(KAP_REACTIONS_STARTUP_DELAY)
+    while True:
+        try:
+            from engine.kap_reactions import refresh_reactions
+            stats = await asyncio.to_thread(refresh_reactions, 200)
+            log.info("KAP reactions tick stats: %s", stats)
+        except asyncio.CancelledError:
+            log.info("KAP reactions loop cancelled")
+            raise
+        except Exception as exc:
+            log.warning("KAP reactions cycle raised: %r", exc)
+        await asyncio.sleep(KAP_REACTIONS_INTERVAL)
+
+
+# ================================================================
+# BULLWATCH ALARM REACTION REFRESH LOOP (BW Alarm Faz 4)
+# ================================================================
+
+
+async def bw_alert_reactions_loop() -> None:
+    """Daily backfill of 1d/1w/1m post-alarm price reactions on
+    BullWatchAlert rows. Mirrors kap_reactions_loop structure."""
+    log.info(
+        "BW alarm reactions loop scheduled — first run in %ds, then daily",
+        KAP_REACTIONS_STARTUP_DELAY + 600,  # +10 min after KAP loop
+    )
+    await asyncio.sleep(KAP_REACTIONS_STARTUP_DELAY + 600)
+    while True:
+        try:
+            from engine.bullwatch_alert_reactions import refresh_alert_reactions
+            stats = await asyncio.to_thread(refresh_alert_reactions, 200)
+            log.info("BW alarm reactions tick stats: %s", stats)
+        except asyncio.CancelledError:
+            log.info("BW alarm reactions loop cancelled")
+            raise
+        except Exception as exc:
+            log.warning("BW alarm reactions cycle raised: %r", exc)
+        await asyncio.sleep(KAP_REACTIONS_INTERVAL)

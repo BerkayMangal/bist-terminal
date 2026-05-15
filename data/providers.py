@@ -13,7 +13,7 @@ import math
 import logging
 import re
 import datetime as _dt
-from typing import Optional, Any
+from typing import Optional, Any, Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import numpy as np
@@ -104,9 +104,34 @@ def _norm(s: Any) -> str:
     return re.sub(r'\s+', ' ', s.replace('\xa0', ' ')).strip()
 
 
+def _is_empty_frame(df: Any) -> bool:
+    """Phase A.10 Step 2-A.1: defensive guard for borsapy responses.
+
+    borsapy occasionally returns a string (rate-limit or error message)
+    instead of a DataFrame for income/balance/cashflow statements. Naive
+    `df.empty` checks then raise AttributeError → '/api/bullwatch/{sym}'
+    returns 502 before override or partial-data layers can run.
+
+    Returns True when:
+      - df is None
+      - df is not a pandas-DataFrame-like object (no `.empty` attr)
+      - df is empty (no rows or no columns)
+
+    Returns False ONLY when df is a real, non-empty DataFrame.
+    """
+    if df is None:
+        return True
+    if not hasattr(df, "empty"):
+        return True
+    try:
+        return bool(df.empty)
+    except Exception:
+        return True
+
+
 def _find_data_col(df: Optional[pd.DataFrame]) -> int:
     """İlk gerçek veri kolonu (2025 boşsa skip)."""
-    if df is None or df.empty:
+    if _is_empty_frame(df):
         return 0
     for ci in range(len(df.columns)):
         non_zero = sum(1 for val in df.iloc[:, ci] if _safe_num(val) not in (None, 0))
@@ -122,7 +147,7 @@ def _pick(
     base: Optional[int] = None,
 ) -> Optional[float]:
     """DataFrame'den satır ismine göre değer çek."""
-    if df is None or df.empty:
+    if _is_empty_frame(df):
         return None
     if base is None:
         base = _find_data_col(df)
@@ -153,17 +178,108 @@ def _pair(
     names: list[str],
 ) -> tuple[Optional[float], Optional[float]]:
     """Cari ve önceki dönem değerlerini çek."""
-    if df is None or df.empty:
+    if _is_empty_frame(df):
         return None, None
     b = _find_data_col(df)
     return _pick(df, names, 0, b), _pick(df, names, 1, b)
+
+
+def _quarterly_series(
+    df: Optional[pd.DataFrame],
+    names: list[str],
+    n: int = 8,
+) -> list[Optional[float]]:
+    """Pull up to N quarters of values for a row name, starting from the
+    most recent column with real data. Returns a fixed-length list; missing
+    cells are None.
+
+    Quarterly column order from borsapy is newest-first
+    (e.g. ['2025Q4', '2025Q3', ..., '2024Q1']), so series[0] is the
+    latest reported quarter, series[4] is the same quarter one year
+    earlier (used for YoY-Q growth).
+    """
+    if _is_empty_frame(df):
+        return [None] * n
+    base = _find_data_col(df)
+    ncols = len(df.columns)
+    return [
+        _pick(df, names, offset=i, base=base) if (base + i) < ncols else None
+        for i in range(n)
+    ]
+
+
+def _compute_quarterly_aggregates(
+    fin_q: Optional[pd.DataFrame],
+) -> dict[str, Any]:
+    """From an 8-quarter income statement, compute YTD year-over-year
+    growth metrics.
+
+    borsapy's quarterly columns are CUMULATIVE YEAR-TO-DATE values (e.g.
+    "2025Q3" = revenue for Jan–Sep 2025, not just Q3 alone). Verified by
+    cross-checking: 2025Q4 cumulative == 2025 annual figure exactly.
+    So:
+      revenue_ytd       = latest cumulative YTD value
+      revenue_ytd_prev  = same quarter from previous year (cumulative)
+      revenue_growth_yoy_q = (ytd - ytd_prev) / ytd_prev
+                           — when latest is Q4, this is full-year YoY.
+                           — when latest is Q3 (mid-year), this is
+                             "first 9 months YoY" — gives a fresher signal
+                             than the annual figures that only update on
+                             year-end reporting.
+
+    True TTM (trailing-12-month standalone) would need a
+    cumulative→standalone conversion; deferred to a follow-up.
+
+    Plan B v1 — additive: existing annual fields are not touched.
+    """
+    out: dict[str, Any] = {
+        "quarterly_data_available": False,
+        "latest_quarter": None,
+    }
+    if _is_empty_frame(fin_q):
+        return out
+
+    base = _find_data_col(fin_q)
+    cols = list(fin_q.columns)
+    if base >= len(cols):
+        return out
+    out["latest_quarter"] = str(cols[base])
+    out["quarterly_data_available"] = True
+
+    fields = [
+        ("revenue", IS_MAP["revenue"]),
+        ("net_income", IS_MAP["net_income"]),
+        ("operating_income", IS_MAP["operating_income"]),
+    ]
+    any_data = False
+    for metric, names in fields:
+        series = _quarterly_series(fin_q, names, n=8)
+        ytd = series[0]               # cumulative through latest reported quarter
+        ytd_prev = series[4]          # same quarter cumulative one year earlier
+        growth = (
+            (ytd - ytd_prev) / abs(ytd_prev)
+            if ytd is not None and ytd_prev not in (None, 0)
+            else None
+        )
+        out[f"{metric}_ytd"] = ytd
+        out[f"{metric}_ytd_prev"] = ytd_prev
+        out[f"{metric}_growth_yoy_q"] = growth
+        if growth is not None:
+            any_data = True
+
+    if not any_data:
+        # Got columns but no row-name matched (e.g. bank-format rows when
+        # caller expected non-bank schema). Demote the availability flag
+        # so callers can fall back to annual.
+        out["quarterly_data_available"] = False
+    return out
 
 
 def _pick_debt(
     bal: Optional[pd.DataFrame],
 ) -> tuple[Optional[float], Optional[float]]:
     """Kısa + Uzun vadeli Finansal Borçlar (aynı isim, farklı section)."""
-    if bal is None or bal.empty:
+    if _is_empty_frame(bal):
         return None, None
     b = _find_data_col(bal)
     ci0 = b
@@ -210,8 +326,16 @@ def _pick_debt(
 #      a cascade).
 # Fix: log exception type + repr + exc_info; add retry-with-backoff
 # around the ThreadPoolExecutor block. CB interaction preserved.
-FETCH_RAW_MAX_ATTEMPTS = 3
-FETCH_RAW_BACKOFF_SEC = (0.5, 1.0, 2.0)   # per-attempt sleep before retry
+# Phase A.10 Step 2-B.1: lighter retry profile.
+# Pre-2-B.1: 3 attempts × (0.5s, 1.0s, 2.0s) backoff = up to 3.5s blocked
+#            per failed symbol (12 symbols × 3.5s ≈ 42s of pool blocked).
+# Post-2-B.1: 2 attempts × 0.7s backoff = max 0.7s per failed symbol.
+# Provider failures still surface (no exception swallowing), they just
+# fail faster so the scan loop can move on. Stale-while-revalidate
+# (Step 2-B) ensures users don't see 502s — the failed symbol returns
+# stale data if cache exists, otherwise data_status=missing.
+FETCH_RAW_MAX_ATTEMPTS = 2
+FETCH_RAW_BACKOFF_SEC = (0.3, 0.7)   # per-attempt sleep before retry
 
 
 def fetch_raw_v9(symbol: str) -> dict:
@@ -304,6 +428,30 @@ def fetch_raw_v9(symbol: str) -> dict:
                 log.warning(f"cashflow {tc}: {type(e).__name__}: {e!r}")
             return None
 
+    # Quarterly fetches (Plan B v1) — 8 trailing quarters for TTM and
+    # year-over-year same-quarter growth metrics. Errors don't fail the
+    # symbol; quarterly_data_available flag in metrics signals success.
+    def _income_q():
+        try:
+            return tk.get_income_stmt(quarterly=True, financial_group=fg, last_n=8)
+        except Exception as e:
+            log.debug(f"income_q {tc}: {type(e).__name__}: {e!r}")
+            return None
+
+    def _balance_q():
+        try:
+            return tk.get_balance_sheet(quarterly=True, financial_group=fg, last_n=8)
+        except Exception as e:
+            log.debug(f"balance_q {tc}: {type(e).__name__}: {e!r}")
+            return None
+
+    def _cashflow_q():
+        try:
+            return tk.get_cashflow(quarterly=True, financial_group=fg, last_n=8)
+        except Exception as e:
+            log.debug(f"cashflow_q {tc}: {type(e).__name__}: {e!r}")
+            return None
+
     last_exc: Optional[Exception] = None
     for attempt in range(FETCH_RAW_MAX_ATTEMPTS):
         if attempt > 0:
@@ -317,17 +465,34 @@ def fetch_raw_v9(symbol: str) -> dict:
             _t.sleep(sleep_sec)
 
         try:
-            with ThreadPoolExecutor(max_workers=5) as pool:
+            with ThreadPoolExecutor(max_workers=8) as pool:
                 f_fast = pool.submit(_fast)
                 f_info = pool.submit(_info)
                 f_fin = pool.submit(_income)
                 f_bal = pool.submit(_balance)
                 f_cf = pool.submit(_cashflow)
+                f_fin_q = pool.submit(_income_q)
+                f_bal_q = pool.submit(_balance_q)
+                f_cf_q = pool.submit(_cashflow_q)
                 fast = f_fast.result(timeout=30)
                 info = f_info.result(timeout=30)
                 fin = f_fin.result(timeout=15)
                 bal = f_bal.result(timeout=15)
                 cf = f_cf.result(timeout=15)
+                # Quarterly results — soft-fail (return None) so they
+                # never block the symbol on borsapy hiccups.
+                try:
+                    fin_q = f_fin_q.result(timeout=15)
+                except Exception:
+                    fin_q = None
+                try:
+                    bal_q = f_bal_q.result(timeout=15)
+                except Exception:
+                    bal_q = None
+                try:
+                    cf_q = f_cf_q.result(timeout=15)
+                except Exception:
+                    cf_q = None
 
             if info is None:
                 info = {
@@ -341,6 +506,7 @@ def fetch_raw_v9(symbol: str) -> dict:
             raw = {
                 "info": info, "fast": fast,
                 "financials": fin, "balance": bal, "cashflow": cf,
+                "financials_q": fin_q, "balance_q": bal_q, "cashflow_q": cf_q,
                 "source": "borsapy", "ticker_clean": tc, "is_bank": is_bank(tc),
                 "_fetched_at": _dt.datetime.now(_dt.timezone.utc).isoformat(),
                 "_fetch_attempts": attempt + 1,  # telemetry
@@ -396,6 +562,7 @@ def compute_metrics_v9(symbol: str) -> dict:
     fin = raw["financials"]
     bal = raw["balance"]
     cf = raw["cashflow"]
+    fin_q = raw.get("financials_q")  # Plan B v1 — quarterly data (optional)
     tc = raw["ticker_clean"]
 
     # Income statement
@@ -540,6 +707,48 @@ def compute_metrics_v9(symbol: str) -> dict:
         missing = [s for s, ok in [("income", has_income), ("balance", has_balance), ("cashflow", has_cashflow)] if not ok]
         log.info(f"DATA QUALITY [{tc}]: Missing {', '.join(missing)} statement(s)")
 
+    # Phase A.10 Step 2-A: field-level source tagging.
+    #
+    # We tag each major field with WHERE it would have come from. This
+    # is coarse — it doesn't track whether the actual returned value is
+    # None or fell back through a different path inside fast/info. But it
+    # gives the diagnostics endpoint enough granularity to answer
+    # "for symbol X, why is free_float missing?" by looking at which
+    # source was supposed to supply it. Manual overrides will overwrite
+    # these labels in `_apply_overrides`.
+    _field_sources = {
+        # Market data — first try fast_info, fall back to info dict
+        "price": "borsapy.fast_info" if fast.get("last_price") is not None else "borsapy.info",
+        "market_cap": "borsapy.fast_info" if fast.get("market_cap") is not None else "borsapy.info",
+        "shares": "borsapy.fast_info" if fast.get("shares") is not None else (
+            "derived_market_cap_over_price" if shares is not None else "missing"
+        ),
+        "pe": "borsapy.fast_info" if fast.get("pe_ratio") is not None else "borsapy.info",
+        "pb": "borsapy.fast_info" if fast.get("pb_ratio") is not None else "borsapy.info",
+        # BIST-specific — only fast_info supplies these
+        "free_float": "borsapy.fast_info" if fast.get("free_float") is not None else "missing",
+        "foreign_ratio": "borsapy.fast_info" if fast.get("foreign_ratio") is not None else "missing",
+        # Sector/industry — info dict only
+        "sector": "borsapy.info" if info.get("sector") else "missing",
+        "industry": "borsapy.info" if info.get("industry") else "missing",
+        # Fundamentals — borsapy income statement (UFRS-grouped)
+        "revenue": "borsapy.income_stmt_ufrs" if revenue is not None else "missing",
+        "net_income": "borsapy.income_stmt_ufrs" if net_income is not None else "missing",
+        "operating_income": "borsapy.income_stmt_ufrs" if operating_income is not None else "missing",
+        "ebitda": "derived_income_plus_dep" if ebitda is not None else "missing",
+        "total_assets": "borsapy.balance_sheet" if total_assets is not None else "missing",
+        "total_debt": "borsapy.balance_sheet" if total_debt is not None else "missing",
+        "equity": "borsapy.balance_sheet" if equity is not None else "missing",
+        "operating_cf": "borsapy.cashflow" if op_cf is not None else "missing",
+        # ohlcv source set later by batch_download_history caller
+    }
+
+    # Plan B v1 — quarterly aggregates (TTM, YoY-Q). Additive: existing
+    # annual fields (revenue_growth, eps_growth, ...) are untouched so
+    # nothing downstream needs to change. Scoring layer wires these in
+    # in Plan B v2.
+    q_aggs = _compute_quarterly_aggregates(fin_q)
+
     return {
         "symbol": symbol, "ticker": tc,
         "name": str(info.get("shortName") or info.get("longName") or tc),
@@ -580,10 +789,25 @@ def compute_metrics_v9(symbol: str) -> dict:
         "share_change": None,
         "asset_turnover": asset_to, "asset_turnover_prev": asset_to_p,
         "inst_holders_pct": foreign_ratio, "foreign_ratio": foreign_ratio,
+        # Phase A.10 Step 2-A.1 Fix A: shares was computed (line ~448) and
+        # tagged in _field_sources but never made it to the returned dict.
+        # That caused data_status to flag it as 'missing' for every symbol.
+        "shares": shares,
         "free_float": _safe_num(fast.get("free_float")),
         "ciro_pd": (revenue / market_cap) if revenue is not None and market_cap not in (None, 0) else None,
         "data_source": "borsapy",
         "data_quality": data_quality,
+        # Phase A.10 Step 2-A: source tagging (additive, doesn't change
+        # any existing field). May be updated by _apply_overrides.
+        "_field_sources": _field_sources,
+        # Plan B v1 — quarterly aggregates merged in. Keys:
+        #   quarterly_data_available, latest_quarter,
+        #   revenue_ytd, revenue_ytd_prev, revenue_growth_yoy_q,
+        #   net_income_*, operating_income_*.
+        # Cumulative YTD semantics — when latest_quarter is mid-year
+        # (e.g. "2025Q3"), growth_yoy_q is the freshest signal you can
+        # get because the annual fields only update on year-end reports.
+        **q_aggs,
     }
 
 
@@ -594,8 +818,25 @@ def batch_download_history_v9(
     symbols: list[str],
     period: str = "1y",
     interval: str = "1d",
+    progress_callback: Optional[Callable[[int, int], None]] = None,
+    use_cache: bool = True,
 ) -> dict[str, pd.DataFrame]:
-    """borsapy ile toplu price history. Chunk+retry+cache fallback."""
+    """borsapy ile toplu price history. Cache-first + chunk+retry.
+
+    Stage 5 (Great Overhaul):
+      - Optional progress_callback(done, total) fires after each chunk
+        finishes (Pass 1 + Pass 2).
+      - WORKERS / inter-chunk sleep come from config.
+
+    Stage 6a (Great Overhaul, persistent history cache):
+      - PRIMARY cache lookup happens BEFORE borsapy. Symbols still
+        within history_cache TTL (default 24h) skip the network entirely
+        — a subsequent refresh within that window returns in ~seconds.
+      - Only the cache-miss symbols hit the chunk fetcher.
+      - Fresh borsapy results are written back to history_cache so the
+        next refresh benefits.
+      - ``use_cache=False`` forces a full refetch (admin escape hatch).
+    """
     if not BORSAPY_AVAILABLE:
         return {}
     try:
@@ -616,20 +857,89 @@ def batch_download_history_v9(
         try:
             tk = bp.Ticker(tc)
             df = tk.history(period=bp_period, interval=interval)
-            if df is not None and not df.empty and len(df) >= 20:
+            if not _is_empty_frame(df) and len(df) >= 20:
                 return sym, df
         except Exception:
             pass
         return sym, None
 
+    def _emit_progress(done: int) -> None:
+        """Fire the progress callback under a try guard — caller code is
+        observability-only and must never break the fetch."""
+        if progress_callback is None:
+            return
+        try:
+            progress_callback(done, len(symbols))
+        except Exception:
+            pass
+
     import time as _time
+    try:
+        from config import BATCH_HISTORY_CHUNK_SLEEP_SEC as _CHUNK_SLEEP
+    except Exception:
+        _CHUNK_SLEEP = 0.3
     CHUNK = 25
-    WORKERS = min(BATCH_HISTORY_WORKERS, 5)
+    WORKERS = BATCH_HISTORY_WORKERS
+
+    # ── Stage 6a: PRIMARY cache lookup ─────────────────────────────
+    # Before this stage, history_cache was only consulted as Pass 3
+    # fallback after both borsapy passes failed. Now we drain warm
+    # entries up-front so the network only sees the cold misses. This
+    # turns "every refresh fast" into reality once the cache is hot.
+    cold_symbols: list[str] = list(symbols)
+    if use_cache:
+        try:
+            from core.cache import history_cache as _hc
+            warm_count = 0
+            cold_symbols = []
+            for sym in symbols:
+                cached = _hc.get(sym)
+                # Same shape check we apply to fresh borsapy fetches —
+                # tolerate a stale cache only if it still has enough bars
+                # for downstream technical indicators (>= 20).
+                if cached is not None and len(cached) >= 20:
+                    result[sym] = cached
+                    warm_count += 1
+                else:
+                    cold_symbols.append(sym)
+            if warm_count:
+                log.info(
+                    "batch_history cache-first: %d/%d warm hits, "
+                    "%d cold to fetch",
+                    warm_count, len(symbols), len(cold_symbols),
+                )
+                # Emit progress immediately so the UI sees a jump from
+                # 0 → warm_count at the start of the phase, rather than
+                # waiting for the first cold chunk to finish.
+                _emit_progress(warm_count)
+        except Exception as exc:
+            log.debug("history_cache primary lookup unavailable: %r", exc)
+            cold_symbols = list(symbols)
+
+    # If everything was warm, skip the entire chunk pipeline. CB is
+    # already marked "before_call" but nothing happened — still safe to
+    # call on_success() because no error was raised.
+    if not cold_symbols:
+        try:
+            cb_borsapy.on_success()
+        except Exception:
+            pass
+        log.info("batch_history (cache-only): %d/%d", len(result), len(symbols))
+        return result
+
     failed: list[str] = []
 
-    # Pass 1: Chunk halinde indir
-    for ci in range(0, len(symbols), CHUNK):
-        chunk = symbols[ci:ci+CHUNK]
+    # Stage 5 progress model: emit `len(result)` (= actual successful
+    # downloads so far) instead of "attempts processed". This way Pass 2
+    # retries continue to push the counter up rather than appearing to
+    # stall at 100% while retries are still chugging.
+
+    # Stage 6a: Track fresh fetches so we can write them back to cache.
+    fresh_results: dict[str, pd.DataFrame] = {}
+
+    # Pass 1: Chunk halinde indir — only cold symbols now (Stage 6a)
+    for ci in range(0, len(cold_symbols), CHUNK):
+        chunk = cold_symbols[ci:ci+CHUNK]
         try:
             with ThreadPoolExecutor(max_workers=WORKERS) as pool:
                 futs = [pool.submit(_fetch_one, s) for s in chunk]
@@ -638,19 +948,23 @@ def batch_download_history_v9(
                         sym, df = fut.result(timeout=30)
                         if df is not None:
                             result[sym] = df
+                            fresh_results[sym] = df
                         else:
                             failed.append(sym)
                     except Exception:
                         pass
         except Exception:
             failed.extend(chunk)
-        if ci + CHUNK < len(symbols):
-            _time.sleep(1.0)
+        # Progress = symbols actually downloaded so far (across both
+        # cache hits and fresh fetches), against the full input size.
+        _emit_progress(len(result))
+        if ci + CHUNK < len(cold_symbols):
+            _time.sleep(_CHUNK_SLEEP)
 
     # Pass 2: Retry başarısızlar
     if failed:
         log.info(f"batch_history retry: {len(failed)} sembol")
-        _time.sleep(2.0)
+        _time.sleep(1.0)  # Stage 5: 2.0 → 1.0; one retry breath, not two
         still_failed = []
         for ci in range(0, len(failed), CHUNK):
             chunk = failed[ci:ci+CHUNK]
@@ -662,120 +976,62 @@ def batch_download_history_v9(
                             sym, df = fut.result(timeout=30)
                             if df is not None:
                                 result[sym] = df
+                                fresh_results[sym] = df
                             else:
                                 still_failed.append(sym)
                         except Exception:
                             pass
             except Exception:
                 still_failed.extend(chunk)
-            _time.sleep(1.5)
+            # Same success-count model — Pass 2 keeps moving the bar up
+            # as retries succeed, never backwards.
+            _emit_progress(len(result))
+            _time.sleep(_CHUNK_SLEEP)
         failed = still_failed
 
-    # Pass 3: Cache fallback
+    # Pass 3: Cache fallback (use_cache=False kullanıcılarda da işler)
+    # Stage 6a: this layer now mainly catches the use_cache=False path
+    # since the primary lookup already drained warm entries; still useful
+    # as a "borsapy completely failed but we have a cached snapshot"
+    # safety net.
     if failed:
-        from core.cache import history_cache
-        recovered = 0
-        for sym in failed:
-            cached = history_cache.get(sym)
-            if cached is not None and len(cached) >= 20:
-                result[sym] = cached
-                recovered += 1
-        if recovered:
-            log.info(f"batch_history cache fallback: {recovered}/{len(failed)} kurtarıldı")
+        try:
+            from core.cache import history_cache
+            recovered = 0
+            for sym in failed:
+                cached = history_cache.get(sym)
+                if cached is not None and len(cached) >= 20:
+                    result[sym] = cached
+                    recovered += 1
+            if recovered:
+                log.info(
+                    "batch_history cache fallback: %d/%d kurtarıldı",
+                    recovered, len(failed),
+                )
+        except Exception as exc:
+            log.debug("Pass 3 cache fallback unavailable: %r", exc)
+
+    # Stage 6a: write fresh fetches back to cache so the next refresh
+    # benefits. Done after both passes complete so we only persist
+    # successful results.
+    if fresh_results:
+        try:
+            from core.cache import history_cache as _hc
+            for sym, df in fresh_results.items():
+                _hc.set(sym, df)
+            log.info(
+                "batch_history: cached %d fresh entries (TTL applies)",
+                len(fresh_results),
+            )
+        except Exception as exc:
+            log.debug("history_cache write-back failed: %r", exc)
 
     if result:
         cb_borsapy.on_success()
-    log.info(f"batch_history: {len(result)}/{len(symbols)} başarılı")
+    log.info(
+        "batch_history: %d/%d başarılı (cache hits: %d, fresh: %d)",
+        len(result), len(symbols),
+        len(result) - len(fresh_results), len(fresh_results),
+    )
     return result
 
-
-    def _fetch_one(sym: str) -> tuple[str, Optional[pd.DataFrame]]:
-        tc = sym.upper().replace(".IS", "").replace(".E", "")
-        try:
-            tk = bp.Ticker(tc)
-            df = tk.history(period=bp_period, interval=interval)
-            if df is not None and not df.empty and len(df) >= 20:
-                return sym, df
-        except Exception:
-            pass
-        return sym, None
-
-    import time as _time
-
-    # ── CHUNK + RETRY STRATEJİSİ ──
-    CHUNK_SIZE = 25
-    MAX_WORKERS = min(BATCH_HISTORY_WORKERS, 5)  # Max 5 eşzamanlı (rate limit)
-
-    all_symbols = list(symbols)  # Kopyala
-    failed_symbols: list[str] = []
-
-    # Pass 1: Chunk'lar halinde indir
-    for chunk_start in range(0, len(all_symbols), CHUNK_SIZE):
-        chunk = all_symbols[chunk_start:chunk_start + CHUNK_SIZE]
-        try:
-            with ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
-                futures = [pool.submit(_fetch_one, s) for s in chunk]
-                for future in as_completed(futures):
-                    try:
-                        sym, df = future.result(timeout=30)
-                        if df is not None:
-                            result[sym] = df
-                        else:
-                            failed_symbols.append(sym)
-                    except Exception:
-                        pass
-        except Exception as e:
-            log.warning(f"batch_history chunk error: {e}")
-            failed_symbols.extend(chunk)
-
-        # Chunk arası bekleme — rate limit koruması
-        if chunk_start + CHUNK_SIZE < len(all_symbols):
-            _time.sleep(1.0)
-
-    # Pass 2: Başarısız semboller için RETRY (2s backoff)
-    if failed_symbols:
-        log.info(f"batch_history retry: {len(failed_symbols)} sembol tekrar deneniyor")
-        _time.sleep(2.0)
-        still_failed: list[str] = []
-        for chunk_start in range(0, len(failed_symbols), CHUNK_SIZE):
-            chunk = failed_symbols[chunk_start:chunk_start + CHUNK_SIZE]
-            try:
-                with ThreadPoolExecutor(max_workers=3) as pool:
-                    futures = [pool.submit(_fetch_one, s) for s in chunk]
-                    for future in as_completed(futures):
-                        try:
-                            sym, df = future.result(timeout=30)
-                            if df is not None:
-                                result[sym] = df
-                            else:
-                                still_failed.append(sym)
-                        except Exception:
-                            pass
-            except Exception:
-                still_failed.extend(chunk)
-            if chunk_start + CHUNK_SIZE < len(failed_symbols):
-                _time.sleep(1.5)
-        failed_symbols = still_failed
-
-    # Pass 3: Hâlâ başarısız olanlar için CACHE FALLBACK
-    if failed_symbols:
-        from core.cache import history_cache
-        cache_recovered = 0
-        for sym in failed_symbols:
-            cached_df = history_cache.get(sym)
-            if cached_df is not None and len(cached_df) >= 20:
-                result[sym] = cached_df
-                cache_recovered += 1
-        if cache_recovered > 0:
-            log.info(f"batch_history cache fallback: {cache_recovered}/{len(failed_symbols)} sembol cache\'den alındı")
-        final_missing = len(failed_symbols) - cache_recovered
-        if final_missing > 0:
-            log.warning(f"batch_history: {final_missing} sembol tamamen eksik (borsapy + cache başarısız)")
-
-    if result:
-        cb_borsapy.on_success()
-    else:
-        cb_borsapy.on_failure(Exception("batch_history: 0 result"))
-
-    log.info(f"batch_history sonuç: {len(result)}/{len(all_symbols)} başarılı")
-    return result

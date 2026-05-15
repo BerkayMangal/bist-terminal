@@ -32,6 +32,9 @@ from core.response_envelope import success, error, not_found, rate_limited, serv
 from core.auth import require_jwt_secret, verify_jwt
 from api.auth import router as auth_router
 from api.phase4_endpoints import router as phase4_router
+from api.bullwatch import router as bullwatch_router
+from api.bullalfa import router as bullalfa_router
+from api.daily_brief import router as daily_brief_router
 
 from config import (
     BOT_VERSION, APP_NAME, CONFIDENCE_MIN, UNIVERSE,
@@ -177,6 +180,38 @@ async def _background_scanner():
 @asynccontextmanager
 async def lifespan(application: FastAPI):
     init_db()
+    # KAP disclosure-feed schema lives in the same SQLite as the rest of
+    # the app; create the table on boot so it's there before the feed
+    # loop fires its first cycle.
+    try:
+        from infra.kap_storage import init_db as _kap_init_db
+        _kap_init_db()
+    except Exception as e:
+        log.warning(f"KAP storage init skipped: {e}")
+    # BullWatch alarm storage — immutable high-conviction history.
+    try:
+        from infra.bullwatch_alerts_storage import init_db as _bwa_init_db
+        _bwa_init_db()
+    except Exception as e:
+        log.warning(f"BullWatch alarm storage init skipped: {e}")
+    # BullWatch membership-events storage — list churn history.
+    try:
+        from infra.bullwatch_membership_storage import init_db as _bwm_init_db
+        _bwm_init_db()
+    except Exception as e:
+        log.warning(f"BullWatch membership storage init skipped: {e}")
+    # VIOP snapshot storage — daily options/futures contract history
+    try:
+        from infra.viop_storage import init_db as _viop_init_db
+        _viop_init_db()
+    except Exception as e:
+        log.warning(f"VIOP storage init skipped: {e}")
+    # Portfolio storage — user's open positions + exit signal history
+    try:
+        from infra.portfolio_storage import init_db as _portfolio_init_db
+        _portfolio_init_db()
+    except Exception as e:
+        log.warning(f"Portfolio storage init skipped: {e}")
     # Phase 1: refuse to boot without a real JWT_SECRET. Raises RuntimeError
     # (uvicorn will surface this as a startup failure) if the env var is
     # missing, too short, or still a placeholder string.
@@ -185,8 +220,103 @@ async def lifespan(application: FastAPI):
     restore_results = restore_all_from_redis()
     log.info(f"{APP_NAME} {BOT_VERSION} | Universe: {len(UNIVERSE)} | AI: {','.join(AI_PROVIDERS) or 'OFF'} | Chart: {'ON' if CHART_AVAILABLE else 'OFF'} | Redis: {'ON' if redis_client.is_available() else 'OFF'} | Restore: {restore_results}")
     task = asyncio.create_task(_background_scanner())
+    # BullWatch cache warmup — keeps /api/bullwatch instant for users.
+    # Runs independently from the main scanner; failures here never affect
+    # any other endpoint. Imported lazily so the optional module doesn't
+    # block app startup if it has an import-time error.
+    bullwatch_task = None
+    bullwatch_hot_task = None
+    try:
+        # BullWatch snapshot refresh — periodically scans the universe and
+        # persists results into the shared snapshot store (core/snapshot_store).
+        # Endpoint reads from the snapshot, never blocks on a live scan when
+        # a snapshot exists. Replaces the previous in-memory warmup loop.
+        from engine.background_tasks import (
+            bullwatch_refresh_loop,
+            bullwatch_hot_tier_loop,
+        )
+        bullwatch_task = asyncio.create_task(bullwatch_refresh_loop())
+        log.info("BullWatch refresh loop started")
+        # D.3 — hot tier loop refreshes the top-50 subset every 5 min
+        # so the most-watched names stay fresher than the full universe.
+        bullwatch_hot_task = asyncio.create_task(bullwatch_hot_tier_loop())
+        log.info("BullWatch hot tier loop started")
+    except Exception as e:
+        log.warning(f"BullWatch refresh loop not started: {e}")
+    bullalfa_task = None
+    try:
+        from api.bullalfa import register_data_provider, warmup_cache_loop as _ba_warmup
+        from api.bullalfa_provider import production_scan_provider, production_ticker_provider
+        register_data_provider(
+            scan_provider=production_scan_provider,
+            ticker_provider=production_ticker_provider,
+            name="production",
+        )
+        bullalfa_task = asyncio.create_task(_ba_warmup())
+        log.info("BullAlfa data provider registered, warmup task started")
+    except Exception as e:
+        log.warning(f"BullAlfa provider not started: {e}")
+    # KAP disclosure feed loop — Faz 1. Pulls fresh disclosures every
+    # 5 min (peak hours) / 30 min (off-hours), persists them, and
+    # invalidates per-ticker scoring caches when a balance sheet drops
+    # (Plan C). The pykap dependency is optional at boot — failure here
+    # just disables the feed.
+    kap_feed_task = None
+    kap_reactions_task = None
+    bw_alerts_reactions_task = None
+    auto_refresh_task = None
+    try:
+        from engine.background_tasks import (
+            kap_feed_loop, kap_reactions_loop, bw_alert_reactions_loop,
+        )
+        kap_feed_task = asyncio.create_task(kap_feed_loop())
+        log.info("KAP feed loop started")
+        kap_reactions_task = asyncio.create_task(kap_reactions_loop())
+        log.info("KAP reactions loop started")
+        # BW alarm reaction tracker — backfills 1d/1w/1m on alarm rows
+        # so the Alarmlar tab can show real performance over time.
+        bw_alerts_reactions_task = asyncio.create_task(bw_alert_reactions_loop())
+        log.info("BW alarm reactions loop started")
+    except Exception as e:
+        log.warning(f"KAP feed loop not started: {e}")
+    # Veri Tazeliği auto-refresh — periodically force-refreshes the worst
+    # stale tickers so the user doesn't have to click the manual button
+    # for the system to stay healthy.
+    try:
+        from engine.auto_refresh_stale import background_loop as _ar_loop
+        auto_refresh_task = asyncio.create_task(_ar_loop())
+        log.info("Auto-refresh stale loop started")
+    except Exception as e:
+        log.warning(f"Auto-refresh loop not started: {e}")
+    # VIOP daily ingestion — snapshots options + futures into viop_snapshots
+    # so the UOA z-score engine (Faz 2) has a rolling baseline.
+    viop_task = None
+    try:
+        from engine.viop_feed import background_loop as _viop_loop
+        viop_task = asyncio.create_task(_viop_loop())
+        log.info("VIOP feed loop started")
+    except Exception as e:
+        log.warning(f"VIOP feed loop not started: {e}")
     yield
-    task.cancel(); redis_client.shutdown(); log.info(f"{APP_NAME} shutting down")
+    task.cancel()
+    if auto_refresh_task is not None:
+        auto_refresh_task.cancel()
+    if viop_task is not None:
+        viop_task.cancel()
+    if bullwatch_task is not None:
+        bullwatch_task.cancel()
+    if bullwatch_hot_task is not None:
+        bullwatch_hot_task.cancel()
+    if bullalfa_task is not None:
+        bullalfa_task.cancel()
+    if kap_feed_task is not None:
+        kap_feed_task.cancel()
+    if kap_reactions_task is not None:
+        kap_reactions_task.cancel()
+    if bw_alerts_reactions_task is not None:
+        bw_alerts_reactions_task.cancel()
+    redis_client.shutdown()
+    log.info(f"{APP_NAME} shutting down")
 
 app = FastAPI(title="BistBull Terminal", version=BOT_VERSION, lifespan=lifespan)
 app.add_middleware(GZipMiddleware, minimum_size=500)
@@ -246,6 +376,45 @@ async def ses_mw(request:Request,call_next):
 # Phase 1: /api/auth/* endpoints (register/login/logout/me).
 app.include_router(auth_router)
 app.include_router(phase4_router)
+app.include_router(bullwatch_router)
+app.include_router(bullalfa_router)
+app.include_router(daily_brief_router)
+# KAP disclosure feed endpoints — Faz 1.
+try:
+    from api.kap import router as kap_router
+    app.include_router(kap_router)
+except Exception as _e:
+    log.warning(f"KAP router not mounted: {_e}")
+# BullWatch alarm endpoints — Faz 1.
+try:
+    from api.bullwatch_alerts import router as bwa_router
+    app.include_router(bwa_router)
+except Exception as _e:
+    log.warning(f"BullWatch alarm router not mounted: {_e}")
+# Veri Tazeliği diagnostic — per-ticker freshness for Radar.
+try:
+    from api.diag import router as diag_router
+    app.include_router(diag_router)
+except Exception as _e:
+    log.warning(f"Diag router not mounted: {_e}")
+# Unified activity feed — alarms + membership + KAP + score-change combined.
+try:
+    from api.activity import router as activity_router
+    app.include_router(activity_router)
+except Exception as _e:
+    log.warning(f"Activity router not mounted: {_e}")
+# VIOP — options + futures snapshots, UOA engine (Faz 2+), Tahtacı overlay
+try:
+    from api.viop import router as viop_router
+    app.include_router(viop_router)
+except Exception as _e:
+    log.warning(f"VIOP router not mounted: {_e}")
+# Portfolio — açık pozisyonlar + exit signal engine
+try:
+    from api.portfolio import router as portfolio_router
+    app.include_router(portfolio_router)
+except Exception as _e:
+    log.warning(f"Portfolio router not mounted: {_e}")
 
 @app.exception_handler(RateLimitExceeded)
 async def _rate_limit_handler(request: Request, exc: RateLimitExceeded):
@@ -398,6 +567,73 @@ async def api_cross():
         return success({"signals": new_signals, "ai_commentary": ai_commentary, "summary": {"total": len(new_signals), "bullish": bullish, "bearish": bearish, "kirilim": kirilim_count, "momentum": momentum_count, "total_stars": total_stars, "vol_confirmed": vol_confirmed, "quality_a": quality_a, "quality_b": quality_b, "scanned": len(UNIVERSE)}}, as_of=now_iso())
     except Exception as e:
         log.error(f"cross: {e}"); return error("Cross Hunter hatası", status_code=500)
+
+
+# ================================================================
+# Phase 5.2.2 — /api/cross/{symbol}/explain
+#
+# Returns plain-Turkish explanations + walk-forward Sharpe + reliability
+# badges for the signals currently active on a single symbol. Uses the
+# cross hunter's last_results snapshot — does NOT trigger a new scan.
+#
+# Rule 6 (byte-identical default): /api/cross response unchanged. This
+# is a NEW endpoint, additive only.
+# ================================================================
+@app.get("/api/cross/{symbol}/explain")
+async def api_cross_explain(symbol: str):
+    try:
+        from engine.signal_explainer import explain_signals_for_symbol
+        sym = normalize_symbol(symbol or "")
+        if not sym:
+            return error("symbol gerekli", status_code=400)
+        # Filter cross hunter's last_results to this symbol
+        sig_for_sym = [s for s in (cross_hunter.last_results or [])
+                       if (s.get("ticker") or "").upper() == sym]
+        payload = explain_signals_for_symbol(sym, sig_for_sym)
+        payload["as_of"] = now_iso()
+        return success(payload, as_of=now_iso())
+    except Exception as e:
+        log.error(f"cross_explain: {e}"); return error("Sinyal açıklaması hatası", status_code=500)
+
+
+# ================================================================
+# Phase 5.2.3 — /api/ai/{symbol}/consensus
+#
+# Multi-model AI showdown — calls Perplexity + Grok + OpenAI + Anthropic
+# IN PARALLEL with the same prompt (built via ai/prompts.py — Rule 8: that
+# module is dokunulmaz). Returns leader text + per-model scores +
+# agreement metric.
+#
+# Opt-in via ?consensus=1 query parameter so default response shape of the
+# legacy /api/ai-summary endpoint stays byte-identical (Rule 6).
+# ================================================================
+@app.get("/api/ai/{symbol}/consensus")
+async def api_ai_consensus(symbol: str, request: Request):
+    try:
+        from engine.ai_consensus import call_all_providers, compute_consensus
+        sym = normalize_symbol(symbol or "")
+        if not sym:
+            return error("symbol gerekli", status_code=400)
+        # Build prompt via existing trader_summary infrastructure — DO NOT
+        # modify ai/prompts.py. We only call its existing builders.
+        try:
+            from ai.prompts import trader_summary_prompt
+            r = analysis_cache.get(sym) or analyze_symbol(sym)
+            prompt = trader_summary_prompt(r)
+        except Exception as e:
+            log.warning(f"consensus: prompt build failed: {e}")
+            return error("Prompt hazırlanamadı", status_code=500)
+
+        responses = await asyncio.to_thread(call_all_providers, prompt, 220, 18.0)
+        consensus = compute_consensus(responses)
+        return success({
+            "symbol": sym,
+            "consensus": consensus,
+            "raw_responses": [{"provider": r.get("provider"), "has_text": bool(r.get("text")), "error": r.get("error")} for r in responses],
+        }, as_of=now_iso())
+    except Exception as e:
+        log.error(f"ai_consensus: {e}"); return error("AI consensus hatası", status_code=500)
+
 
 # ================================================================
 # HEALTH & STATUS

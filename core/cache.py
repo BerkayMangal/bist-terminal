@@ -184,11 +184,19 @@ class SafeCache:
             self._timestamps.clear()
 
     def stats(self) -> dict[str, Any]:
-        """Cache istatistikleri — dashboard için."""
+        """Cache istatistikleri — dashboard için.
+
+        `size` is the L1 (in-memory) entry count. `l2_size` is the
+        Redis (L2) entry count under the same namespace prefix —
+        important when L1 evicts quickly (small maxsize or short TTL)
+        but L2 holds the real working set. Without this, the health
+        endpoint reports raw_cache=0 even when borsapy fetches are
+        all hitting Redis cleanly.
+        """
         with self._lock:
             now = time.time()
             ages = [now - ts for ts in self._timestamps.values() if ts > 0]
-            return {
+            base = {
                 "namespace": self._namespace,
                 "size": len(self._cache),
                 "maxsize": self._cache.maxsize,
@@ -197,6 +205,24 @@ class SafeCache:
                 "oldest_age_s": round(max(ages), 1) if ages else None,
                 "newest_age_s": round(min(ages), 1) if ages else None,
             }
+        # L2 size — best-effort Redis KEYS scan with hard cap so we never
+        # block on huge cache namespaces. None means "not measured".
+        l2_size: Optional[int] = None
+        if self._l2_enabled and redis_client.is_available():
+            try:
+                client = redis_client.get_client()
+                if client is not None:
+                    pattern = f"bb:cache:{self._namespace}:*"
+                    count = 0
+                    for _ in client.scan_iter(match=pattern, count=500):
+                        count += 1
+                        if count >= 10000:  # safety guard
+                            break
+                    l2_size = count
+            except Exception:
+                pass
+        base["l2_size"] = l2_size
+        return base
 
 
 # ================================================================

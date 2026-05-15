@@ -236,14 +236,54 @@ class CircuitBreaker:
     def on_failure(self, error: Optional[Exception] = None) -> None:
         """Çağrı başarısız oldu."""
         with self._lock:
+            err_str = str(error) if error else ""
+            err_lower = err_str.lower()
+            # Phase A.10 Step 2-B — quota exhaustion is permanent until
+            # the operator pays/refills, NOT a transient rate-limit. Trip
+            # the CB immediately and keep it OPEN long enough that the
+            # log isn't spammed every loop iteration. Patterns matched:
+            #   "insufficient_quota"        (Perplexity 401)
+            #   "exceeded your current quota"
+            #   "all available credits"     (xAI / Grok 429)
+            #   "spending limit"
+            #   "quota exhausted"
+            is_quota_exhausted = any(s in err_lower for s in (
+                "insufficient_quota",
+                "exceeded your current quota",
+                "all available credits",
+                "monthly spending limit",
+                "spending limit",
+                "quota exhausted",
+            ))
             # OPT: Rate limit (429) hataları normal — CB'yi tetiklemesin
-            is_rate_limit = error and ('429' in str(error) or 'rate' in str(error).lower() or 'Too Many' in str(error))
+            # (BUT quota errors that look like 429 should still trip)
+            is_rate_limit = (
+                not is_quota_exhausted
+                and ('429' in err_str or 'rate' in err_lower or 'Too Many' in err_str)
+            )
             if is_rate_limit:
                 self._total_failures += 1
                 return  # Rate limit → CB state değiştirme
             self._total_failures += 1
             self._last_failure_time = time.monotonic()
-            self._last_error = str(error) if error else None
+            self._last_error = err_str or None
+
+            if is_quota_exhausted:
+                # Force OPEN immediately. Suppress repeated logs by only
+                # emitting the OPEN transition once (subsequent failures
+                # while already OPEN are silent at this level — engine.py
+                # also throttles the "AI <provider> failed" warning).
+                if self._state != CBState.OPEN:
+                    log.warning(
+                        f"CB [{self.name}] quota/credits exhausted → OPEN "
+                        f"(suppressing further logs from this provider)",
+                        extra={"provider": self.name, "phase": "cb_quota_open"},
+                    )
+                    self._failure_count = self._failure_threshold
+                    self._to_open()
+                # Even when already OPEN, swallow the failure quietly
+                # (no extra log) — caller still gets the exception.
+                return
 
             if self._state == CBState.HALF_OPEN:
                 self._to_open()

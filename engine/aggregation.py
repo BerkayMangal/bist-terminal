@@ -192,22 +192,27 @@ def build_hero_data(
 
     opp = risk_item = None
     deger_leaders: list[dict] = []
-    ivme_leaders: list[dict] = []
+    quality_leaders: list[dict] = []
 
     if items:
         by_d = sorted(items, key=lambda x: x.get("deger", x["overall"]), reverse=True)
         deger_leaders = [
             {"ticker": r["ticker"], "name": r["name"], "deger": r.get("deger", r["overall"]),
-             "ivme": r.get("ivme", 50), "style": r["style"],
+             "quality": (r.get("scores") or {}).get("quality", 50),
+             "style": r["style"],
              "reason": r["positives"][0] if r["positives"] else ""}
             for r in by_d[:3]
         ]
-        by_i = sorted(items, key=lambda x: x.get("ivme", 50), reverse=True)
-        ivme_leaders = [
+        # Quality leaders — replaces the old "ivme_leaders" board. Radar is
+        # pure fundamental after Plan A, so momentum-based leaderboards are
+        # gone; we sort by the quality dimension instead.
+        by_q = sorted(items, key=lambda x: (x.get("scores") or {}).get("quality", 0), reverse=True)
+        quality_leaders = [
             {"ticker": r["ticker"], "name": r["name"], "deger": r.get("deger", r["overall"]),
-             "ivme": r.get("ivme", 50), "style": r["style"],
+             "quality": (r.get("scores") or {}).get("quality", 50),
+             "style": r["style"],
              "reason": r["positives"][0] if r["positives"] else ""}
-            for r in by_i[:3]
+            for r in by_q[:3]
         ]
         worst = min(items, key=lambda x: x.get("deger", x["overall"]))
         risk_item = {"ticker": worst["ticker"], "name": worst["name"],
@@ -251,7 +256,7 @@ def build_hero_data(
         "mode": mode, "mode_label": mode_label, "mode_color": mode_color,
         "opportunity": clean_for_json(opp), "risk": clean_for_json(risk_item),
         "deger_leaders": clean_for_json(deger_leaders),
-        "ivme_leaders": clean_for_json(ivme_leaders),
+        "quality_leaders": clean_for_json(quality_leaders),
         "watch": watch[:4],
         "strong_sectors": [{"name": s[0], "score": round(s[1], 1)} for s in strong_sectors],
         "weak_sectors": [{"name": s[0], "score": round(s[1], 1)} for s in weak_sectors],
