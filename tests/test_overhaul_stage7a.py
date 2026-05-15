@@ -213,3 +213,48 @@ class TestLoopWiring:
         assert "seconds_until_next_scan" in src, (
             "bullwatch_refresh_loop is not using the new schedule helper"
         )
+
+
+# ────────────────────────────────────────────────────────────────
+# Radar once-daily scan anchor (Radar Overhaul follow-up)
+# ────────────────────────────────────────────────────────────────
+
+
+class TestRadarDailyScan:
+    def test_radar_scan_hour_is_after_close(self):
+        from engine.scan_schedule import RADAR_SCAN_HOUR_IST
+        # BIST closes 18:00 — radar scan must be after close.
+        assert 18 <= RADAR_SCAN_HOUR_IST <= 23
+
+    def test_before_target_same_day(self):
+        from engine.scan_schedule import (
+            seconds_until_next_radar_scan, RADAR_SCAN_HOUR_IST,
+        )
+        # 10:00 Istanbul = 07:00 UTC. Next radar = 19:00 today.
+        utc = dt.datetime(2026, 5, 11, 7, 0, tzinfo=UTC)
+        sec = seconds_until_next_radar_scan(utc)
+        expected_h = RADAR_SCAN_HOUR_IST - 10
+        assert abs(sec - expected_h * 3600) < 120
+
+    def test_after_target_rolls_next_day(self):
+        from engine.scan_schedule import seconds_until_next_radar_scan
+        # 20:00 Istanbul — past 19:00, next is tomorrow 19:00 (~23h).
+        utc = dt.datetime(2026, 5, 11, 17, 0, tzinfo=UTC)
+        sec = seconds_until_next_radar_scan(utc)
+        assert 22 * 3600 < sec < 24 * 3600
+
+    def test_never_negative(self):
+        from engine.scan_schedule import seconds_until_next_radar_scan
+        # Exactly at 19:00 Istanbul → rolls to tomorrow, positive.
+        utc = dt.datetime(2026, 5, 11, 16, 0, tzinfo=UTC)
+        assert seconds_until_next_radar_scan(utc) >= 1.0
+
+    def test_background_scanner_uses_daily_anchor(self):
+        with open(
+            os.path.join(os.path.dirname(__file__), "..", "app.py"),
+            "r", encoding="utf-8",
+        ) as fh:
+            src = fh.read()
+        assert "seconds_until_next_radar_scan" in src, (
+            "background scanner not wired to the daily radar anchor"
+        )

@@ -330,8 +330,13 @@ class ScanCoordinator:
 
             workers = min(SCAN_MAX_WORKERS, len(universe))
             # Radar Overhaul (2026-05): the universe grew from 108 to
-            # ~622 (full BIST). The whole-scan budget scales with size.
-            _scan_budget = 1200 if len(universe) > 200 else 300
+            # ~622 (full BIST). The radar runs ONCE per day now, so the
+            # scan can afford to be slow + thorough — 2400s (40 min)
+            # lets borsapy stragglers finish instead of being cancelled,
+            # so the scan captures ~all 622. The graceful-timeout path
+            # below still publishes a partial result if even that isn't
+            # enough (genuinely-dead symbols), never erroring the scan.
+            _scan_budget = 2400 if len(universe) > 200 else 300
             with ThreadPoolExecutor(max_workers=workers) as pool:
                 futures = {pool.submit(_safe_analyze, t): t for t in universe}
                 # Graceful budget handling: a few stragglers hanging on
