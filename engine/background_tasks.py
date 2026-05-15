@@ -388,6 +388,56 @@ async def paper_trade_loop() -> None:
 
 
 # ================================================================
+# HISTORY CACHE PRE-WARM (Stage 8 — Railway Pro)
+# ================================================================
+
+async def history_cache_prewarm() -> None:
+    """Fire-and-forget: populate history_cache for the full BullWatch
+    universe right after boot so the FIRST user-triggered refresh is
+    already cache-warm and returns in seconds instead of 2-3 minutes.
+
+    Why this exists:
+      Stage 6a made every refresh after the first one fast. But the
+      first refresh (cold boot, empty cache) still needed a full
+      borsapy fetch — measured at 2-3 minutes for 437 tickers.
+      Pre-warming during boot moves that wait to a time when no user
+      is staring at the page.
+
+    Why it's safe to run early:
+      With Stage 6a's cache-first lookup, this populates the cache
+      via the same path a regular scan uses. No new code path. If
+      the prewarm fails (borsapy 502 etc.), the cache stays empty
+      and the first user refresh falls back to the old "cold load"
+      behavior — degrades gracefully.
+
+    Cadence:
+      Runs ONCE shortly after boot. Scheduled scans (Stage 7a,
+      09:30 + 13:30 + 18:30 IST) keep the cache refreshed thereafter.
+    """
+    # Small delay so the rest of the lifespan can finish initializing
+    # without competing for the borsapy circuit breaker on startup.
+    await asyncio.sleep(60)
+
+    try:
+        from engine.technical import batch_download_history
+        try:
+            from config import FULL_BIST as _universe
+        except Exception:
+            from config import UNIVERSE as _universe
+
+        log.info(
+            "History cache pre-warm starting: %d tickers (background)",
+            len(_universe),
+        )
+        await asyncio.to_thread(batch_download_history, list(_universe))
+        log.info("History cache pre-warm complete")
+    except asyncio.CancelledError:
+        raise
+    except Exception as exc:
+        log.warning("History cache pre-warm failed (non-fatal): %r", exc)
+
+
+# ================================================================
 # BULLWATCH SNAPSHOT REFRESH LOOP
 # ================================================================
 

@@ -234,6 +234,7 @@ async def lifespan(application: FastAPI):
         from engine.background_tasks import (
             bullwatch_refresh_loop,
             bullwatch_hot_tier_loop,
+            history_cache_prewarm,
         )
         bullwatch_task = asyncio.create_task(bullwatch_refresh_loop())
         log.info("BullWatch refresh loop started")
@@ -241,6 +242,12 @@ async def lifespan(application: FastAPI):
         # so the most-watched names stay fresher than the full universe.
         bullwatch_hot_task = asyncio.create_task(bullwatch_hot_tier_loop())
         log.info("BullWatch hot tier loop started")
+        # Stage 8 (Railway Pro): history-cache prewarm. One-shot fetch
+        # of the full BIST universe ~60s after boot so the first user
+        # refresh is already cache-warm. Task is fire-and-forget; we
+        # don't await it.
+        _prewarm_task = asyncio.create_task(history_cache_prewarm())
+        log.info("History cache pre-warm scheduled")
     except Exception as e:
         log.warning(f"BullWatch refresh loop not started: {e}")
     bullalfa_task = None
