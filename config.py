@@ -134,13 +134,17 @@ HISTORY_CACHE_SIZE = 2000
 # ================================================================
 # SCANNER / THREADING CONFIG
 # ================================================================
-# Stage 8 (Railway Pro): 8 → 16. With 24 vCPU available, scan_coordinator
-# parallelism is no longer CPU-bound. The constraint is borsapy
-# upstream rate-limit, which empirically tolerates 16 concurrent
-# fast_info calls on Pro infra; rate-limit retries observed locally
-# came from old hostname/network issues, not the limiter itself.
-SCAN_MAX_WORKERS = 16
-RAW_PREFETCH_WORKERS = 16
+# Radar data-outage fix (2026-05): each radar symbol's fetch_raw_v9
+# spawns an 8-worker inner pool (income/balance/cashflow + quarterly
+# + fast + info). At SCAN_MAX_WORKERS=16 that's 16×8 = 128 concurrent
+# borsapy calls — which throttled borsapy's financial-statement
+# backend hard: it returned DataNotAvailableError for most stocks, so
+# the whole 622-stock radar came back thin-data and the data gate
+# emptied the list. 6 outer × 8 inner = 48 concurrent — gentle enough
+# that borsapy serves real financials. The first cold scan is slower
+# but raw_cache (24h) makes every subsequent scan fast.
+SCAN_MAX_WORKERS = 6
+RAW_PREFETCH_WORKERS = 8
 # Stage 5: 5→8 — measured cold scan of 437 tickers took >5 min in
 # history_fetch alone with 5 workers.
 # Stage 8 (Railway Pro): 8 → 16 — same justification as SCAN_MAX_WORKERS.

@@ -334,8 +334,12 @@ def _pick_debt(
 # fail faster so the scan loop can move on. Stale-while-revalidate
 # (Step 2-B) ensures users don't see 502s — the failed symbol returns
 # stale data if cache exists, otherwise data_status=missing.
-FETCH_RAW_MAX_ATTEMPTS = 2
-FETCH_RAW_BACKOFF_SEC = (0.3, 0.7)   # per-attempt sleep before retry
+# Radar data-outage fix (2026-05): 2→3 attempts, longer backoff.
+# borsapy intermittently throws DataNotAvailableError for financial
+# statements under load; a backoff retry usually recovers it. The
+# 3rd attempt + 3s final backoff gives borsapy time to un-throttle.
+FETCH_RAW_MAX_ATTEMPTS = 3
+FETCH_RAW_BACKOFF_SEC = (0.5, 1.5, 3.0)   # per-attempt sleep before retry
 
 
 def fetch_raw_v9(symbol: str) -> dict:
@@ -511,6 +515,28 @@ def fetch_raw_v9(symbol: str) -> dict:
                 "_fetched_at": _dt.datetime.now(_dt.timezone.utc).isoformat(),
                 "_fetch_attempts": attempt + 1,  # telemetry
             }
+
+            # Radar data-outage fix (2026-05): _income/_balance/_cashflow
+            # swallow borsapy's DataNotAvailableError and return None, so
+            # a throttle never reached the retry loop — fetch_raw
+            # "succeeded" with empty financials. A non-bank with NO
+            # income statement is almost always a transient throttle,
+            # not a company that genuinely lacks financials. Retry it
+            # with backoff; only accept the empty result on the last
+            # attempt (degraded — the stale-cache fallback below still
+            # applies if a prior good fetch exists).
+            _financials_empty = _is_empty_frame(fin) and not is_bank(tc)
+            if _financials_empty and attempt < FETCH_RAW_MAX_ATTEMPTS - 1:
+                last_exc = RuntimeError(
+                    f"{tc}: income statement empty — likely borsapy "
+                    f"throttle, retrying"
+                )
+                log.info(
+                    "fetch_raw_v9 %s: financials empty, will retry "
+                    "(attempt %d/%d)",
+                    tc, attempt + 2, FETCH_RAW_MAX_ATTEMPTS,
+                )
+                continue
 
             raw_cache.set(symbol, raw)
             cb_borsapy.on_success()
