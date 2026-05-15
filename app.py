@@ -119,7 +119,7 @@ async def _background_scanner():
                             except Exception: pass
                     if _daily_changes: log.info(f"Daily changes: {len(_daily_changes)} symbols cached for heatmap")
                     return hmap
-                def _analyze_fn(ticker): return analyze_symbol(normalize_symbol(ticker))
+                def _analyze_fn(ticker): return analyze_symbol(normalize_symbol(ticker), force=True)
                 def _cross_fn(hmap): cross_hunter.scan_all(hmap)
                 def _ai_enrich_fn(ranked):
                     if not AI_AVAILABLE: return
@@ -527,7 +527,7 @@ async def api_scan(request: Request):
     if status["running"]:
         return success({"items": [build_scan_item(r) for r in items] if items else [], "total_scanned": len(RADAR_UNIVERSE), "scan_running": True}, as_of=asof.isoformat() if hasattr(asof, "isoformat") else str(asof) if asof else None)
     try:
-        def _analyze_fn(ticker): return analyze_symbol(normalize_symbol(ticker))
+        def _analyze_fn(ticker): return analyze_symbol(normalize_symbol(ticker), force=True)
         await asyncio.to_thread(scan_coordinator.start_scan, RADAR_UNIVERSE, _analyze_fn)
         items = get_top10_items(); asof = get_top10_asof()
         return success({"items": [build_scan_item(r) for r in items], "total_scanned": len(RADAR_UNIVERSE)}, as_of=asof.isoformat() if hasattr(asof, "isoformat") else str(asof) if asof else None)

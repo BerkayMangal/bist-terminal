@@ -213,8 +213,16 @@ def compute_metrics(symbol: str) -> dict:
 # ================================================================
 # ANALYZE SYMBOL — Full pipeline + V10 applicability
 # ================================================================
-def analyze_symbol(symbol: str, scoring_version: Optional[str] = None) -> dict:
+def analyze_symbol(symbol: str, scoring_version: Optional[str] = None,
+                   force: bool = False) -> dict:
     """V13 Pure Radar Pipeline.
+
+    force=True skips the analysis_cache READ (still writes the fresh
+    result back). The periodic radar scan passes force=True so a
+    24h-cached stale analysis can't freeze the radar — otherwise a
+    code change to the scoring/labels wouldn't show up until the cache
+    naturally expired. Ad-hoc reads (detail panel, consensus endpoint)
+    keep force=False for fast cached responses.
 
     Flow: metrics → 7-dim FA (re-normalized) → Risk → K3 Turkey → K4 Academic → Final Score
 
@@ -244,9 +252,10 @@ def analyze_symbol(symbol: str, scoring_version: Optional[str] = None) -> dict:
 
     # Cache key includes scoring_version so A/B calls don't clash
     cache_key = (symbol, scoring_version) if scoring_version != "v13_handpicked" else symbol
-    cached = analysis_cache.get(cache_key)
-    if cached is not None:
-        return cached
+    if not force:
+        cached = analysis_cache.get(cache_key)
+        if cached is not None:
+            return cached
 
     m = validate_metrics(normalize_metrics(compute_metrics(symbol)))
     sector_group = map_sector(m.get("sector", ""))
