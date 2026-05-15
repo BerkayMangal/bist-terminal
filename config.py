@@ -16,15 +16,32 @@ CONFIDENCE_MIN = 50
 
 # ================================================================
 # AI PROVIDER CONFIG
+#
+# AI Quality Overhaul (2026-05): consolidated on Anthropic Claude as
+# the single provider. The other three (Grok / OpenAI / Perplexity)
+# had run out of credit and produced lower-quality Turkish financial
+# commentary anyway. Keys are still read so the provider chain can be
+# re-armed later by funding them — but Claude is primary and, in
+# practice, the only one that fires.
+#
+# Model: claude-sonnet-4-6 — the workhorse. Big quality jump over the
+# old claude-sonnet-4 (20250514) for nuanced Turkish reasoning, and
+# far cheaper per-token than Opus so a $100 budget lasts.
 # ================================================================
 GROK_KEY: str = os.environ.get("XAI_API_KEY", "") or os.environ.get("GROK_API_KEY", "")
 GROK_MODEL: str = os.environ.get("GROK_MODEL", "grok-3-mini-fast")
 OPENAI_KEY: str = os.environ.get("OPENAI_KEY", "") or os.environ.get("OPENAI_API_KEY", "")
 OPENAI_MODEL: str = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
 ANTHROPIC_KEY: str = os.environ.get("ANTHROPIC_API_KEY", "") or os.environ.get("ANTHROPIC_KEY", "")
-ANTHROPIC_MODEL: str = os.environ.get("AI_MODEL", "claude-sonnet-4-20250514")
+ANTHROPIC_MODEL: str = os.environ.get("AI_MODEL", "claude-sonnet-4-6")
 PERPLEXITY_KEY: str = os.environ.get("PERPLEXITY_API_KEY", "")
 PERPLEXITY_MODEL: str = os.environ.get("PERPLEXITY_MODEL", "sonar")
+
+# AI primary provider — drives the ai/engine.py call order. With this
+# set to "anthropic" the engine tries Claude FIRST and only falls
+# through to the others if Claude itself errors (which, on a funded
+# key, it won't).
+AI_PRIMARY_PROVIDER: str = os.environ.get("AI_PRIMARY_PROVIDER", "anthropic")
 
 # ================================================================
 # REDIS CONFIG — L2 persistent cache

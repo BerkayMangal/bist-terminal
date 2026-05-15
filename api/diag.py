@@ -283,6 +283,28 @@ async def api_diag_auto_refresh_status():
     )
 
 
+@router.get("/api/diag/ai-status")
+async def api_diag_ai_status():
+    """AI provider health + recent call telemetry.
+
+    Added in the AI Quality Overhaul (2026-05). Surfaces:
+      - which providers are configured + which is primary
+      - aggregate success rate
+      - the last AI call (provider, model, latency, ok/fail)
+      - last 15 calls as a ring buffer
+      - which providers have been flagged quota-exhausted this process
+
+    Lets the operator answer "is the AI healthy / which model served
+    the last commentary / why is output empty" without digging logs.
+    """
+    try:
+        from ai.engine import get_ai_telemetry
+        telem = get_ai_telemetry()
+    except Exception as exc:
+        return error(f"AI telemetry unavailable: {exc}", status_code=500)
+    return success(telem, extra_meta={"endpoint": "diag.ai_status"})
+
+
 @router.get("/api/diag/stale")
 async def api_diag_stale(
     threshold: str = Query(

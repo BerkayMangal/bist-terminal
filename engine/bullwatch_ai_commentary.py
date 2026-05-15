@@ -215,7 +215,7 @@ def generate_commentary(item: dict[str, Any]) -> Optional[str]:
 
     try:
         prompt = build_commentary_prompt(item)
-        raw = ai_call(prompt, max_tokens=350)
+        raw = ai_call(prompt, max_tokens=500)
         if not raw:
             return None
         result = validate_ai_output(raw, "interpreter")
