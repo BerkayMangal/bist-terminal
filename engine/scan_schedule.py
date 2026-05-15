@@ -120,3 +120,28 @@ def is_market_day(now_utc: Optional[dt.datetime] = None) -> bool:
     if now_utc is None:
         now_utc = dt.datetime.now(dt.timezone.utc)
     return now_utc.astimezone(ISTANBUL_TZ).weekday() < 5
+
+
+# ── Radar: once-daily scan anchor ────────────────────────────────
+# The Radar is a pure-fundamental scanner. Balance sheets change
+# quarterly, so re-scanning all 622 stocks every 1-3 hours just burns
+# borsapy quota for an identical result. The Radar therefore runs
+# ONCE per day, after BIST close (19:00 Istanbul). The result is
+# persisted (Redis snapshot) and served all day to every visitor.
+RADAR_SCAN_HOUR_IST: int = 19
+
+
+def seconds_until_next_radar_scan(
+    now_utc: Optional[dt.datetime] = None,
+) -> float:
+    """Seconds to sleep until the next once-daily radar scan slot
+    (19:00 Istanbul). Always returns a positive value."""
+    if now_utc is None:
+        now_utc = dt.datetime.now(dt.timezone.utc)
+    now_ist = now_utc.astimezone(ISTANBUL_TZ)
+    target = now_ist.replace(
+        hour=RADAR_SCAN_HOUR_IST, minute=0, second=0, microsecond=0,
+    )
+    if target <= now_ist:
+        target = target + dt.timedelta(days=1)
+    return max(1.0, (target - now_ist).total_seconds())

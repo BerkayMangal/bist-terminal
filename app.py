@@ -170,8 +170,17 @@ async def _background_scanner():
                 log.info(f"Scan atlanıyor — {ms['reason']} ({ms['ist_time']} IST)")
         except Exception as e:
             log.error(f"Background scan hatası: {e}")
-        ms = get_market_status()
-        wait = BACKGROUND_SCAN_INTERVAL_OPEN if ms["status"] == "open" else BACKGROUND_SCAN_INTERVAL_CLOSED
+        # Radar runs ONCE per day (19:00 Istanbul). It's a pure-
+        # fundamental scanner — balance sheets change quarterly, so
+        # re-scanning 622 stocks every 1-3h just burned borsapy quota
+        # for an identical result. The first scan still fires right
+        # after boot (loop above); thereafter it's daily.
+        from engine.scan_schedule import seconds_until_next_radar_scan
+        wait = seconds_until_next_radar_scan()
+        log.info(
+            "Radar: next daily scan in %.0fs (~%.1f h)",
+            wait, wait / 3600.0,
+        )
         await asyncio.sleep(wait)
 
 # ================================================================
