@@ -498,6 +498,54 @@ def entry_quality_label(fa_pure: float, ivme: float, risk_penalty: int) -> str:
     return "BEKLE"
 
 
+def fundamental_quality_label(
+    fa_pure: float,
+    value_score: float,
+    risk_penalty: int,
+) -> str:
+    """Radar Overhaul (2026-05): pure-fundamental quality label.
+
+    Radar no longer scores on momentum/timing, so the old timing-flavored
+    labels (TEYİTLİ / ERKEN / GEÇ) made no sense. This classifies a stock
+    on two fundamental axes — QUALITY (fa_pure) and VALUATION
+    (value_score: high = cheap) — plus a risk gate.
+
+      Zayıf Temel     — fa < 35 or heavy risk: avoid on fundamentals
+      Kaliteli Değer  — strong fundamentals AND cheap: the sweet spot
+      Pahalı Kalite   — strong fundamentals but expensive valuation
+      Ucuz ama Riskli — cheap but weak/mediocre fundamentals
+      Dengeli         — middling on both axes
+    """
+    fa = fa_pure if fa_pure is not None else 50.0
+    val = value_score if value_score is not None else 50.0
+    rp = risk_penalty or 0
+
+    if fa < 35 or rp <= -25:
+        return "Zayıf Temel"
+    if fa >= 60:
+        return "Kaliteli Değer" if val >= 55 else "Pahalı Kalite"
+    if val >= 60 and fa < 50:
+        return "Ucuz ama Riskli"
+    return "Dengeli"
+
+
+def fundamental_decision(fa_pure: float, risk_penalty: int) -> str:
+    """Radar Overhaul: AL / İZLE / BEKLE / KAÇIN purely from the
+    fundamental score + risk penalty — no momentum, no entry-timing
+    label dependency. Timing belongs to Cross Hunter / BullWatch."""
+    fa = fa_pure if fa_pure is not None else 50.0
+    rp = risk_penalty or 0
+    if rp <= -25 or fa < 30:
+        return "KAÇIN"
+    if fa >= 60 and rp > -15:
+        return "AL"
+    if fa >= 45 and rp > -20:
+        return "İZLE"
+    if fa >= 38:
+        return "BEKLE"
+    return "KAÇIN"
+
+
 def decision_engine(fa_pure: float, ivme: float, risk_penalty: int, entry_label: str) -> str:
     fa = fa_pure or 50
     rp = risk_penalty or 0

@@ -37,7 +37,7 @@ from api.bullalfa import router as bullalfa_router
 from api.daily_brief import router as daily_brief_router
 
 from config import (
-    BOT_VERSION, APP_NAME, CONFIDENCE_MIN, UNIVERSE,
+    BOT_VERSION, APP_NAME, CONFIDENCE_MIN, UNIVERSE, RADAR_UNIVERSE,
     MACRO_SYMBOLS, FINANCE_QUOTES, FINANCE_BOOKS, STATIC_RATES,
     BACKGROUND_SCAN_STARTUP_DELAY,
     BACKGROUND_SCAN_INTERVAL_OPEN, BACKGROUND_SCAN_INTERVAL_CLOSED,
@@ -126,7 +126,7 @@ async def _background_scanner():
                     for r in ranked[:3]:
                         try: tech = tech_cache.get(r.get("symbol", "")); generate_trader_summary(r, tech)
                         except Exception: pass
-                await asyncio.to_thread(scan_coordinator.start_scan, UNIVERSE, _analyze_fn, _history_fn, _cross_fn, _ai_enrich_fn)
+                await asyncio.to_thread(scan_coordinator.start_scan, RADAR_UNIVERSE, _analyze_fn, _history_fn, _cross_fn, _ai_enrich_fn)
 
                 # Phase 4.7 A/B dual-write: when calibrated fits are
                 # available on disk, run a secondary calibrated pass
@@ -525,12 +525,12 @@ async def api_top10():
 async def api_scan(request: Request):
     check_rate_limit(request, "scan"); status = get_scan_status(); items = get_top10_items(); asof = get_top10_asof()
     if status["running"]:
-        return success({"items": [build_scan_item(r) for r in items] if items else [], "total_scanned": len(UNIVERSE), "scan_running": True}, as_of=asof.isoformat() if hasattr(asof, "isoformat") else str(asof) if asof else None)
+        return success({"items": [build_scan_item(r) for r in items] if items else [], "total_scanned": len(RADAR_UNIVERSE), "scan_running": True}, as_of=asof.isoformat() if hasattr(asof, "isoformat") else str(asof) if asof else None)
     try:
         def _analyze_fn(ticker): return analyze_symbol(normalize_symbol(ticker))
-        await asyncio.to_thread(scan_coordinator.start_scan, UNIVERSE, _analyze_fn)
+        await asyncio.to_thread(scan_coordinator.start_scan, RADAR_UNIVERSE, _analyze_fn)
         items = get_top10_items(); asof = get_top10_asof()
-        return success({"items": [build_scan_item(r) for r in items], "total_scanned": len(UNIVERSE)}, as_of=asof.isoformat() if hasattr(asof, "isoformat") else str(asof) if asof else None)
+        return success({"items": [build_scan_item(r) for r in items], "total_scanned": len(RADAR_UNIVERSE)}, as_of=asof.isoformat() if hasattr(asof, "isoformat") else str(asof) if asof else None)
     except Exception as e:
         log.error(f"scan: {e}"); return error("Scan başarısız", status_code=500)
 

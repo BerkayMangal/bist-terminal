@@ -370,6 +370,18 @@ else:
     _FULL_BIST_SOURCE = "static_only"
 
 # ================================================================
+# RADAR_UNIVERSE — Radar Overhaul (2026-05)
+#
+# Radar used to scan UNIVERSE (108: BIST30 + EXTRA). It now scans the
+# FULL BIST board (~622). Rationale: Radar is a pure-fundamental
+# ranking and balance sheets change only quarterly, so a once-a-day
+# full-board scan is cheap and gives complete coverage — small caps
+# included. The 108-symbol UNIVERSE stays the alias for heatmap /
+# watchlist / ticker-resolver, which are latency-sensitive.
+# ================================================================
+RADAR_UNIVERSE: list[str] = FULL_BIST
+
+# ================================================================
 # FA SCORE AĞIRLIKLARI
 # ================================================================
 FA_WEIGHTS: dict[str, float] = {

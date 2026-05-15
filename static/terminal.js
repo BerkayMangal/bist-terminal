@@ -4118,12 +4118,13 @@ const cpL=v11.ciro_pd_label;const eqL=v11l.earnings_quality||{};const caL=v11l.c
 const dc=r.decision||'';const dCol=vColor(dc);
 const dcBg=vBg(dc);
 const dcDesc=VERDICT_DESC[dc]||'';
-// Radar is pure fundamental now — timing description was dead code (unused
-// after Plan A removed r.timing) so it's been removed. Entry-label
-// descriptions updated to FA-only language; the underlying classifier
-// still runs but with a neutral momentum input, so SPEKÜLATİF / GEÇ /
-// ERKEN branches no longer fire in practice.
-const el=r.entry_label||'';const elCol=el==='TEYİTLİ'?'var(--grn)':el==='ERKEN'?'var(--blu)':el==='FIRSAT'?'var(--cyn)':el==='GEÇ'?'var(--ylw)':el==='SPEKÜLATİF'?'var(--red)':'var(--t3)';const elBg=el==='TEYİTLİ'?'var(--grnd)':el==='SPEKÜLATİF'?'rgba(239,83,80,.15)':'var(--bg3)';const elDesc=el==='TEYİTLİ'?'Güçlü temel + düşük risk — uygun giriş noktası olabilir.':el==='ERKEN'?'Temel güçlü, sabırlı yatırımcı için ilginç.':el==='FIRSAT'?'Orta temel — izlenmeye değer.':el==='GEÇ'?'Temel iyi, dikkatli olun.':el==='SPEKÜLATİF'?'⚠️ DİKKAT: Temel zayıf — spekülasyon riski yüksek.':el==='KAÇIN'?'Zayıf temel veya yüksek risk.':'Beklemede — net sinyal yok.';
+// Radar Overhaul (2026-05): pure-fundamental quality labels. Old
+// timing labels (TEYİTLİ/ERKEN/GEÇ) are gone — Radar ranks company
+// quality + valuation, not entry timing.
+const el=r.entry_label||'';
+const elCol=el==='Kaliteli Değer'?'var(--grn)':el==='Pahalı Kalite'?'var(--cyn)':el==='Ucuz ama Riskli'?'var(--ylw)':el==='Zayıf Temel'?'var(--red)':'var(--t3)';
+const elBg=el==='Kaliteli Değer'?'var(--grnd)':el==='Zayıf Temel'?'rgba(239,83,80,.15)':'var(--bg3)';
+const elDesc=el==='Kaliteli Değer'?'Güçlü temel + makul değerleme — kalite ve fiyat bir arada.':el==='Pahalı Kalite'?'Şirket kaliteli ama fiyat zaten yüksek — değerleme pahalı.':el==='Ucuz ama Riskli'?'Ucuz görünüyor ama temel zayıf — değer tuzağı olabilir.':el==='Zayıf Temel'?'⚠️ Temel analiz zayıf veya risk yüksek.':el==='Dengeli'?'Ne öne çıkan ne zayıf — orta seviye temel.':'Değerlendiriliyor.';
 const faScore=r.fa_score||r.deger||r.overall;const riskScore=r.risk_score||0;
 $('dp').innerHTML=`<div class="dp-h" style="background:linear-gradient(135deg,var(--bg1),var(--bg2))">
 <div style="flex:1">
@@ -4139,7 +4140,7 @@ $('dp').innerHTML=`<div class="dp-h" style="background:linear-gradient(135deg,va
   <!-- Sector + quality badges -->
   <div style="font-size:12px;color:var(--t3);margin-bottom:8px">${esc(r.sector||'')}${r.sector_group?' · '+esc(r.sector_group):''}${bilancoBadge(r)}</div>
   <div style="display:flex;gap:5px;flex-wrap:wrap">
-    ${el?`<span class="pill" style="background:${elBg};color:${elCol};font-weight:700;font-size:var(--fs-xs);padding:3px 8px;border:1px solid ${elCol}30" title="${esc(elDesc)}">Giriş: ${esc(el)}</span>`:''}
+    ${el?`<span class="pill" style="background:${elBg};color:${elCol};font-weight:700;font-size:var(--fs-xs);padding:3px 8px;border:1px solid ${elCol}30" title="${esc(elDesc)}">${esc(el)}</span>`:''}
     ${(r.confidence||0)<40?'<span class="pill" style="background:rgba(255,179,0,.1);color:var(--ylw);font-size:8px;border:1px solid var(--ylw)" title="Veri eksikliği nedeniyle bu etiket temkinli okunmalı">⚠ Veri sınırlı</span>':''}
     ${r.quality_tag?`<span class="pill" style="background:var(--grnd);color:var(--grn);font-size:var(--fs-xs)" title="Temel analiz kalite seviyesi">Kalite: ${esc(r.quality_tag)}</span>`:''}
     <span class="pill" style="background:${L.buffett_filter==='Geçti'?'var(--grnd)':L.buffett_filter==='Sınırda'?'var(--ylwd)':'rgba(239,83,80,.12)'};color:${L.buffett_filter==='Geçti'?'var(--grn)':L.buffett_filter==='Sınırda'?'var(--ylw)':'var(--red)'};font-size:var(--fs-xs)" title="Buffett Filtresi: Kalite + Rekabet Avantajı + Finansal Sağlık birleşimi">Buffett: ${esc(L.buffett_filter||'N/A')}</span>
@@ -4302,7 +4303,7 @@ $('dp').innerHTML=`<div class="dp-h" style="background:linear-gradient(135deg,va
 </div>
 
 <!-- TAB: TEKNİK -->
-<div class="ds" id="ds-tek">${tech?renderTech(tech):'<div class="emp"><h3 style="color:var(--t2)">Teknik veri yok</h3></div>'}</div>
+<div class="ds" id="ds-tek"><div style="margin-bottom:12px;padding:8px 12px;background:var(--bg3);border:1px solid var(--bdr);border-left:3px solid var(--blu);border-radius:0 var(--rad) var(--rad) 0;font-size:11px;color:var(--t3);line-height:1.5">ℹ️ Teknik göstergeler yalnızca referans içindir — <b style="color:var(--t2)">Radar sıralamasına etki etmez</b>. Radar saf temel analiz sıralaması yapar. Giriş zamanlaması için Cross Hunter / BullWatch'a bakın.</div>${tech?renderTech(tech):'<div class="emp"><h3 style="color:var(--t2)">Teknik veri yok</h3></div>'}</div>
 
 <!-- TAB: GÖSTERGELER -->
 <div class="ds" id="ds-leg">
@@ -5073,7 +5074,7 @@ function _alphaTip(e,idx){
   html+=`<span class="tt-lbl">Overall</span><span class="tt-val" style="color:#fff">${(it.overall||0).toFixed(0)}</span>`;
   html+=`<span class="tt-lbl">Piotroski</span><span class="tt-val">${pf}</span>`;
   html+=`<span class="tt-lbl">Altman Z</span><span class="tt-val">${az}</span>`;
-  html+=`<span class="tt-lbl">Giriş</span><span class="tt-val" style="color:var(--ylw)">${it.entry_label||'—'}</span>`;
+  html+=`<span class="tt-lbl">Temel</span><span class="tt-val" style="color:var(--ylw)">${it.entry_label||'—'}</span>`;
   html+=`<span class="tt-lbl">Kalite</span><span class="tt-val">${it.quality_tag||'—'}</span>`;
   html+=`<span class="tt-lbl">Fiyat</span><span class="tt-val" style="color:#fff">${it.price?('₺'+fN(it.price)):'—'}</span>`;
   html+=`</div>`;
@@ -5140,13 +5141,13 @@ h+=`<div class="card" style="margin-bottom:20px"><div class="card-h"><span class
 <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:rgba(255,202,40,.08);border-radius:var(--rad);border-left:3px solid var(--ylw)"><span style="font-family:'JetBrains Mono',monospace;font-weight:800;color:var(--ylw);min-width:50px">BEKLE</span><span style="font-size:var(--fs-sm);color:var(--t2)">İyi şirket ama pahalı veya zamanlama uygun değil</span></div>
 <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:rgba(239,83,80,.08);border-radius:var(--rad);border-left:3px solid var(--red)"><span style="font-family:'JetBrains Mono',monospace;font-weight:800;color:var(--red);min-width:50px">KAÇIN</span><span style="font-size:var(--fs-sm);color:var(--t2)">Zayıf görünüyor — dikkatli ol</span></div>
 </div>
-<div style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-xs);color:var(--t4);margin-bottom:10px">ZAMANLAMA</div>
+<div style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-xs);color:var(--t4);margin-bottom:10px">TEMEL DURUM</div>
 <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:20px">
-<span class="pill" style="background:var(--blud);color:var(--blu)">ERKEN — kimse fark etmedi</span>
-<span class="pill" style="background:var(--blud);color:var(--blu)">GELİŞİYOR — sinyaller oluşuyor</span>
-<span class="pill" style="background:var(--grnd);color:var(--grn)">TEYİTLİ — trend başladı ✓</span>
-<span class="pill" style="background:var(--ylwd);color:var(--ylw)">GEÇ — geç kalmış olabilirsin</span>
-<span class="pill" style="background:var(--redd);color:var(--red)">AŞIRI — düzeltme riski</span>
+<span class="pill" style="background:var(--grnd);color:var(--grn)">Kaliteli Değer — güçlü temel + makul fiyat</span>
+<span class="pill" style="background:var(--cynd,var(--bg3));color:var(--cyn)">Pahalı Kalite — iyi şirket ama pahalı</span>
+<span class="pill" style="background:var(--ylwd);color:var(--ylw)">Ucuz ama Riskli — ucuz ama temel zayıf</span>
+<span class="pill" style="background:var(--bg3);color:var(--t3)">Dengeli — orta seviye temel</span>
+<span class="pill" style="background:var(--redd);color:var(--red)">Zayıf Temel — kaçınılması gereken</span>
 </div>
 <div style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-xs);color:var(--t4);margin-bottom:10px">KALİTE</div>
 <div style="display:flex;flex-wrap:wrap;gap:6px">
