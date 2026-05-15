@@ -392,38 +392,56 @@ async def paper_trade_loop() -> None:
 # ================================================================
 
 async def bullwatch_refresh_loop() -> None:
-    """Periodically refresh the BullWatch snapshot store.
+    """Refresh the BullWatch snapshot store at fixed Istanbul times.
 
-    Replaces the old api.bullwatch.warmup_cache_loop. The scan itself,
-    snapshot persistence, and in-memory mirror update all live in
-    api.bullwatch._refresh_and_persist (lazy import avoids the
-    api → engine.background_tasks → api circular dep at module load).
+    Stage 7a (Great Overhaul):
+      Replaces the old "every 30 min around the clock" cadence with a
+      clock-anchored schedule (09:30 + 13:30 Istanbul, weekdays only).
+      Why: the 30-min cadence burned borsapy quota even at 03:00 when
+      BIST is closed. Anchoring to market-relevant times gives users
+      fresh data when they actually look and lets the system idle
+      overnight.
 
-    Single tier in D.1: one cadence for the full BullWatch universe.
-    D.3 will split this into hot/warm/cold tiers.
+    Startup behavior:
+      First run still kicks ~4 min after boot so a deployed instance
+      isn't dead until the next scheduled slot. After that, the loop
+      sleeps until the next scheduled time per engine.scan_schedule.
     """
+    from engine.scan_schedule import seconds_until_next_scan
+
     log.info(
-        "BullWatch refresh loop scheduled — first run in %ds, then every %ds",
-        BULLWATCH_REFRESH_STARTUP_DELAY, BULLWATCH_REFRESH_INTERVAL,
+        "BullWatch refresh loop: first run in %ds, then clock-anchored "
+        "(09:30 + 13:30 Istanbul, weekdays)",
+        BULLWATCH_REFRESH_STARTUP_DELAY,
     )
     await asyncio.sleep(BULLWATCH_REFRESH_STARTUP_DELAY)
 
     while True:
-        sleep_for = BULLWATCH_REFRESH_INTERVAL
+        # ── Run the scan ───────────────────────────────────────────
         try:
             from api.bullwatch import _refresh_and_persist as _bw_refresh
             payload = await _bw_refresh()
             if payload is None:
-                # Either scan-in-flight skip or hard failure — either way,
-                # back off briefly so we don't spin.
-                sleep_for = BULLWATCH_RETRY_AFTER_ERROR
+                # Scan-in-flight skip or hard failure. Don't ride the
+                # error all the way to the next schedule slot — wait a
+                # short cool-down and re-evaluate.
+                log.debug("BullWatch refresh returned None; brief cool-down")
+                await asyncio.sleep(BULLWATCH_RETRY_AFTER_ERROR)
+                continue
         except asyncio.CancelledError:
             log.info("BullWatch refresh loop cancelled")
             raise
         except Exception as e:
             log.warning("BullWatch refresh loop tick failed: %r", e)
-            sleep_for = BULLWATCH_RETRY_AFTER_ERROR
+            await asyncio.sleep(BULLWATCH_RETRY_AFTER_ERROR)
+            continue
 
+        # ── Sleep until next scheduled slot ────────────────────────
+        sleep_for, label = seconds_until_next_scan()
+        log.info(
+            "BullWatch refresh: next slot %s in %.0fs (~%.1f h)",
+            label, sleep_for, sleep_for / 3600.0,
+        )
         await asyncio.sleep(sleep_for)
 
 
