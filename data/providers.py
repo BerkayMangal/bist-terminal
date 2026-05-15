@@ -348,7 +348,19 @@ def fetch_raw_v9(symbol: str) -> dict:
         raise ImportError("borsapy yok")
 
     cached = raw_cache.get(symbol)
-    if cached is not None:
+    # Radar data-outage fix (2026-05): a cached raw with an EMPTY income
+    # statement for a non-bank is "poisoned" — it was written by a
+    # borsapy throttle (DataNotAvailableError swallowed → financials
+    # None). Serving it means confidence=0 forever until the 24h TTL.
+    # Treat such an entry as a cache MISS so we re-fetch fresh; the
+    # retry loop below (FETCH_RAW_MAX_ATTEMPTS) then recovers real data.
+    _tc_poison = symbol.upper().replace('.IS', '').replace('.E', '')
+    _poisoned = (
+        cached is not None
+        and not is_bank(_tc_poison)
+        and _is_empty_frame(cached.get("financials"))
+    )
+    if cached is not None and not _poisoned:
         # Finansal veriler cache'te → sadece fiyat güncelle (günde 1x bilanço yeter)
         try:
             tc_ = symbol.upper().replace('.IS', '').replace('.E', '')
@@ -363,6 +375,11 @@ def fetch_raw_v9(symbol: str) -> dict:
         except Exception:
             pass  # Fiyat güncellenemezse eski cache dön
         return cached
+    if _poisoned:
+        log.info(
+            "fetch_raw_v9 %s: cached raw has empty financials — "
+            "re-fetching (poisoned by earlier throttle)", _tc_poison,
+        )
 
     # Circuit Breaker kontrolü — borsapy devre dışıysa hemen hata fırlat
     cb_borsapy.before_call()
