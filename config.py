@@ -290,15 +290,67 @@ UNIVERSE: list[str] = UNIVERSE_BIST30 + UNIVERSE_EXTRA
 
 # ================================================================
 # FULL_BIST — canonical deduplicated universe across all modules.
-# 437 unique tickers = dedup(BIST30 ∪ EXTRA ∪ EXTENDED). Used by the
-# shared snapshot pipeline as the single source of truth so per-module
-# scanners can compute their own filters without maintaining separate
-# universe lists. Per-module scan inputs may still narrow this (e.g.
-# BullWatch intentionally excludes BIST30) — see api/bullwatch.py.
+#
+# Stage 6b (Great Overhaul):
+#   Tries borsapy.Screener().run() at import time to auto-discover
+#   the FULL BIST equity universe (~591 symbols vs the previous 437
+#   static dedup). The user explicitly asked for "tum bist hisseleri"
+#   and the Pro plan can absorb the extra scan cost.
+#
+#   Fallback: if borsapy is unavailable or the screener fails (offline
+#   tests, CI without network, future API breakage), we fall back to
+#   the static dedup so the app boots cleanly.
+#
+# Used by the shared snapshot pipeline as the single source of truth
+# so per-module scanners can compute their own filters without
+# maintaining separate universe lists. Per-module scan inputs may
+# still narrow this (e.g. BullWatch intentionally excludes BIST30).
 # ================================================================
-FULL_BIST: list[str] = list(dict.fromkeys(
+def _discover_full_bist_universe() -> list[str]:
+    """Best-effort auto-discovery via borsapy.Screener.
+
+    Returns the full BIST equity list, or [] on any error. The caller
+    is responsible for falling back to the static dedup when [].
+    """
+    try:
+        import borsapy as _bp
+        df = _bp.Screener().run()
+        # Screener returns a DataFrame with a 'symbol' column.
+        if df is None:
+            return []
+        syms = []
+        for col in ("symbol", "Symbol", "ticker", "Ticker"):
+            if col in df.columns:
+                syms = [str(s).upper().strip() for s in df[col].tolist()]
+                break
+        # Strip any .IS / .E suffixes; the rest of the codebase uses
+        # bare tickers and ticker_resolver adds suffixes when needed.
+        syms = [s.replace(".IS", "").replace(".E", "") for s in syms]
+        # Filter junk (empty strings, NaN strings, non-alphabetic noise)
+        syms = [s for s in syms if s and s.isalnum() and 2 <= len(s) <= 6]
+        return list(dict.fromkeys(syms))
+    except Exception:
+        return []
+
+
+_FULL_BIST_STATIC: list[str] = list(dict.fromkeys(
     UNIVERSE_BIST30 + UNIVERSE_EXTRA + UNIVERSE_EXTENDED
 ))
+
+# Resolve once at module-import time. If discovery fails, fall back
+# to the static list — boot must never crash because borsapy is slow.
+# We also UNION the discovered list with the static one so any
+# hand-curated ticker that screener doesn't return (e.g. delisted
+# in screener metadata but still tradeable) stays available.
+_FULL_BIST_DISCOVERED: list[str] = _discover_full_bist_universe()
+if _FULL_BIST_DISCOVERED:
+    FULL_BIST: list[str] = list(dict.fromkeys(
+        _FULL_BIST_DISCOVERED + _FULL_BIST_STATIC
+    ))
+    _FULL_BIST_SOURCE = "borsapy_screener+static"
+else:
+    FULL_BIST = _FULL_BIST_STATIC
+    _FULL_BIST_SOURCE = "static_only"
 
 # ================================================================
 # FA SCORE AĞIRLIKLARI
