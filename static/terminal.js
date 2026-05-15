@@ -140,6 +140,11 @@ const _API_TIMEOUTS = {
   '/api/scan':    30000,   // user-initiated full scan
   '/api/agent':   20000,   // AI call
   '/api/ai-summary': 20000,
+  // /api/ai/{symbol}/consensus does a LIVE Claude call (~600 tokens) +
+  // analyze_symbol on cache miss — 10-20s end to end. The 8s default
+  // was aborting it → "AI analizi yüklenemedi". Trailing slash keeps
+  // this distinct from /api/ai-summary (which is /api/ai-, not /api/ai/).
+  '/api/ai/': 35000,
   '/api/bullwatch': 300000,  // first-run scan can take 1-3 min on cold cache (yfinance is slow)
   '/api/kap/disclosure': 5000,    // disclosure detail is a single SQLite/Redis read
   '/api/kap': 8000,                // generic KAP endpoints (recent / by-ticker / calendar)

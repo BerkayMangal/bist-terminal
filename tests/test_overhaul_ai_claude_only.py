@@ -114,6 +114,9 @@ class TestConsensusEndpointSingleClaude:
     @pytest.mark.asyncio
     async def test_endpoint_handles_empty_ai(self, monkeypatch):
         import app
+        # Use a distinct symbol from the other endpoint test — the
+        # consensus endpoint caches per symbol, so reusing "BIMAS"
+        # would return the prior test's cached non-empty result.
         monkeypatch.setattr(app, "analyze_symbol",
                             lambda s: {"ticker": s, "scores": {},
                                        "metrics": {}, "overall": 70})
@@ -126,7 +129,7 @@ class TestConsensusEndpointSingleClaude:
         from fastapi import Request
         scope = {"type": "http", "headers": [], "method": "GET",
                  "path": "/api/ai/X/consensus", "query_string": b""}
-        resp = await app.api_ai_consensus("BIMAS", Request(scope))
+        resp = await app.api_ai_consensus("AKBNK", Request(scope))
         import json
         body = json.loads(resp.body.decode("utf-8"))
         flat = {**body, **body.get("data", {})}
