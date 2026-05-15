@@ -330,21 +330,35 @@ class ScanCoordinator:
 
             workers = min(SCAN_MAX_WORKERS, len(universe))
             # Radar Overhaul (2026-05): the universe grew from 108 to
-            # ~622 (full BIST). The whole-scan budget scales with size —
-            # 300s was sized for 108. 2s/symbol headroom over 622 with
-            # 16 workers → ~78s ideal, but cold borsapy + retries can
-            # push it; 900s is a safe ceiling for the background scan.
-            _scan_budget = 900 if len(universe) > 200 else 300
+            # ~622 (full BIST). The whole-scan budget scales with size.
+            _scan_budget = 1200 if len(universe) > 200 else 300
             with ThreadPoolExecutor(max_workers=workers) as pool:
                 futures = {pool.submit(_safe_analyze, t): t for t in universe}
-                for future in as_completed(futures, timeout=_scan_budget):
-                    try:
-                        r = future.result(timeout=60)
-                    except Exception:
-                        r = None
-                    if r and r.get("confidence", 0) >= CONFIDENCE_MIN \
-                            and _radar_data_sufficient(r):
-                        ranked.append(r)
+                # Graceful budget handling: a few stragglers hanging on
+                # borsapy used to make as_completed() raise TimeoutError,
+                # which errored the WHOLE scan → no snapshot published →
+                # the radar froze on a stale snapshot. Now a timeout is
+                # caught: we publish whatever completed and cancel the
+                # rest. A partial radar beats a frozen one.
+                try:
+                    for future in as_completed(futures, timeout=_scan_budget):
+                        try:
+                            r = future.result(timeout=60)
+                        except Exception:
+                            r = None
+                        if r and r.get("confidence", 0) >= CONFIDENCE_MIN \
+                                and _radar_data_sufficient(r):
+                            ranked.append(r)
+                except TimeoutError:
+                    unfinished = [f for f in futures if not f.done()]
+                    log.warning(
+                        "Scan budget %ds exceeded — %d ranked, %d "
+                        "stragglers cancelled; publishing partial",
+                        _scan_budget, len(ranked), len(unfinished),
+                        extra={"scan_id": scan_id},
+                    )
+                    for f in unfinished:
+                        f.cancel()
 
             ranked.sort(
                 key=lambda x: (x.get("overall", 0), x.get("scores", {}).get("quality", 0)),
