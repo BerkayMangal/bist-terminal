@@ -1034,6 +1034,55 @@ async def api_bullwatch_explain(symbol: str):
     )
 
 
+@router.get("/api/bullwatch/ai-commentary/{symbol}")
+async def api_bullwatch_ai_commentary(symbol: str):
+    """Faz 4 — AI-generated 3-4 sentence Turkish commentary for a
+    CONVICTION-zone ticker. Returns 404 if ticker isn't currently in
+    the BullWatch list, 422 if it's not CONVICTION (sub-zones use
+    programmatic explainability), or 503 if AI provider is unavailable.
+
+    Literal path registered BEFORE variadic /{symbol} so FastAPI
+    doesn't route 'ai-commentary' as a ticker symbol.
+    """
+    sym = (symbol or "").upper().strip().replace(".IS", "")
+    if not sym:
+        return error("empty symbol", status_code=400)
+
+    from engine.bullwatch_ai_commentary import (
+        generate_commentary, lookup_item_from_cache,
+    )
+
+    item = await asyncio.get_event_loop().run_in_executor(
+        None, lookup_item_from_cache, sym,
+    )
+    if not item:
+        return error(
+            f"{sym} not in BullWatch list", status_code=404,
+        )
+    zone = (item.get("zone") or "").upper()
+    if zone != "CONVICTION":
+        return error(
+            f"{sym} is {zone or 'unknown'}, not CONVICTION — "
+            "AI commentary only on CONVICTION tier",
+            status_code=422,
+        )
+
+    text = await asyncio.get_event_loop().run_in_executor(
+        None, generate_commentary, item,
+    )
+    if text is None:
+        return error(
+            "AI commentary unavailable (provider down or output rejected)",
+            status_code=503,
+        )
+    return success({
+        "symbol": sym,
+        "zone": zone,
+        "score": item.get("score"),
+        "commentary": text,
+    }, extra_meta={"endpoint": "bullwatch.ai_commentary"})
+
+
 @router.get("/api/bullwatch/{symbol}")
 async def api_bullwatch_symbol(symbol: str):
     """

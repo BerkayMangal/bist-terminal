@@ -3291,7 +3291,53 @@ async function showBwExplainModal(ticker){
   }
   if (!data) { ov.remove(); return; }
   ov.querySelector('div').innerHTML = _bwExplainHtml(data);
+  // Faz 4: CONVICTION zone'da AI commentary butonu ekle
+  if ((data.zone || '').toUpperCase() === 'CONVICTION') {
+    _injectBwAiCommentaryBtn(ov.querySelector('div'), data.symbol);
+  }
 }
+
+// Faz 4 helpers — AI commentary on demand
+function _injectBwAiCommentaryBtn(container, symbol){
+  if (!container || !symbol) return;
+  const btnWrap = document.createElement('div');
+  btnWrap.id = 'bwAiComWrap';
+  btnWrap.style.cssText = 'margin-top:14px;padding:12px;background:var(--bg2);border:1px solid var(--bdr);border-radius:var(--rad);border-left:3px solid var(--cyn)';
+  btnWrap.innerHTML = `<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
+    <div>
+      <div style="font-size:11px;color:var(--cyn);font-family:'JetBrains Mono',monospace;text-transform:uppercase;letter-spacing:1px;font-weight:700">🤖 AI Yorumu</div>
+      <div style="font-size:11px;color:var(--t3);margin-top:2px">CONVICTION skoru için kısa bir AI değerlendirmesi</div>
+    </div>
+    <button class="btn btn-sm btn-cyn" id="bwAiComBtn" onclick="window._loadBwAiCommentary('${esc(symbol)}')">Yorumu Yükle →</button>
+  </div>
+  <div id="bwAiComBody" style="margin-top:0"></div>`;
+  container.appendChild(btnWrap);
+}
+
+window._loadBwAiCommentary = async function(symbol){
+  const btn = document.getElementById('bwAiComBtn');
+  const body = document.getElementById('bwAiComBody');
+  if (!btn || !body) return;
+  btn.disabled = true;
+  btn.textContent = 'Yükleniyor…';
+  body.innerHTML = `<div style="margin-top:10px;color:var(--t3);font-size:12px"><span class="sp" style="display:inline-block;width:14px;height:14px;vertical-align:middle;margin-right:6px"></span>AI yorumu hazırlanıyor…</div>`;
+  try {
+    const r = await api('/api/bullwatch/ai-commentary/' + encodeURIComponent(symbol));
+    const data = (r && (r.value || r)) || null;
+    if (data && data.commentary) {
+      body.innerHTML = `<div style="margin-top:10px;padding:10px;background:var(--bg1);border-radius:4px;font-size:13px;line-height:1.6;color:var(--t1)">${esc(data.commentary)}</div>`;
+      btn.style.display = 'none';
+    } else {
+      body.innerHTML = `<div style="margin-top:10px;color:var(--t3);font-size:11px">AI yorumu üretilemedi.</div>`;
+      btn.disabled = false;
+      btn.textContent = 'Tekrar Dene';
+    }
+  } catch (e) {
+    body.innerHTML = `<div style="margin-top:10px;color:var(--red);font-size:11px">Hata: ${esc(e.message||'bilinmeyen')}</div>`;
+    btn.disabled = false;
+    btn.textContent = 'Tekrar Dene';
+  }
+};
 
 function _bwExplainHtml(d){
   const ts = d.tahtaci_strength || {};
