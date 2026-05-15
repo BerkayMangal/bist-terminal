@@ -61,7 +61,7 @@ def generate_trader_summary(r: dict, tech: Optional[dict] = None) -> dict:
 
     try:
         prompt = trader_summary_prompt(r, tech)
-        text = ai_call(prompt, max_tokens=300)
+        text = ai_call(prompt, max_tokens=500)
         if text:
             # Validate: use interpreter role rules (forbidden words, length)
             result = validate_ai_output(text, "interpreter")
@@ -138,7 +138,7 @@ def generate_hero_story(
             macro_items=macro_items,
             cross_count=cross_count,
         )
-        text = ai_call(prompt, max_tokens=300)
+        text = ai_call(prompt, max_tokens=400)
         if text:
             parsed = parse_hero_response(text)
             hero_data["story"] = parsed["story"]
@@ -159,7 +159,7 @@ def generate_briefing(ctx: dict) -> Optional[str]:
         return None
     try:
         prompt = briefing_prompt(ctx)
-        return ai_call(prompt, max_tokens=400)
+        return ai_call(prompt, max_tokens=600)
     except Exception as e:
         log.warning(f"briefing AI: {e}")
         return None
@@ -174,7 +174,7 @@ def generate_macro_commentary(macro_items: list[dict]) -> Optional[str]:
         return None
     try:
         prompt = macro_commentary_prompt(macro_items)
-        return ai_call(prompt, max_tokens=300)
+        return ai_call(prompt, max_tokens=450)
     except Exception as e:
         log.warning(f"macro AI: {e}")
         return None
@@ -193,7 +193,7 @@ def generate_cross_commentary(
         return None
     try:
         prompt = cross_commentary_prompt(signals, bullish, bearish)
-        return ai_call(prompt, max_tokens=250)
+        return ai_call(prompt, max_tokens=400)
     except Exception as e:
         log.debug(f"cross AI: {e}")
         return None
@@ -211,7 +211,7 @@ def generate_agent_answer(
         return None
     try:
         prompt = agent_prompt(context, query)
-        return ai_call(prompt, max_tokens=300)
+        return ai_call(prompt, max_tokens=500)
     except Exception as e:
         log.warning(f"agent AI: {e}")
         return None
@@ -226,7 +226,7 @@ def generate_social_sentiment() -> Optional[dict]:
     if not AI_AVAILABLE or "grok" not in AI_PROVIDERS:
         return None
     try:
-        text = ai_call(SOCIAL_PROMPT, max_tokens=500)
+        text = ai_call(SOCIAL_PROMPT, max_tokens=700)
         if not text:
             return None
         data = clean_json_response(text)

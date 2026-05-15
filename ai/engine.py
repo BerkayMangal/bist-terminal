@@ -23,19 +23,25 @@ from ai.clients import get_grok_client, get_openai_client, get_anthropic_client,
 log = logging.getLogger("bistbull.ai")
 
 # ================================================================
-# PROVIDER DISCOVERY — Perplexity first, then Grok → OpenAI → Anthropic
+# PROVIDER DISCOVERY
+#
+# AI Quality Overhaul (2026-05): the call order is now driven by
+# config.AI_PRIMARY_PROVIDER (default "anthropic"). The primary is
+# tried FIRST; the rest stay in the list as a dormant fallback chain
+# so the system still degrades gracefully if the primary key lapses.
+# In practice, with a funded Claude key, only the primary ever fires.
 # ================================================================
-AI_PROVIDERS: list[str] = []
+_DISCOVERED: list[str] = []
 
 try:
     from openai import OpenAI as _OpenAI
     from config import PERPLEXITY_KEY, GROK_KEY, OPENAI_KEY
     if PERPLEXITY_KEY:
-        AI_PROVIDERS.append("perplexity")
+        _DISCOVERED.append("perplexity")
     if GROK_KEY:
-        AI_PROVIDERS.append("grok")
+        _DISCOVERED.append("grok")
     if OPENAI_KEY:
-        AI_PROVIDERS.append("openai")
+        _DISCOVERED.append("openai")
 except ImportError:
     _OpenAI = None  # type: ignore
 
@@ -43,10 +49,24 @@ try:
     import anthropic as _anthropic_mod
     from config import ANTHROPIC_KEY
     if ANTHROPIC_KEY:
-        AI_PROVIDERS.append("anthropic")
+        _DISCOVERED.append("anthropic")
 except ImportError:
     _anthropic_mod = None  # type: ignore
 
+
+def _ordered_providers(discovered: list[str]) -> list[str]:
+    """Put the configured primary provider first, keep the rest as
+    fallback. Unknown primary → discovered order unchanged."""
+    try:
+        from config import AI_PRIMARY_PROVIDER as _primary
+    except Exception:
+        _primary = "anthropic"
+    if _primary in discovered:
+        return [_primary] + [p for p in discovered if p != _primary]
+    return list(discovered)
+
+
+AI_PROVIDERS: list[str] = _ordered_providers(_DISCOVERED)
 AI_AVAILABLE: bool = len(AI_PROVIDERS) > 0
 
 
@@ -146,19 +166,96 @@ _CALLERS = {
 _QUOTA_LOGGED: set[str] = set()
 
 
+# ── AI telemetry (AI Quality Overhaul) ──────────────────────────
+# Lightweight in-memory record of the last N AI calls so /api/diag
+# can answer "is the AI healthy / which provider served the last
+# request / how slow was it". Bounded ring buffer — never grows.
+import time as _time
+import threading as _threading
+
+_TELEMETRY_LOCK = _threading.Lock()
+_TELEMETRY_MAX = 50
+_TELEMETRY: list[dict] = []
+_TELEMETRY_TOTALS: dict[str, int] = {"calls": 0, "ok": 0, "fail": 0}
+
+
+def _record_call(provider: str, model: str, ok: bool,
+                 latency_ms: float, error: str = "") -> None:
+    """Append one call to the telemetry ring buffer (thread-safe)."""
+    with _TELEMETRY_LOCK:
+        _TELEMETRY_TOTALS["calls"] += 1
+        _TELEMETRY_TOTALS["ok" if ok else "fail"] += 1
+        _TELEMETRY.append({
+            "ts": _time.time(),
+            "provider": provider,
+            "model": model,
+            "ok": ok,
+            "latency_ms": round(latency_ms, 1),
+            "error": error[:200] if error else "",
+        })
+        if len(_TELEMETRY) > _TELEMETRY_MAX:
+            del _TELEMETRY[0]
+
+
+def get_ai_telemetry() -> dict:
+    """Snapshot of AI call telemetry for /api/diag/ai-status."""
+    with _TELEMETRY_LOCK:
+        recent = list(_TELEMETRY[-15:])
+        totals = dict(_TELEMETRY_TOTALS)
+    last = recent[-1] if recent else None
+    return {
+        "providers_configured": list(AI_PROVIDERS),
+        "primary": AI_PROVIDERS[0] if AI_PROVIDERS else None,
+        "ai_available": AI_AVAILABLE,
+        "totals": totals,
+        "success_rate": (
+            round(totals["ok"] / totals["calls"] * 100, 1)
+            if totals["calls"] else None
+        ),
+        "last_call": last,
+        "recent_calls": recent,
+        "quota_exhausted": sorted(_QUOTA_LOGGED),
+    }
+
+
+_MODEL_BY_PROVIDER = {
+    "perplexity": PERPLEXITY_MODEL,
+    "grok": GROK_MODEL,
+    "openai": OPENAI_MODEL,
+    "anthropic": ANTHROPIC_MODEL,
+}
+
+
 # ================================================================
 # PUBLIC API — single entry point for all AI calls
 # ================================================================
-def ai_call(prompt: str, max_tokens: int = 200) -> Optional[str]:
-    """Try each AI provider in order: Grok → OpenAI → Anthropic.
-    CB OPEN olan provider atlanır — sessiz fallback."""
+def ai_call(prompt: str, max_tokens: int = 600) -> Optional[str]:
+    """Run an AI completion. Tries each provider in AI_PROVIDERS order
+    (primary first — see _ordered_providers). CB-OPEN providers are
+    skipped silently.
+
+    AI Quality Overhaul (2026-05):
+      - Default max_tokens raised 200 → 600. The old 200-token ceiling
+        truncated multi-sentence Turkish commentary mid-thought, which
+        was a major source of "saçma sapan" output.
+      - Every attempt is recorded in the telemetry ring buffer so
+        /api/diag/ai-status can show provider health.
+    """
     for provider in AI_PROVIDERS:
+        caller = _CALLERS.get(provider)
+        if not caller:
+            continue
+        model = _MODEL_BY_PROVIDER.get(provider, "?")
+        t0 = _time.time()
         try:
-            caller = _CALLERS.get(provider)
-            if caller:
-                return caller(prompt, max_tokens)
+            result = caller(prompt, max_tokens)
+            _record_call(provider, model, True,
+                         (_time.time() - t0) * 1000.0)
+            return result
         except CircuitBreakerOpen:
             log.info(f"AI {provider} CB OPEN — skip to next")
+            _record_call(provider, model, False,
+                         (_time.time() - t0) * 1000.0, "circuit_breaker_open")
             continue
         except Exception as e:
             err_lower = str(e).lower()
@@ -170,9 +267,8 @@ def ai_call(prompt: str, max_tokens: int = 200) -> Optional[str]:
                 "quota exhausted",
             ))
             if is_quota:
-                # Phase A.10 Step 2-B: log ONCE per provider per process.
-                # The CB trip log already covers the fact; subsequent
-                # failures are silent so they don't pollute BullWatch logs.
+                # Log ONCE per provider per process — the CB trip log
+                # already covers the fact; subsequent failures silent.
                 if provider not in _QUOTA_LOGGED:
                     log.warning(
                         f"AI {provider} disabled: quota/credits exhausted "
@@ -181,5 +277,7 @@ def ai_call(prompt: str, max_tokens: int = 200) -> Optional[str]:
                     _QUOTA_LOGGED.add(provider)
             else:
                 log.warning(f"AI {provider} failed: {e}")
+            _record_call(provider, model, False,
+                         (_time.time() - t0) * 1000.0, str(e))
             continue
     return None
