@@ -3,7 +3,7 @@
 // ===== STATE =====
 const S={page:'home',scan:null,cross:null,macro:null,dash:null,takas:null,social:null,hero:null,quote:null,book:null,wl:JSON.parse(localStorage.getItem('bb_wl')||'[]'),seen:JSON.parse(localStorage.getItem('bb_seen')||'[]'),_alerts:[]};
 const QT=['ASELS','THYAO','BIMAS','KCHOL','TUPRS','AKBNK','GARAN','FROTO','TOASO','PGSUS'];
-const PAGES=[{id:'nasil',label:'Nasıl?',icon:'❓'},{id:'home',label:'Ana Sayfa',icon:'🏠'},{id:'akis',label:'Akış',icon:'📰'},{id:'radar',label:'Radar',icon:'📡'},{id:'bullwatch',label:'BullWatch',icon:'🐂'},{id:'alarmlar',label:'Alarmlar',icon:'🚨'},{id:'bullalfa',label:'BullAlfa',icon:'🎯'},{id:'viop',label:'VIOP',icon:'🎲'},{id:'bilancolar',label:'Bilançolar',icon:'📊'},{id:'makro',label:'Makro',icon:'🌍'},{id:'portfoy',label:'Portföy',icon:'💼'},{id:'diag',label:'Tanı',icon:'🔧'}];
+const PAGES=[{id:'nasil',label:'Nasıl?',icon:'❓'},{id:'home',label:'Ana Sayfa',icon:'🏠'},{id:'akis',label:'Akış',icon:'📰'},{id:'radar',label:'Radar',icon:'📡'},{id:'bullwatch',label:'BullWatch',icon:'🐂'},{id:'bulten',label:'Günlük Bülten',icon:'📰'},{id:'alarmlar',label:'Alarmlar',icon:'🚨'},{id:'bullalfa',label:'BullAlfa',icon:'🎯'},{id:'viop',label:'VIOP',icon:'🎲'},{id:'bilancolar',label:'Bilançolar',icon:'📊'},{id:'makro',label:'Makro',icon:'🌍'},{id:'portfoy',label:'Portföy',icon:'💼'},{id:'diag',label:'Tanı',icon:'🔧'}];
 const $=s=>document.getElementById(s);
 
 // ===== XSS SANITIZER =====
@@ -261,6 +261,7 @@ function goPage(id){
   if(id==='radar')renderRadarPage();
   if(id==='cross'){goPage('bullalfa');BullAlfa&&BullAlfa._setMode&&BullAlfa._setMode('__SIGNALS__');return;}
   if(id==='bullwatch')renderBullwatchPage();
+  if(id==='bulten')renderBultenPage();
   if(id==='bullalfa')renderBullalfaPage();
   if(id==='alarmlar')renderAlarmlarPage();
   if(id==='bilancolar')renderBilancolarPage();
@@ -5597,3 +5598,203 @@ function renderBullalfaPage(){
     el.innerHTML='<div style="padding:1rem;color:var(--t3)">BullAlfa modülü yüklenemedi (bullalfa.js eksik olabilir).</div>';
   }
 }
+
+// ===== GÜNLÜK BÜLTEN (Stage 7c) =====
+// Daily bulletin page — consumes /api/daily-brief* endpoints from
+// Stage 7b. Renders today's bulletin or the most recent one if today
+// hasn't been generated yet (BIST closed days, fresh deploy).
+//
+// Layout:
+//   - Headline + generated-at timestamp
+//   - Stats row (scanned / conviction / confirmed / early)
+//   - CONVICTION top 5 cards
+//   - Confirmed-new-today list
+//   - Sector rotation winners
+//   - Biggest movers (gainers + losers)
+//   - KAP highlights
+//   - Pre-alarm candidates
+//   - Archive sidebar (last 30 dates, click to load)
+async function renderBultenPage(){
+  const pg = $('pg-bulten');
+  if (!pg) return;
+  pg.innerHTML = `<div class="ld" style="padding:40px 20px">
+    <div class="sp"></div>
+    <div class="ld-t" style="margin-top:12px">📰 Bülten yükleniyor…</div>
+  </div>`;
+  let latest = null;
+  let history = [];
+  try {
+    [latest, history] = await Promise.all([
+      api('/api/daily-brief').catch(() => null),
+      api('/api/daily-brief/history?limit=30').catch(() => ({dates: []})),
+    ]);
+  } catch (e) {
+    pg.innerHTML = `<div style="padding:24px;color:var(--red)">Bülten alınamadı: ${esc(e.message || 'unknown')}</div>`;
+    return;
+  }
+  const bulletin = latest && latest.bulletin ? latest.bulletin : null;
+  const archiveDates = (history && history.dates) || [];
+  if (!bulletin) {
+    pg.innerHTML = `<div style="padding:24px">
+      <h2 style="margin:0 0 12px">📰 Günlük Bülten</h2>
+      <p style="color:var(--t3);max-width:540px">
+        Henüz bülten yazılmadı. İlk bülten kapanış sonrası (İstanbul 18:30) otomatik
+        olarak yazılacak. Tetikleyiciyi manuel test etmek istersen:
+      </p>
+      <div style="margin-top:12px">
+        <button class="btn btn-sm btn-blu" onclick="window._regenBulletin()">🔄 Şimdi oluştur</button>
+      </div>
+    </div>`;
+    return;
+  }
+  pg.innerHTML = _renderBultenContent(bulletin, archiveDates);
+}
+
+function _renderBultenContent(rec, archive){
+  const c = (rec && rec.content) || {};
+  const date = rec.bulletin_date || '—';
+  const genAt = rec.generated_at ? new Date(rec.generated_at).toLocaleString('tr-TR') : '';
+  const stats = c.stats || {};
+  const headline = c.headline || 'Bültenin başlığı yok.';
+  let h = `<div style="padding:16px 20px;max-width:1200px;margin:0 auto">`;
+
+  // Header
+  h += `<div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:16px">
+    <div>
+      <h2 style="margin:0 0 4px;font-size:var(--fs-xl)">📰 Günlük Bülten — ${esc(date)}</h2>
+      <div style="color:var(--t3);font-size:var(--fs-xs)">Oluşturulma: ${esc(genAt)}</div>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <select id="bultenArchive" onchange="_loadBultenDate(this.value)" style="background:var(--bg2);color:var(--t1);border:1px solid var(--bdr);border-radius:4px;padding:6px 10px;font-family:'JetBrains Mono',monospace;font-size:var(--fs-xs)">
+        <option value="">Arşivden seç…</option>
+        ${(archive||[]).map(a => `<option value="${esc(a.bulletin_date)}" ${a.bulletin_date===date?'selected':''}>${esc(a.bulletin_date)}</option>`).join('')}
+      </select>
+      <button class="btn btn-sm btn-blu" onclick="window._regenBulletin()">🔄 Yenile</button>
+    </div>
+  </div>`;
+
+  // Headline + stats
+  h += `<div class="card" style="margin-bottom:16px"><div class="card-b">
+    <div style="font-size:var(--fs-md);font-weight:600;margin-bottom:12px">${esc(headline)}</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px">
+      ${_bultenStatCell('Taranan', stats.scanned)}
+      ${_bultenStatCell('CONVICTION', stats.conviction, 'var(--grn)')}
+      ${_bultenStatCell('CONFIRMED', stats.confirmed, 'var(--ylw)')}
+      ${_bultenStatCell('EARLY', stats.early, 'var(--blu)')}
+    </div>
+  </div></div>`;
+
+  // CONVICTION top
+  if ((c.conviction_top||[]).length) {
+    h += `<div class="card" style="margin-bottom:16px"><div class="card-h"><span class="card-t">🐂 CONVICTION — Top ${c.conviction_top.length}</span></div><div class="card-b">
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px">
+        ${c.conviction_top.map(s => `<div style="border:1px solid var(--bdr);border-radius:6px;padding:10px;background:var(--bg2)">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+            <span class="clk-t" style="font-size:var(--fs-md);font-weight:700" onclick="loadTicker('${esc(s.symbol)}')">${esc(s.symbol||'-')}</span>
+            <span style="background:var(--grn);color:#000;padding:2px 8px;border-radius:3px;font-family:'JetBrains Mono',monospace;font-size:var(--fs-xs);font-weight:700">${(s.score||0).toFixed(0)}</span>
+          </div>
+          ${s.pattern ? `<div style="font-size:var(--fs-xs);color:var(--t2);margin-bottom:4px">${esc(s.pattern)}</div>` : ''}
+          ${(s.reasons||[]).slice(0,2).map(r => `<div style="font-size:10px;color:var(--grn);margin-top:2px">✓ ${esc(r)}</div>`).join('')}
+        </div>`).join('')}
+      </div>
+    </div></div>`;
+  }
+
+  // Confirmed new today
+  if ((c.confirmed_new||[]).length) {
+    h += `<div class="card" style="margin-bottom:16px"><div class="card-h"><span class="card-t">🆕 Bugün CONFIRMED olanlar</span></div><div class="card-b">
+      <div style="display:flex;flex-wrap:wrap;gap:8px">
+        ${c.confirmed_new.map(s => `<span class="clk-t" style="background:var(--bg2);padding:4px 10px;border-radius:3px;font-family:'JetBrains Mono',monospace;font-size:var(--fs-xs);border:1px solid var(--ylw)" onclick="loadTicker('${esc(s.symbol)}')">${esc(s.symbol)} <span style="color:var(--t3)">${(s.score||0).toFixed(0)}</span></span>`).join('')}
+      </div>
+    </div></div>`;
+  }
+
+  // Sector rotation
+  if ((c.sector_rotation||[]).length) {
+    h += `<div class="card" style="margin-bottom:16px"><div class="card-h"><span class="card-t">🔄 Sektör Rotasyonu — Liderler</span></div><div class="card-b">
+      <table style="width:100%;font-family:'JetBrains Mono',monospace;font-size:var(--fs-xs)">
+        <thead><tr style="text-align:left;color:var(--t3);border-bottom:1px solid var(--bdr)">
+          <th style="padding:6px">Sektör</th><th style="padding:6px;text-align:right">Aktivite</th>
+        </tr></thead>
+        <tbody>${c.sector_rotation.map(s => `<tr style="border-bottom:1px solid var(--bdr)">
+          <td style="padding:6px">${esc(s.sector||s.name||'-')}</td>
+          <td style="padding:6px;text-align:right">${s.activity_score!=null?s.activity_score.toFixed(1):'-'}</td>
+        </tr>`).join('')}</tbody>
+      </table>
+    </div></div>`;
+  }
+
+  // Biggest movers
+  const mv = c.biggest_movers || {};
+  if ((mv.gainers||[]).length || (mv.losers||[]).length) {
+    h += `<div class="card" style="margin-bottom:16px"><div class="card-h"><span class="card-t">📈 Günün Hareketleri</span></div><div class="card-b">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+        <div><div style="color:var(--grn);font-size:var(--fs-xs);font-weight:700;margin-bottom:6px">EN ÇOK YÜKSELEN</div>
+          ${(mv.gainers||[]).map(g => `<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid var(--bdr);font-size:var(--fs-xs);font-family:'JetBrains Mono',monospace"><span class="clk-t" onclick="loadTicker('${esc(g.ticker)}')">${esc(g.ticker)}</span><span style="color:var(--grn)">+${(g.change_pct||0).toFixed(2)}%</span></div>`).join('')}
+        </div>
+        <div><div style="color:var(--red);font-size:var(--fs-xs);font-weight:700;margin-bottom:6px">EN ÇOK DÜŞEN</div>
+          ${(mv.losers||[]).map(l => `<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid var(--bdr);font-size:var(--fs-xs);font-family:'JetBrains Mono',monospace"><span class="clk-t" onclick="loadTicker('${esc(l.ticker)}')">${esc(l.ticker)}</span><span style="color:var(--red)">${(l.change_pct||0).toFixed(2)}%</span></div>`).join('')}
+        </div>
+      </div>
+    </div></div>`;
+  }
+
+  // KAP highlights
+  if ((c.kap_highlights||[]).length) {
+    h += `<div class="card" style="margin-bottom:16px"><div class="card-h"><span class="card-t">📢 KAP Öne Çıkanlar</span></div><div class="card-b">
+      ${c.kap_highlights.map(k => `<div style="padding:6px 0;border-bottom:1px solid var(--bdr);font-size:var(--fs-xs)">
+        <span class="clk-t" style="font-family:'JetBrains Mono',monospace;font-weight:700" onclick="loadTicker('${esc(k.ticker)}')">${esc(k.ticker||'-')}</span>
+        <span style="color:var(--ylw);font-size:10px;margin-left:6px;padding:1px 6px;background:var(--bg2);border-radius:3px">${esc(k.type||'')}</span>
+        <span style="color:var(--t2);margin-left:8px">${esc(k.subject||'')}</span>
+      </div>`).join('')}
+    </div></div>`;
+  }
+
+  // Pre-alarms
+  if ((c.pre_alarms||[]).length) {
+    h += `<div class="card" style="margin-bottom:16px"><div class="card-h"><span class="card-t">⚠️ Pre-Alarm Adayları</span></div><div class="card-b">
+      ${c.pre_alarms.map(p => `<div style="padding:6px 0;border-bottom:1px solid var(--bdr);font-size:var(--fs-xs)">
+        <span class="clk-t" style="font-family:'JetBrains Mono',monospace;font-weight:700" onclick="loadTicker('${esc(p.symbol)}')">${esc(p.symbol)}</span>
+        <span style="color:var(--t3);margin-left:6px">skor ${p.score!=null?p.score.toFixed(0):'-'}</span>
+        ${(p.hints||[]).slice(0,1).map(hh => `<span style="color:var(--t2);margin-left:8px">${esc(hh)}</span>`).join('')}
+      </div>`).join('')}
+    </div></div>`;
+  }
+  h += '</div>';
+  return h;
+}
+
+function _bultenStatCell(label, val, color){
+  return `<div style="background:var(--bg2);border-radius:6px;padding:10px;text-align:center">
+    <div style="color:var(--t3);font-size:10px;text-transform:uppercase;letter-spacing:0.5px">${esc(label)}</div>
+    <div style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-lg);font-weight:700;color:${color||'var(--t1)'};margin-top:4px">${val!=null?val:'—'}</div>
+  </div>`;
+}
+
+async function _loadBultenDate(date){
+  if (!date) return;
+  const pg = $('pg-bulten');
+  pg.innerHTML = `<div class="ld" style="padding:40px 20px"><div class="sp"></div></div>`;
+  try {
+    const r = await api('/api/daily-brief/' + encodeURIComponent(date));
+    const archive = await api('/api/daily-brief/history?limit=30').catch(() => ({dates:[]}));
+    if (r && r.bulletin) {
+      pg.innerHTML = _renderBultenContent(r.bulletin, archive.dates || []);
+    } else {
+      pg.innerHTML = `<div style="padding:24px;color:var(--t3)">Bu tarih için bülten yok.</div>`;
+    }
+  } catch (e) {
+    pg.innerHTML = `<div style="padding:24px;color:var(--red)">Bülten alınamadı: ${esc(e.message||'')}</div>`;
+  }
+}
+
+window._regenBulletin = async function(){
+  const pg = $('pg-bulten');
+  pg.innerHTML = `<div class="ld" style="padding:40px 20px"><div class="sp"></div><div class="ld-t" style="margin-top:12px">Bülten oluşturuluyor…</div></div>`;
+  try {
+    await api('/api/daily-brief/regenerate', {method: 'POST'});
+    renderBultenPage();
+  } catch (e) {
+    pg.innerHTML = `<div style="padding:24px;color:var(--red)">Oluşturulamadı: ${esc(e.message||'')}</div>`;
+  }
+};
