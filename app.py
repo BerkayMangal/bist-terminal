@@ -19,7 +19,7 @@ from core import redis_client
 from core.cache import (
     raw_cache, analysis_cache, tech_cache, history_cache,
     macro_cache, takas_cache, social_cache, briefing_cache,
-    hero_cache, agent_cache, heatmap_cache, macro_ai_cache,
+    hero_cache, agent_cache, heatmap_cache, macro_ai_cache, ai_cache,
     get_top10_items, get_top10_asof, set_top10,
     get_scan_status, update_scan_status, increment_scan_progress,
     append_briefing, get_briefing_history,
@@ -618,6 +618,19 @@ async def api_ai_consensus(symbol: str, request: Request):
         sym = normalize_symbol(symbol or "")
         if not sym:
             return error("symbol gerekli", status_code=400)
+
+        # Cache the Claude analysis per symbol (AI_CACHE_TTL, ~24h). A
+        # live Claude call costs money — without this every ticker-detail
+        # open re-analyzes the same stock. Fundamentals change quarterly,
+        # so a day-long cache is safe and keeps the budget honest.
+        _ck = f"consensus:{sym}"
+        cached = ai_cache.get(_ck)
+        if cached:
+            return success({
+                "symbol": sym,
+                "consensus": {"leader": "anthropic", "leader_text": cached},
+            }, as_of=now_iso(), cache_status="hit")
+
         try:
             from ai.prompts import trader_summary_prompt
             r = analysis_cache.get(sym) or analyze_symbol(sym)
@@ -636,6 +649,7 @@ async def api_ai_consensus(symbol: str, request: Request):
                 "symbol": sym,
                 "consensus": {"leader": None, "leader_text": ""},
             }, as_of=now_iso())
+        ai_cache.set(_ck, text)
         return success({
             "symbol": sym,
             "consensus": {
