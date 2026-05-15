@@ -461,10 +461,14 @@ async def bullwatch_refresh_loop() -> None:
 
     log.info(
         "BullWatch refresh loop: first run in %ds, then clock-anchored "
-        "(09:30 + 13:30 Istanbul, weekdays)",
+        "(09:30 + 13:30 + 18:30 Istanbul, weekdays)",
         BULLWATCH_REFRESH_STARTUP_DELAY,
     )
     await asyncio.sleep(BULLWATCH_REFRESH_STARTUP_DELAY)
+
+    # Stage 7c: track the slot we just woke from so we can fire the
+    # daily bulletin generator after the post_close (18:30) scan.
+    last_slot_label: Optional[str] = None
 
     while True:
         # ── Run the scan ───────────────────────────────────────────
@@ -486,8 +490,28 @@ async def bullwatch_refresh_loop() -> None:
             await asyncio.sleep(BULLWATCH_RETRY_AFTER_ERROR)
             continue
 
+        # ── Stage 7c: daily bulletin auto-fire ─────────────────────
+        # The bulletin generator (Stage 7b) composes a daily summary
+        # from currently-warm sources. It must fire ONLY after the
+        # post_close (18:30 IST) scan so the daily candle is final
+        # and confirmed_new_today actually reflects the day's
+        # zone-entries. last_slot_label was set the previous loop tick.
+        if last_slot_label == "post_close":
+            try:
+                from engine.daily_bulletin import generate_and_persist
+                rec = await asyncio.to_thread(generate_and_persist)
+                log.info(
+                    "Daily bulletin saved for %s",
+                    rec.get("bulletin_date"),
+                )
+            except Exception as exc:
+                # Best-effort — bulletin failure must never break the
+                # scan loop. Operator gets a warning and we move on.
+                log.warning("Daily bulletin generation failed: %r", exc)
+
         # ── Sleep until next scheduled slot ────────────────────────
         sleep_for, label = seconds_until_next_scan()
+        last_slot_label = label
         log.info(
             "BullWatch refresh: next slot %s in %.0fs (~%.1f h)",
             label, sleep_for, sleep_for / 3600.0,
