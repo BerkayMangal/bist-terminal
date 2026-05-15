@@ -302,9 +302,15 @@ class ScanCoordinator:
                     return None
 
             workers = min(SCAN_MAX_WORKERS, len(universe))
+            # Radar Overhaul (2026-05): the universe grew from 108 to
+            # ~622 (full BIST). The whole-scan budget scales with size —
+            # 300s was sized for 108. 2s/symbol headroom over 622 with
+            # 16 workers → ~78s ideal, but cold borsapy + retries can
+            # push it; 900s is a safe ceiling for the background scan.
+            _scan_budget = 900 if len(universe) > 200 else 300
             with ThreadPoolExecutor(max_workers=workers) as pool:
                 futures = {pool.submit(_safe_analyze, t): t for t in universe}
-                for future in as_completed(futures, timeout=300):
+                for future in as_completed(futures, timeout=_scan_budget):
                     try:
                         r = future.result(timeout=60)
                     except Exception:

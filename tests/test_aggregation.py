@@ -234,7 +234,9 @@ class TestBriefingPrompt:
                "sig_str": "THYAO:GOLDEN_CROSS", "signal_count": 1}
         prompt = briefing_prompt(ctx)
         assert "THYAO" in prompt
-        assert "50 hisse" in prompt
+        # AI Quality Overhaul rewrote the briefing prompt — the scan
+        # count now reads "Taranan hisse: 50" instead of "50 hisse".
+        assert "50" in prompt and "hisse" in prompt
 
 class TestMacroCommentaryPrompt:
     def test_returns_string(self):

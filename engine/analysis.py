@@ -35,6 +35,7 @@ from engine.scoring import (
     quality_label, entry_quality_label,
     decision_engine, style_label, legendary_labels, drivers,
     compute_valuation_stretch,
+    fundamental_quality_label, fundamental_decision,
 )
 from engine.scoring_v11 import get_risk_cap, detect_fatal_risks
 from engine.technical import compute_technical
@@ -375,13 +376,16 @@ def analyze_symbol(symbol: str, scoring_version: Optional[str] = None) -> dict:
     # ──────────────────────────────────────────────────
     # Labels & Decision — pure-FA only (no momentum/timing)
     # ──────────────────────────────────────────────────
-    # entry_quality_label and decision_engine still take an `ivme` argument
-    # for legacy reasons. We pass a neutral 50 so the momentum branch never
-    # fires — labels are decided purely on fa_pure + risk_penalty. This
-    # keeps the scoring.py functions reusable elsewhere without forking.
+    # Radar Overhaul (2026-05): the timing-flavored entry labels
+    # (TEYİTLİ / ERKEN / GEÇ) are replaced with pure-fundamental
+    # quality labels. Radar answers "is this company fundamentally
+    # good + fairly priced?" — timing ("enter now / stay away") is
+    # Cross Hunter / BullWatch territory.
     q_label = quality_label(fa_pure)
-    e_label = entry_quality_label(fa_pure, 50.0, risk_penalty)
-    decision = decision_engine(fa_pure, 50.0, risk_penalty, e_label)
+    e_label = fundamental_quality_label(
+        fa_pure, scores.get("value", 50.0), risk_penalty,
+    )
+    decision = fundamental_decision(fa_pure, risk_penalty)
 
     # Confidence — base score minus penalty for excluded dimensions
     confidence = confidence_score(m)
