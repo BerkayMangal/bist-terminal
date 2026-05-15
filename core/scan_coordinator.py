@@ -46,6 +46,33 @@ from core.logging_config import generate_id, set_scan_id
 log = logging.getLogger("bistbull.scan")
 
 
+def _radar_data_sufficient(r: dict) -> bool:
+    """Radar Overhaul (2026-05): a stock only enters the radar ranking
+    if enough FA dimensions have real data.
+
+    The full-BIST universe (~622) pulled in many small caps whose
+    fundamental data is too thin to score meaningfully — they all
+    collapsed to overall=1 and piled up at the bottom of the list as
+    misleading "UZAK DUR" noise. The real message for those is "veri
+    yetersiz", not "bad company".
+
+    A stock passing confidence_score (CONFIDENCE_MIN) can still have
+    most FA dimensions imputed; this second gate uses score_coverage's
+    per-dimension breakdown. Stocks below RADAR_MIN_DIMENSIONS are
+    dropped from the radar list — they remain individually searchable
+    via /api/analyze, just not ranked among analyzable peers.
+    """
+    try:
+        from config import RADAR_MIN_DIMENSIONS
+    except Exception:
+        RADAR_MIN_DIMENSIONS = 4
+    cov = (r.get("score_coverage") or {}).get("summary") or {}
+    # Default 7 (fully covered) when the field is absent so a missing
+    # score_coverage never silently drops a stock.
+    dims = cov.get("dimensions_with_data", 7)
+    return dims >= RADAR_MIN_DIMENSIONS
+
+
 class ScanCoordinator:
     """
     Merkezi scan orkestratörü.
@@ -315,7 +342,8 @@ class ScanCoordinator:
                         r = future.result(timeout=60)
                     except Exception:
                         r = None
-                    if r and r.get("confidence", 0) >= CONFIDENCE_MIN:
+                    if r and r.get("confidence", 0) >= CONFIDENCE_MIN \
+                            and _radar_data_sufficient(r):
                         ranked.append(r)
 
             ranked.sort(

@@ -381,6 +381,15 @@ else:
 # ================================================================
 RADAR_UNIVERSE: list[str] = FULL_BIST
 
+# Radar Overhaul (2026-05): minimum FA dimensions (of 7) that must
+# have real data for a stock to enter the radar ranking. Below this,
+# the score is unreliable (most dimensions imputed) — the stock is
+# dropped from the radar list rather than shown as a misleading
+# "overall=1 / UZAK DUR". It stays searchable via /api/analyze.
+# 4/7 keeps any stock missing only growth/moat/capital data while
+# cutting the thin-data small caps that piled up at the bottom.
+RADAR_MIN_DIMENSIONS: int = 4
+
 # ================================================================
 # FA SCORE AĞIRLIKLARI
 # ================================================================
