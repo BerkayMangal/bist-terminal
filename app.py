@@ -34,6 +34,7 @@ from api.auth import router as auth_router
 from api.phase4_endpoints import router as phase4_router
 from api.bullwatch import router as bullwatch_router
 from api.bullalfa import router as bullalfa_router
+from api.daily_brief import router as daily_brief_router
 
 from config import (
     BOT_VERSION, APP_NAME, CONFIDENCE_MIN, UNIVERSE,
@@ -377,6 +378,7 @@ app.include_router(auth_router)
 app.include_router(phase4_router)
 app.include_router(bullwatch_router)
 app.include_router(bullalfa_router)
+app.include_router(daily_brief_router)
 # KAP disclosure feed endpoints — Faz 1.
 try:
     from api.kap import router as kap_router
