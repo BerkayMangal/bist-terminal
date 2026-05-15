@@ -182,13 +182,20 @@ class TestScoreDispatch:
         # quality bucket uses roe + net_margin which are in fits
         assert r["quality"] is not None
 
-    def test_calibrated_fallback_to_v13_when_no_fits(self):
+    def test_calibrated_fallback_to_v13_when_no_fits(self, tmp_path, monkeypatch):
         """When calibrated requested but no fits available, fall back
-        to V13 handpicked and record the fallback in version_effective."""
+        to V13 handpicked and record the fallback in version_effective.
+
+        Phase 4.7 deploy: real fits live in reports/, so we monkeypatch
+        DEFAULT_FITS_PATH to force missing-file branch.
+        """
         from engine.scoring_calibrated import (
             score_dispatch, CALIBRATED_VERSION, HANDPICKED_VERSION,
             reset_fits_cache,
         )
+        import engine.scoring_calibrated as scoring_mod
+        monkeypatch.setattr(scoring_mod, "DEFAULT_FITS_PATH",
+                            tmp_path / "no_fits.json")
         reset_fits_cache()
         m = {"roe": 0.20, "pe": 8.0, "pb": 1.5, "market_cap": 5000,
              "total_debt": 100, "cash": 50, "revenue": 1000,

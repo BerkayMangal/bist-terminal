@@ -195,13 +195,20 @@ class TestScoreDispatchIntegration:
         assert d["value"] == pytest.approx(direct_value)
         assert d["quality"] == pytest.approx(direct_quality)
 
-    def test_calibrated_no_fits_falls_back(self):
+    def test_calibrated_no_fits_falls_back(self, tmp_path, monkeypatch):
         """calibrated_2026Q1 requested with no fits on disk -> falls
-        back to V13 and records scoring_version_effective."""
+        back to V13 and records scoring_version_effective.
+
+        Phase 4.7 deploy: real fits committed at reports/, so we
+        monkeypatch DEFAULT_FITS_PATH to force missing-file branch.
+        """
         from engine.scoring_calibrated import (
             score_dispatch, CALIBRATED_VERSION, HANDPICKED_VERSION,
             reset_fits_cache,
         )
+        import engine.scoring_calibrated as scoring_mod
+        monkeypatch.setattr(scoring_mod, "DEFAULT_FITS_PATH",
+                            tmp_path / "no_fits.json")
         reset_fits_cache()
         m = {"pe": 10.0, "roe": 0.15, "net_margin": 0.12,
              "market_cap": 1000, "total_debt": 100, "cash": 50, "revenue": 500,
@@ -427,6 +434,75 @@ class TestAbReportEndpoint:
         assert resp.status_code == 200
         data = resp.json()
         assert data["_meta"]["n_paired_rows"] == 0
+
+
+# ==========================================================================
+# Phase 4.8: /api/scoring/ab_report_breakdown
+# ==========================================================================
+
+class TestAbReportBreakdown:
+    """Phase 4.8 deep breakdown endpoint."""
+
+    def test_empty_no_data(self, client):
+        resp = client.get("/api/scoring/ab_report_breakdown?days=30")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["_meta"]["n_paired_rows"] == 0
+        assert data["by_sector"] == {}
+        assert data["by_symbol"] == []
+
+    def test_basic_aggregation(self, client, seed_score_history_ab):
+        resp = client.get("/api/scoring/ab_report_breakdown?days=30")
+        assert resp.status_code == 200
+        data = resp.json()
+
+        meta = data["_meta"]
+        assert meta["n_paired_rows"] == 10  # 5 symbols × 2 dates
+        assert meta["n_symbols"] == 5
+
+    def test_per_symbol_sorted_by_max_abs_diff(self, client, seed_score_history_ab):
+        resp = client.get("/api/scoring/ab_report_breakdown?days=30")
+        data = resp.json()
+        bs = data["by_symbol"]
+        assert len(bs) == 5
+
+        # Sorted descending — first row's max_abs_diff is highest
+        for i in range(len(bs) - 1):
+            assert bs[i]["max_abs_diff"] >= bs[i + 1]["max_abs_diff"]
+
+    def test_per_symbol_has_sector(self, client, seed_score_history_ab):
+        resp = client.get("/api/scoring/ab_report_breakdown?days=30")
+        bs = resp.json()["by_symbol"]
+        for r in bs:
+            assert "sector" in r
+            assert isinstance(r["sector"], str)
+
+    def test_decision_quadrant_present(self, client, seed_score_history_ab):
+        resp = client.get("/api/scoring/ab_report_breakdown?days=30")
+        q = resp.json()["decision_quadrant"]
+        # Today: 5 × AL→İZLE; yesterday: 5 × AL→AL
+        assert q.get("AL->İZLE", 0) == 5
+        assert q.get("AL->AL", 0) == 5
+
+    def test_decision_match_rate_per_sector(self, client, seed_score_history_ab):
+        resp = client.get("/api/scoring/ab_report_breakdown?days=30")
+        bs = resp.json()["by_sector"]
+        for sg, stats in bs.items():
+            # Every sector has match rate 0.5 (yesterday match, today flip)
+            if stats["decision_match_rate"] is not None:
+                assert 0.0 <= stats["decision_match_rate"] <= 1.0
+
+    def test_days_query_param(self, client, seed_score_history_ab):
+        # Larger lookback should still return all 10 rows
+        resp = client.get("/api/scoring/ab_report_breakdown?days=100")
+        assert resp.status_code == 200
+        assert resp.json()["_meta"]["n_paired_rows"] == 10
+
+    def test_invalid_days(self, client):
+        resp = client.get("/api/scoring/ab_report_breakdown?days=0")
+        assert resp.status_code == 422
+        resp = client.get("/api/scoring/ab_report_breakdown?days=400")
+        assert resp.status_code == 422
 
 
 # ==========================================================================

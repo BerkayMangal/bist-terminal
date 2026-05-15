@@ -519,6 +519,112 @@ Rollback: single commit revertable. pick_all_values is additive.
 V13 handpicked remains always-available fallback.
 
 
+---
+
+## Phase 4.7 deploy — close-out entry
+
+Not a regression. Closes the Phase 4.7 arc.
+
+Infrastructure shipped this turn (commits ff01c05 + dc994dd):
+  - tests/test_calibrated_loads_real_fits.py (10): loader path
+    resolution, fits-present path, fits-missing V13 fallback with
+    telemetry, empty-dict behavior, corrupt-JSON recovery
+  - scripts/smoke_test_calibrated.py (~230 LOC): CLI tool, 3-check
+    production smoke test, Türkçe output, zero external deps
+  - tests/test_smoke_script_logic.py (17): offline response-shape
+    parsing coverage
+  - DEPLOY_CALIBRATED_GUIDE.md (179 lines, Türkçe): 5-step deploy
+    path + troubleshooting + rollback
+
+Test impact: 934 -> 961 passed + 5 skipped (+27). Both CWDs.
+Reviewer target 940+ cleared by +21.
+
+IMPORTANT INTEGRITY NOTE — Uploaded Colab artifacts were empty:
+
+The turn prompt described a successful Colab backfill (1,900 rows,
+5 symbols, 11 fitted metrics, interest_coverage sanity-rejected).
+The actual fa_calibration_full_final.zip uploaded to the session
+contained 3 files totaling 304 bytes:
+  fa_events.csv: 117 bytes (header only, 0 data rows)
+  fa_isotonic_fits.json: 2 bytes (literal "{}", 0 metrics)
+  fa_calibration_summary.md: 185 bytes ("Input events: 0")
+
+The agent did NOT commit these empty files to reports/ because
+doing so would:
+  1. Put a lying audit trail in the repo (summary says "Input
+     events: 0" while reviewer narrative claims 1,900)
+  2. Cause loader to cache {}, producing same behavior as no fits
+     file, but with a misleading committed state
+  3. Complicate debugging when real Colab output arrives later
+
+Repo deployable in TWO states:
+  Path A: operator re-runs Colab, produces real fits, commits
+          reports/fa_isotonic_fits.json + events CSV + summary,
+          then pushes + deploys
+  Path B: operator pushes as-is. Calibrated requests fall back to
+          V13 with scoring_version_effective='v13_handpicked'
+          telemetry. Background scanner skips A/B dual-write
+          cleanly (_get_fits() is None). Zero crash, zero user
+          visible breakage — just calibrated is a no-op until
+          real fits arrive.
+
+Both paths documented in PHASE_4_7_DEPLOY_FINAL_REPORT.md.
+
+Rollback: all Phase 4.7 commits additive + independently revertable.
+V13 handpicked remains always-available fallback.
+
+Phase 4.7 arc: 577 (Phase 3) -> 961 tests (+384 over 4.0-4.9 + final
++ v2 + v3 ROUND B + deploy). 43 commits on feat/calibrated-scoring
+from feat/pit-backfill-validator baseline.
+
+
+---
+
+## Phase 4.7 deploy — CLOSED (real fits committed)
+
+Earlier "uploads were empty" entry resolved.
+
+Root cause was found and patched: research/ingest_prices.py was using
+borsapy's old module-level get_prices() API, which doesn't exist in
+borsapy>=0.8. Fixed in commit 2aacdfe by switching to the production
+bp.Ticker(sym).history(period="max", interval="1d") API. After this
+fix, the Colab two-stage flow (price ingest → FA ingest → calibrate)
+produced 2,465 events / 15 fits cleanly.
+
+Real fits landed in commit c90d9e5:
+  reports/fa_events.csv (224 KB, 2,465 rows, 5 symbols, 16 metrics)
+  reports/fa_isotonic_fits.json (7.4 KB, 15 fitted, 1 sanity-rejected)
+  reports/fa_calibration_summary.md (1.5 KB)
+
+Test fix in same commit:
+  test_fallback_recorded_in_effective_flag was asserting V13 fallback
+  when no fits on disk, but with real fits now committed it was
+  finding them via DEFAULT_FITS_PATH and failing. Fixed by
+  monkeypatching DEFAULT_FITS_PATH to a non-existent tmp_path,
+  exercising the actual missing-file code path. Invariant preserved.
+
+Verification:
+  - End-to-end: _get_fits() loads 15 metrics from default path
+  - score_dispatch with calibrated_2026Q1 returns
+    scoring_version_effective='calibrated_2026Q1' (no V13 fallback)
+  - Bucket scores in expected ranges (value=55.5, quality=23.7
+    on representative test fixture)
+  - tests/test_calibrated_loads_real_fits.py: 10 passed
+  - tests/test_smoke_script_logic.py: 17 passed
+
+Coverage limitation noted for Phase 5:
+  155 samples per metric (5 symbols × 31 quarters). Phase 5 candidate
+  for recalibration with BIST30 non-bank set (~650 samples/metric).
+
+Phase 4.7 arc total: 577 (Phase 3) -> 961 (deploy) tests, 46 commits.
+Push + Railway redeploy flips production from V13 fallback to
+calibrated_2026Q1 active.
+
+Phase 4.7 deploy: CLOSED.
+
+
+---
+
 # ================================================================
 # PHASE 5 — Total UI/UX Redesign (2026-04-30)
 # ================================================================

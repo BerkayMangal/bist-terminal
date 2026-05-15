@@ -463,6 +463,7 @@ def make_borsapy_fetcher() -> Callable:
                 symbol=tc, filed_at=filed_at,
                 shares_current=shares_outstanding_current,
                 paid_in_capital=balance.get("paid_in_capital"),
+                period_end=qe,
             )
             fast = {"market_cap": pit_mcap}
 
@@ -477,10 +478,54 @@ def make_borsapy_fetcher() -> Callable:
     return _fetcher
 
 
+def _pit_shares_outstanding(
+    symbol: str,
+    period_end: date,
+    paid_in_capital: Optional[float],
+    shares_current: Optional[float],
+) -> tuple[Optional[float], str]:
+    """Phase 4.9: resolve point-in-time shares outstanding.
+
+    Returns (shares, source_tag) where source_tag is one of:
+      'pit_paid_in_capital'  — paid-in capital from THAT quarter's balance
+                                sheet, divided by 1 TL nominal (Turkish
+                                convention). This is the truly PIT value.
+      'current_fast_info'     — fallback to current shares_outstanding
+                                (proxy: BIST30 large caps rarely issue/retire
+                                shares dramatically, so bounded error).
+      'unavailable'           — neither available; caller's PE/PB metrics
+                                will fall out.
+
+    Phase 4.9 changes the preference order from Phase 4.7 v2:
+      Old: shares_current preferred, paid_in_capital as fallback
+      New: paid_in_capital (PIT) preferred, shares_current as fallback
+
+    Why: paid_in_capital is read from the same quarter's balance sheet
+    as the rest of the metrics, so it correctly reflects historical
+    capital actions (rights issues, bonus shares, capital reductions).
+    Using current shares for a 2018 quarter would inflate or deflate
+    PE/PB depending on whether the company has since issued / retired
+    shares.
+
+    Limitations acknowledged:
+      - Some BIST symbols have nominal value other than 1 TL. This
+        helper assumes 1 TL (Turkish standard since 2005 redenomination).
+      - Some share classes (preferred, restricted) are not separated.
+        For the metrics this calibration cares about (PE, PB, FCF yield),
+        bulk shares is what matters.
+    """
+    if paid_in_capital and paid_in_capital > 0:
+        return float(paid_in_capital), "pit_paid_in_capital"
+    if shares_current and shares_current > 0:
+        return float(shares_current), "current_fast_info"
+    return None, "unavailable"
+
+
 def _pit_market_cap(
     symbol: str, filed_at: date,
     shares_current: Optional[float],
     paid_in_capital: Optional[float],
+    period_end: Optional[date] = None,
 ) -> Optional[float]:
     """Compute point-in-time market cap.
 
@@ -488,15 +533,14 @@ def _pit_market_cap(
     (TODAY's mcap) for every historical quarter, producing PB=7994
     outliers. Fix: close_price_at_filed_at × shares_outstanding.
 
-    Fallback chain:
-      1. shares_outstanding (from fast_info, current) × PIT close price.
-         Works for BIST30 large-caps that don't issue/retire shares
-         frequently. Good enough for an initial calibration.
-      2. paid_in_capital (from balance sheet, PIT) × PIT close price,
-         assuming 1 TL nominal value per share (Turkish convention).
-         Works when shares_outstanding isn't available.
-      3. None — caller's metrics requiring mcap (PE, PB, FCF yield)
-         will fall out.
+    Phase 4.9 fix: previously preferred shares_current (today's count) over
+    paid_in_capital (PIT). This produced subtle PE/PB noise for symbols
+    that had capital actions between then and now. Now PIT wins.
+
+    Resolution chain:
+      1. paid_in_capital (PIT, from same-quarter balance sheet) × PIT close
+      2. shares_outstanding (current snapshot, fallback) × PIT close
+      3. None — caller's metrics requiring mcap (PE, PB, FCF yield) fall out
     """
     from infra.pit import get_price_at_or_before
     row = get_price_at_or_before(symbol, filed_at)
@@ -506,12 +550,15 @@ def _pit_market_cap(
     if not close_price:
         return None
 
-    if shares_current and shares_current > 0:
-        return float(close_price) * float(shares_current)
-    if paid_in_capital and paid_in_capital > 0:
-        # Paid-in capital / 1 TL nominal = share count (Turkish convention)
-        return float(close_price) * float(paid_in_capital)
-    return None
+    shares, _src = _pit_shares_outstanding(
+        symbol=symbol,
+        period_end=period_end or filed_at,
+        paid_in_capital=paid_in_capital,
+        shares_current=shares_current,
+    )
+    if shares is None:
+        return None
+    return float(close_price) * shares
 
 
 # ==========================================================================

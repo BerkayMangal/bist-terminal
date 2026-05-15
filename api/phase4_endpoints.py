@@ -642,3 +642,158 @@ async def ab_report_page(days: int = Query(30, ge=1, le=365)):
 </body>
 </html>"""
     return HTMLResponse(html)
+
+
+# ==========================================================================
+# Phase 4.8 — GET /api/scoring/ab_report_breakdown
+# Sector + symbol breakdown of paired telemetry
+# ==========================================================================
+
+@router.get("/api/scoring/ab_report_breakdown")
+async def api_scoring_ab_report_breakdown(
+    request: Request,
+    days: int = Query(30, ge=1, le=365),
+):
+    """Phase 4.8: deep breakdown of A/B paired telemetry.
+
+    Returns per-sector + per-symbol aggregations beyond the base
+    /api/scoring/ab_report. Useful for identifying which segments
+    drive divergence between V13 and calibrated_2026Q1.
+
+    Read-only, rate-limited.
+    """
+    from core.rate_limiter import check_rate_limit
+    check_rate_limit(request, "ab_report")
+
+    from infra.storage import _get_conn
+    from collections import defaultdict
+    import statistics
+
+    conn = _get_conn()
+    d_from = (date.today() - timedelta(days=days)).isoformat()
+
+    rows = conn.execute("""
+        SELECT
+            h.snap_date, h.symbol,
+            h.score AS v13_score, c.score AS cal_score,
+            h.decision AS v13_dec, c.decision AS cal_dec,
+            h.fa_score AS v13_fa, c.fa_score AS cal_fa
+        FROM score_history h
+        JOIN score_history c
+          ON h.symbol = c.symbol
+         AND h.snap_date = c.snap_date
+         AND h.scoring_version = 'v13_handpicked'
+         AND c.scoring_version = 'calibrated_2026Q1'
+        WHERE h.snap_date >= ?
+        ORDER BY h.snap_date DESC, h.symbol ASC
+    """, (d_from,)).fetchall()
+
+    if not rows:
+        return JSONResponse({
+            "_meta": {"n_paired_rows": 0, "lookback_days": days},
+            "by_sector": {},
+            "by_symbol": [],
+            "decision_quadrant": {},
+        })
+
+    # Sector lookup (best-effort, current mapping)
+    from engine.scoring import map_sector
+    try:
+        from data.providers import compute_metrics_v9
+    except Exception:
+        compute_metrics_v9 = None
+
+    sym_to_sector: dict[str, str] = {}
+    for r in rows:
+        sym = r[1]
+        if sym in sym_to_sector:
+            continue
+        sector_str = ""
+        if compute_metrics_v9 is not None:
+            try:
+                m = compute_metrics_v9(sym)
+                sector_str = (m.get("sector") or m.get("sector_group") or "")
+            except Exception:
+                sector_str = ""
+        sym_to_sector[sym] = map_sector(sector_str) if sector_str else "sanayi"
+
+    # Aggregate
+    by_sector: dict[str, dict] = defaultdict(lambda: {
+        "n_rows": 0, "symbols": set(),
+        "diffs": [], "matches": 0, "dec_total": 0,
+    })
+    by_symbol: dict[str, dict] = defaultdict(lambda: {
+        "n_rows": 0, "diffs": [], "flips": 0,
+        "latest_v13": None, "latest_cal": None,
+    })
+    quadrant: dict[tuple, int] = defaultdict(int)
+
+    for r in rows:
+        snap, sym = r[0], r[1]
+        v13s, cals = r[2], r[3]
+        v13d, cald = r[4], r[5]
+        sg = sym_to_sector.get(sym, "sanayi")
+
+        if v13s is not None and cals is not None:
+            d = cals - v13s
+            by_sector[sg]["diffs"].append(d)
+            by_symbol[sym]["diffs"].append(d)
+        by_sector[sg]["n_rows"] += 1
+        by_sector[sg]["symbols"].add(sym)
+        by_symbol[sym]["n_rows"] += 1
+
+        if v13d and cald:
+            quadrant[(v13d, cald)] += 1
+            by_sector[sg]["dec_total"] += 1
+            if v13d == cald:
+                by_sector[sg]["matches"] += 1
+            else:
+                by_symbol[sym]["flips"] += 1
+
+        # Latest snapshot per symbol (rows ORDER BY snap_date DESC)
+        if by_symbol[sym]["latest_v13"] is None:
+            by_symbol[sym]["latest_v13"] = v13s
+            by_symbol[sym]["latest_cal"] = cals
+
+    # Format output
+    sector_out = {}
+    for sg, s in by_sector.items():
+        sector_out[sg] = {
+            "n_rows": s["n_rows"],
+            "n_symbols": len(s["symbols"]),
+            "mean_diff": round(statistics.mean(s["diffs"]), 4)
+                          if s["diffs"] else None,
+            "max_abs_diff": round(max(abs(d) for d in s["diffs"]), 4)
+                             if s["diffs"] else None,
+            "decision_match_rate": round(s["matches"] / s["dec_total"], 4)
+                                    if s["dec_total"] else None,
+        }
+
+    symbol_out = []
+    for sym, s in by_symbol.items():
+        if not s["diffs"]:
+            continue
+        symbol_out.append({
+            "symbol": sym,
+            "sector": sym_to_sector.get(sym, "sanayi"),
+            "n_rows": s["n_rows"],
+            "mean_diff": round(statistics.mean(s["diffs"]), 4),
+            "max_abs_diff": round(max(abs(d) for d in s["diffs"]), 4),
+            "decision_flips": s["flips"],
+            "latest_v13": s["latest_v13"],
+            "latest_cal": s["latest_cal"],
+        })
+    # Sort by max_abs_diff desc
+    symbol_out.sort(key=lambda r: r["max_abs_diff"], reverse=True)
+
+    return JSONResponse({
+        "_meta": {
+            "n_paired_rows": len(rows),
+            "lookback_days": days,
+            "n_symbols": len(by_symbol),
+            "n_sectors": len(by_sector),
+        },
+        "by_sector": sector_out,
+        "by_symbol": symbol_out,
+        "decision_quadrant": {f"{a}->{b}": c for (a, b), c in quadrant.items()},
+    })
