@@ -258,7 +258,22 @@ def analyze_symbol(symbol: str, scoring_version: Optional[str] = None,
             return cached
 
     m = validate_metrics(normalize_metrics(compute_metrics(symbol)))
-    sector_group = map_sector(m.get("sector", ""))
+    # Sector resolution. borsapy Ticker.info is unreliable from prod —
+    # the sector field comes back empty for ~all stocks, which collapsed
+    # every stock to the "sanayi" default and broke sector-conditional
+    # scoring + the dashboard sector breakdown. When borsapy gives us a
+    # sector we use it; otherwise we fall back to the frozen BIST sector
+    # map (data/bist_sectors.py, built from borsapy's bulk sector indices).
+    from data.bist_sectors import sector_label_for, sector_group_for
+    _borsapy_sector = (m.get("sector") or "").strip()
+    if _borsapy_sector:
+        sector_group = map_sector(_borsapy_sector)
+        _display_sector = _borsapy_sector
+    else:
+        sector_group = sector_group_for(symbol)
+        _display_sector = sector_label_for(symbol)
+        if _display_sector:
+            m["sector"] = _display_sector
 
     # Radar is pure fundamental — momentum / tech_break / institutional flow
     # were already excluded from v13_final (kept only as a sentiment badge).
