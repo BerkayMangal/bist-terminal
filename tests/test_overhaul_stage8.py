@@ -49,10 +49,15 @@ class TestRailwayProConfig:
             f"BATCH_HISTORY_WORKERS dropped to {BATCH_HISTORY_WORKERS}"
         )
 
-    def test_scan_max_workers_bumped(self):
+    def test_scan_max_workers_throttle_safe(self):
         from config import SCAN_MAX_WORKERS
-        assert SCAN_MAX_WORKERS >= 12, (
-            f"SCAN_MAX_WORKERS dropped to {SCAN_MAX_WORKERS}"
+        # The "Railway Pro → bump workers" premise was wrong: the scan
+        # bottleneck is borsapy rate-limiting, not local CPU. PR #93
+        # dropped SCAN_MAX_WORKERS to 6 to stop borsapy throttling on
+        # the 622-stock universe. Guard against it creeping back up.
+        assert SCAN_MAX_WORKERS <= 8, (
+            f"SCAN_MAX_WORKERS={SCAN_MAX_WORKERS} — too high, will "
+            "re-trigger borsapy throttling on the full-BIST scan"
         )
 
     def test_chunk_sleep_tightened(self):

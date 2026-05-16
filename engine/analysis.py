@@ -38,7 +38,6 @@ from engine.scoring import (
     fundamental_quality_label, fundamental_decision,
 )
 from engine.scoring_v11 import get_risk_cap, detect_fatal_risks
-from engine.technical import compute_technical
 from engine.applicability import build_applicability_flags
 from engine.metric_guards import validate_metrics
 from engine.academic_layer import compute_academic_adjustments
@@ -488,12 +487,9 @@ def analyze_symbol(symbol: str, scoring_version: Optional[str] = None,
     except Exception as e:
         log.debug(f"Valuation skipped for {symbol}: {e}")
 
-    # Timing Intelligence (never blocks)
-    try:
-        from engine.timing_intel import build_timing_intel
-        r.update(build_timing_intel(scores, tech, m))
-    except Exception as e:
-        log.debug(f"Timing intel skipped for {symbol}: {e}")
+    # Timing Intelligence — intentionally NOT run here. Radar is pure
+    # fundamental; build_timing_intel needs technical data the radar
+    # path no longer fetches. Timing lives in BullAlpha / Cross Hunter.
 
     # Dimension Explanations — plain-language per-dimension (never blocks)
     try:
@@ -530,13 +526,15 @@ def analyze_symbol(symbol: str, scoring_version: Optional[str] = None,
         log.warning(f"Explainability skipped for {symbol}: {e}")
         r["explanation"] = None
 
-    # V11 Enrichment — mevcut alanları bozmadan v11 block ekler
+    # V11 Enrichment — mevcut alanları bozmadan v11 block ekler.
+    # tech-bağımlı enrich_with_tech_v11 (accumulation divergence) radar
+    # pure-FA olduğu için çağrılmaz; enrich_analysis_v11 + label hesabı
+    # tech'siz çalışır.
     try:
-        from engine.scoring_v11 import enrich_analysis_v11, enrich_with_tech_v11
+        from engine.scoring_v11 import enrich_analysis_v11
         from engine.labels import compute_all_labels
         r = enrich_analysis_v11(r)
-        r = enrich_with_tech_v11(r, tech)
-        r["v11_labels"] = compute_all_labels(r, tech)
+        r["v11_labels"] = compute_all_labels(r, None)
     except Exception as e:
         log.debug(f"V11 enrichment skipped for {symbol}: {e}")
 

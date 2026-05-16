@@ -308,10 +308,11 @@ class TestProvidersDeadCodeRemoved:
         )
         with open(path, "r", encoding="utf-8") as fh:
             n = sum(1 for _ in fh)
-        assert n < 1080, (
+        assert n < 1150, (
             f"data/providers.py has {n} lines — dead code may have "
-            "regressed (was 1005 with duplicate before Stage 1; "
-            "~1037 expected after Stage 6a cache-first plumbing)"
+            "regressed. The retry / poisoned-cache logic (PR #93-94) "
+            "legitimately grew the file; the duplicate-block check is "
+            "covered by test_no_duplicate_fetch_one_in_batch."
         )
 
     def test_no_duplicate_fetch_one_in_batch(self):
