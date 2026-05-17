@@ -36,6 +36,7 @@ from engine.scoring import (
     fundamental_quality_label, radar_grade,
 )
 from engine.scoring_v11 import get_risk_cap, detect_fatal_risks
+from engine.macro_context import get_policy_rate, get_inflation_rate
 from engine.applicability import build_applicability_flags
 from engine.metric_guards import validate_metrics
 from engine.academic_layer import compute_academic_adjustments
@@ -380,7 +381,7 @@ def analyze_symbol(symbol: str, scoring_version: Optional[str] = None,
     try:
         turkey_result = compute_turkey_realities(
             m, sector_group=sector_group, fa_pure=fa_pure,
-            policy_rate=37.0,
+            policy_rate=get_policy_rate(),
         )
     except Exception as e:
         log.debug(f"K3 Turkey skipped for {symbol}: {e}")
@@ -396,8 +397,8 @@ def analyze_symbol(symbol: str, scoring_version: Optional[str] = None,
         academic_result = compute_academic_adjustments(
             m, sector_group=sector_group,
             fa_input=tr_adjusted_fa,
-            policy_rate=37.0,
-            inflation_rate=0.40,
+            policy_rate=get_policy_rate(),
+            inflation_rate=get_inflation_rate(),
         )
     except Exception as e:
         log.debug(f"K4 Academic skipped for {symbol}: {e}")
