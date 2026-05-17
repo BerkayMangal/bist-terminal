@@ -22,22 +22,26 @@ import pytest
 # 1. Retry profile constants
 # ============================================================
 class TestRetryProfile:
-    def test_max_attempts_reduced_to_2(self):
+    # NOTE: the original Phase A.10 "cheap retry" profile (2 attempts,
+    # (0.3, 0.7)s backoff) was deliberately reversed by PR #93. At the
+    # 622-stock full-BIST universe borsapy throttles under load;
+    # surviving the throttle needs MORE retries with longer backoff,
+    # not fewer. These tests now guard the throttle-survival profile.
+    def test_max_attempts_throttle_survival(self):
         from data.providers import FETCH_RAW_MAX_ATTEMPTS
-        assert FETCH_RAW_MAX_ATTEMPTS == 2
+        assert FETCH_RAW_MAX_ATTEMPTS >= 3
 
-    def test_backoff_cheaper(self):
+    def test_backoff_profile(self):
         from data.providers import FETCH_RAW_BACKOFF_SEC
-        # New profile: ≤2 entries, sum < 1.5s
-        assert len(FETCH_RAW_BACKOFF_SEC) <= 2
-        assert sum(FETCH_RAW_BACKOFF_SEC) < 1.5
-        # Specifically (0.3, 0.7) per spec
-        assert FETCH_RAW_BACKOFF_SEC == (0.3, 0.7)
+        # PR #93 throttle-survival profile.
+        assert len(FETCH_RAW_BACKOFF_SEC) >= 3
+        assert FETCH_RAW_BACKOFF_SEC == (0.5, 1.5, 3.0)
 
-    def test_backoff_total_well_below_old(self):
-        """Pre-2-B.1 profile: (0.5, 1.0, 2.0) = 3.5s total. New: 1.0s."""
+    def test_backoff_gives_borsapy_room(self):
+        """The final backoff must be long enough (≥2s) that a throttled
+        borsapy symbol gets real recovery time before the last attempt."""
         from data.providers import FETCH_RAW_BACKOFF_SEC
-        assert sum(FETCH_RAW_BACKOFF_SEC) < 3.5
+        assert FETCH_RAW_BACKOFF_SEC[-1] >= 2.0
 
 
 # ============================================================
@@ -377,15 +381,13 @@ class TestRuntimeSimulation:
         old_total = sum(OLD_BACKOFF[1:OLD_ATTEMPTS])
         assert old_total == 3.0
 
-    def test_new_retry_cost_modeled(self):
+    def test_retry_cost_modeled(self):
         from data.providers import FETCH_RAW_MAX_ATTEMPTS, FETCH_RAW_BACKOFF_SEC
-        # New: 2 attempts, 1 retry sleep
-        # at attempt=1: sleep BACKOFF[1] = 0.7
-        new_total = sum(FETCH_RAW_BACKOFF_SEC[1:FETCH_RAW_MAX_ATTEMPTS])
-        assert new_total == 0.7
-        # Old: 3.0s, New: 0.7s → 76.7% reduction per failed symbol
-        old_total = 3.0
-        assert (old_total - new_total) / old_total > 0.7  # ≥70% reduction
+        # PR #93 throttle-survival profile: 3 attempts → 2 retry sleeps
+        # (BACKOFF[1] + BACKOFF[2]) for a symbol that exhausts retries.
+        # Trades per-symbol speed for scan completeness under throttle.
+        worst = sum(FETCH_RAW_BACKOFF_SEC[1:FETCH_RAW_MAX_ATTEMPTS])
+        assert worst == 4.5
 
 
 # ============================================================

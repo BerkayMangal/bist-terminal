@@ -395,6 +395,16 @@ RADAR_UNIVERSE: list[str] = FULL_BIST
 RADAR_MIN_DIMENSIONS: int = 4
 
 # ================================================================
+# ENFLASYON — reel büyüme hesabı için
+# Yıllık TÜFE tahmini. score_growth nominal büyümeyi bununla
+# enflasyondan arındırır: reel = (1+nominal)/(1+enflasyon) - 1.
+# Türkiye yüksek-enflasyon ortamında nominal büyüme yanıltıcı;
+# nominal +%30 ama enflasyon %33 ise şirket reel olarak küçülmüştür.
+# TÜFE değiştikçe bu sabit güncellenmeli.
+# ================================================================
+BIST_INFLATION_RATE: float = 0.33
+
+# ================================================================
 # FA SCORE AĞIRLIKLARI
 # ================================================================
 FA_WEIGHTS: dict[str, float] = {
@@ -427,70 +437,81 @@ VAL_STRETCH_MAP: list[tuple[int, int]] = [
 ]
 
 # ================================================================
-# SEKTÖR BAZLI EŞIK SİSTEMİ
-# Format: (bad/great, ok/good, good/ok, great/bad) → score_higher/score_lower'a gider
-# None = o metrik bu sektör için devre dışı
+# SEKTÖR BAZLI EŞIK SİSTEMİ — V11 yüksek-faiz kalibrasyonu
+#
+# KURAL: tüm eşik tuple'ları ARTAN sayısal sırada yazılır.
+#   - score_higher (yüksek=iyi: roe, net_margin, altman_z, ...):
+#     artan tuple = en kötü → en iyi
+#   - score_lower  (düşük=iyi: pe, pb, ev_ebitda, net_debt_ebitda,
+#     debt_equity): artan tuple = en iyi → en kötü
+# Her iki fonksiyon da ARTAN tuple bekler. Azalan yazmak score_lower'ı
+# dejenere bir step fonksiyonuna çevirir (eski kritik bug — F/K<25
+# olan tüm hisseler 100 alıyordu).
+# None = o metrik bu sektör için devre dışı (uygulanamaz).
 # ================================================================
 SECTOR_THRESHOLDS: dict[str, dict] = {
     "banka": {
-        "pe": (12, 8, 5, 3),
-        "pb": (1.8, 1.2, 0.8, 0.5),
-        "roe": (0.08, 0.14, 0.20, 0.28),
-        "net_margin": (0.05, 0.12, 0.20, 0.30),
+        "pe": (2.5, 4.5, 7, 10),
+        "pb": (0.5, 0.8, 1.2, 1.8),
+        "roe": (0.12, 0.18, 0.25, 0.35),
+        "net_margin": (0.06, 0.14, 0.22, 0.32),
+        "roic": None,
         "ev_ebitda": None,
         "debt_equity": None,
         "current_ratio": None,
         "altman_z": None,
     },
     "holding": {
-        "pe": (18, 12, 8, 5),
-        "pb": (1.8, 1.3, 0.9, 0.5),
-        "roe": (0.04, 0.08, 0.14, 0.20),
-        "net_margin": (0.03, 0.06, 0.12, 0.20),
+        "pe": (4, 7, 10, 16),
+        "pb": (0.5, 0.8, 1.1, 1.6),
+        "roe": (0.06, 0.10, 0.16, 0.24),
+        "net_margin": (0.04, 0.08, 0.14, 0.22),
     },
     "savunma": {
-        "pe": (30, 20, 14, 8),
-        "ev_ebitda": (16, 12, 8, 5),
-        "roe": (0.06, 0.12, 0.18, 0.25),
+        "pe": (7, 12, 18, 28),
+        "ev_ebitda": (4, 7, 10, 14),
+        "roe": (0.08, 0.14, 0.20, 0.28),
         "revenue_growth": (-0.02, 0.08, 0.18, 0.30),
     },
     "enerji": {
-        "pe": (10, 7, 4, 2),
-        "ev_ebitda": (10, 7, 5, 3),
-        "net_margin": (0.01, 0.04, 0.08, 0.15),
-        "net_debt_ebitda": (3.5, 2.5, 1.5, 0.5),
-        "debt_equity": (80, 150, 250, 400),
+        "pe": (2, 3, 5, 8),
+        "ev_ebitda": (2.5, 4, 6, 8),
+        "roe": (0.10, 0.16, 0.22, 0.30),
+        "net_margin": (0.02, 0.06, 0.10, 0.18),
+        "net_debt_ebitda": (0.3, 1.2, 2.0, 3.0),
+        "debt_equity": (70, 130, 220, 370),
         "altman_z": (0.8, 1.5, 2.5, 3.5),
     },
     "perakende": {
-        "pe": (22, 16, 10, 6),
-        "net_margin": (0.01, 0.03, 0.06, 0.10),
+        "pe": (5, 9, 14, 20),
+        "net_margin": (0.015, 0.04, 0.07, 0.12),
+        "roe": (0.06, 0.12, 0.18, 0.26),
         "revenue_growth": (-0.03, 0.08, 0.15, 0.25),
-        "asset_turnover": (0.5, 0.9, 1.4, 2.0),
     },
     "ulasim": {
-        "pe": (12, 8, 5, 3),
-        "ev_ebitda": (8, 6, 4, 3),
-        "roe": (0.05, 0.10, 0.16, 0.24),
-        "net_debt_ebitda": (3.5, 2.5, 1.5, 0.5),
-        "debt_equity": (150, 300, 500, 700),
+        "pe": (2.5, 4, 7, 10),
+        "ev_ebitda": (2.5, 3.5, 5, 7),
+        "roe": (0.08, 0.14, 0.20, 0.28),
+        "net_debt_ebitda": (0.3, 1.2, 2.2, 3.0),
+        "debt_equity": (140, 280, 460, 650),
         "current_ratio": (0.6, 0.9, 1.2, 1.8),
         "altman_z": (0.5, 1.0, 1.8, 2.8),
     },
     "sanayi": {
-        "pe": (20, 14, 8, 5),
-        "roe": (0.04, 0.10, 0.16, 0.22),
-        "roic": (0.03, 0.08, 0.13, 0.18),
-        "net_margin": (0.02, 0.06, 0.10, 0.16),
-        "ev_ebitda": (12, 8, 5, 3),
+        "pe": (4, 7, 12, 18),
+        "roe": (0.06, 0.12, 0.18, 0.25),
+        "roic": (0.04, 0.10, 0.15, 0.20),
+        "net_margin": (0.03, 0.08, 0.13, 0.20),
+        "ev_ebitda": (2.5, 4, 7, 10),
     },
 }
 
-# Default eşikler (sektör override yoksa bunlar kullanılır)
+# Default eşikler (sektör override yoksa bunlar kullanılır).
+# Hepsi ARTAN sırada — bkz. SECTOR_THRESHOLDS kuralı.
 DEFAULT_THRESHOLDS: dict[str, tuple] = {
-    "pe": (25, 16, 10, 6),
-    "pb": (4.5, 2.5, 1.5, 0.8),
-    "ev_ebitda": (16, 11, 7, 4),
+    "pe": (6, 10, 16, 25),
+    "pb": (0.8, 1.5, 2.5, 4.5),
+    "ev_ebitda": (4, 7, 11, 16),
     "roe": (0.01, 0.06, 0.12, 0.20),
     "roic": (0.01, 0.06, 0.10, 0.16),
     "net_margin": (0.005, 0.03, 0.08, 0.15),
@@ -715,63 +736,9 @@ V11_MOMENTUM_GATE: list[tuple[int, float]] = [
     (0,  0.08),   # FA < 35  → neredeyse sıfır
 ]
 
-# --- V11 Sector Thresholds (High-Rate Calibrated) ---
-V11_SECTOR_THRESHOLDS: dict[str, dict[str, tuple]] = {
-    "banka": {
-        "pe": (10, 7, 4.5, 2.5),          # was (12, 8, 5, 3) — tighter
-        "pb": (1.8, 1.2, 0.8, 0.5),       # unchanged
-        "roe": (0.12, 0.18, 0.25, 0.35),   # was (0.08, 0.14, 0.20, 0.28) — raised
-        "net_margin": (0.06, 0.14, 0.22, 0.32),  # raised
-        "roic": None,                       # N/A for banks
-        "ev_ebitda": None,
-        "debt_equity": None,
-        "current_ratio": None,
-        "altman_z": None,
-    },
-    "holding": {
-        "pe": (16, 10, 7, 4),              # tighter
-        "pb": (1.6, 1.1, 0.8, 0.5),
-        "roe": (0.06, 0.10, 0.16, 0.24),   # raised
-        "net_margin": (0.04, 0.08, 0.14, 0.22),
-    },
-    "savunma": {
-        "pe": (28, 18, 12, 7),             # tighter
-        "ev_ebitda": (14, 10, 7, 4),
-        "roe": (0.08, 0.14, 0.20, 0.28),   # raised
-        "revenue_growth": (-0.02, 0.08, 0.18, 0.30),
-    },
-    "enerji": {
-        "pe": (8, 5, 3, 2),               # tighter — compete with bonds
-        "ev_ebitda": (8, 6, 4, 2.5),
-        "roe": (0.10, 0.16, 0.22, 0.30),   # raised significantly
-        "net_margin": (0.02, 0.06, 0.10, 0.18),
-        "net_debt_ebitda": (3.0, 2.0, 1.2, 0.3),  # tighter
-        "debt_equity": (70, 130, 220, 370),
-        "altman_z": (0.8, 1.5, 2.5, 3.5),
-    },
-    "perakende": {
-        "pe": (20, 14, 9, 5),
-        "net_margin": (0.015, 0.04, 0.07, 0.12),
-        "roe": (0.06, 0.12, 0.18, 0.26),   # raised
-        "revenue_growth": (-0.03, 0.08, 0.15, 0.25),
-    },
-    "ulasim": {
-        "pe": (10, 7, 4, 2.5),
-        "ev_ebitda": (7, 5, 3.5, 2.5),
-        "roe": (0.08, 0.14, 0.20, 0.28),   # raised
-        "net_debt_ebitda": (3.0, 2.2, 1.2, 0.3),
-        "debt_equity": (140, 280, 460, 650),
-        "current_ratio": (0.6, 0.9, 1.2, 1.8),
-        "altman_z": (0.5, 1.0, 1.8, 2.8),
-    },
-    "sanayi": {
-        "pe": (18, 12, 7, 4),              # tighter
-        "roe": (0.06, 0.12, 0.18, 0.25),   # was (0.04, 0.10, 0.16, 0.22)
-        "roic": (0.04, 0.10, 0.15, 0.20),
-        "net_margin": (0.03, 0.08, 0.13, 0.20),
-        "ev_ebitda": (10, 7, 4, 2.5),
-    },
-}
+# V11 yüksek-faiz kalibrasyonu artık tek kanonik tabloda:
+# SECTOR_THRESHOLDS (yukarıda). Ayrı V11_SECTOR_THRESHOLDS kaldırıldı —
+# iki tablo kafa karıştırıyordu ve V11 değerleri hiç bağlı değildi.
 
 # --- V11 Ciro/PD Eşikleri (Berkay Factor) ---
 # score_higher ile kullanılır — yüksek = iyi (ucuz)
