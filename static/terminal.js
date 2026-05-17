@@ -2133,7 +2133,10 @@ h+=`</div>`;}
 // ECONOMIC CALENDAR — TCMB / Fed / ECB / TÜFE / istihdam
 if(d.calendar&&d.calendar.future&&d.calendar.future.length){
 const _evs=d.calendar.future.slice(0,16);
-h+=`<div class="card" style="margin-bottom:14px"><div class="card-h"><span class="card-t">📅 Ekonomik Takvim</span><span style="font-size:9px;color:var(--t4);font-family:'JetBrains Mono',monospace">TCMB · Fed · ECB · TÜFE · İstihdam</span></div><div class="card-b">`;
+const _np=('Notification' in window)?Notification.permission:'unsupported';
+const _nLbl=_np==='granted'?'🔔 Bildirimler açık':_np==='denied'?'🔕 İzin verilmedi':_np==='unsupported'?'':'🔔 Bildirimleri Aç';
+const _nBtn=_nLbl?`<button id="econNotifBtn" onclick="macroNotifPermission()" style="font-family:'JetBrains Mono',monospace;font-size:9px;padding:3px 8px;background:var(--bg3);border:1px solid var(--bdr);border-radius:4px;color:var(--t2);cursor:pointer">${_nLbl}</button>`:'';
+h+=`<div class="card" style="margin-bottom:14px"><div class="card-h"><span class="card-t">📅 Ekonomik Takvim</span>${_nBtn}</div><div class="card-b">`;
 _evs.forEach(e=>{
 const _isHigh=e.importance==='high';
 const _impCol=_isHigh?'var(--red)':e.importance==='medium'?'var(--ylw)':'var(--t4)';
@@ -5458,6 +5461,46 @@ pg.innerHTML=h;
 function showAddPF(){$('pfAddForm').style.display='block';$('pfTicker').focus();}
 function doAddPF(){const t=$('pfTicker').value.trim().toUpperCase();const l=parseInt($('pfLot').value)||0;const a=parseFloat($('pfAvg').value)||0;if(!t||t.length<3||l<=0||a<=0){alert('Ticker, lot ve maliyet girin');return;}addPF(t,l,a);$('pfAddForm').style.display='none';$('pfTicker').value='';$('pfLot').value='';$('pfAvg').value='';renderPortfoyPage();}
 async function askDedePortfoy(){const pf=getPF();if(!pf.length){alert('Önce portföye hisse ekleyin');return;}const box=$('pfDedeBox');box.style.display='block';box.innerHTML=`<div class="aib"><div class="aib-t">🤖 Q PORTFÖY ANALİZİ</div><div class="aib-tx">Portföye bakıyoruz…</div></div>`;const desc=pf.map(p=>`${p.ticker} ${p.lot} lot (maliyet: ${p.avg} TL)`).join(', ');try{const d=await api('/api/agent?q='+encodeURIComponent('Portfoyumde sunlar var: '+desc+'. Sektörel dağılım ve risk hakkında ne düşünüyorsun?'));box.innerHTML=`<div class="aib"><div class="aib-t">🤖 Q PORTFÖY ANALİZİ</div><div class="aib-tx">${esc(d.answer)}</div></div>`;}catch(e){box.innerHTML='';}}
+
+// ===== EKONOMİK TAKVİM BİLDİRİMLERİ =====
+// Web Notification API — sayfa açıkken OS bildirimi (servis-worker
+// gerektirmez). TCMB/enflasyon/ABD verisi 24sa ve 1sa kala uyarır.
+const _ECON_NOTIF_KEY='bb_econ_notified';
+function _econNotifGet(){try{return JSON.parse(localStorage.getItem(_ECON_NOTIF_KEY)||'[]');}catch(e){return[];}}
+function _econNotifMark(id){const a=_econNotifGet();if(!a.includes(id)){a.push(id);localStorage.setItem(_ECON_NOTIF_KEY,JSON.stringify(a.slice(-200)));}}
+function macroNotifPermission(){
+  if(!('Notification' in window)){alert('Tarayıcın bildirim desteklemiyor.');return;}
+  Notification.requestPermission().then(p=>{
+    const btn=document.getElementById('econNotifBtn');
+    if(btn)btn.textContent=p==='granted'?'🔔 Bildirimler açık':p==='denied'?'🔕 İzin verilmedi':'🔔 Bildirimleri Aç';
+    if(p==='granted'){try{new Notification('BistBull bildirimleri açık',{body:'TCMB faizi, enflasyon ve ABD verisi yaklaşınca haber vereceğiz.'});}catch(e){}_checkEconNotifications();}
+  }).catch(()=>{});
+}
+async function _checkEconNotifications(){
+  if(!('Notification' in window)||Notification.permission!=='granted')return;
+  let evs;
+  try{const d=await api('/api/macro/calendar');evs=(d&&d.future)||[];}catch(e){return;}
+  const now=Date.now();const done=_econNotifGet();
+  evs.forEach(e=>{
+    if(e.importance!=='high')return;
+    const ts=new Date(e.date+'T'+(e.time||'09:00')+':00+03:00').getTime();
+    if(isNaN(ts))return;
+    const ms=ts-now;if(ms<=0)return;
+    const base=e.date+'_'+e.title;
+    if(ms<=24*3600e3 && !done.includes(base+'_24h')){
+      try{new Notification('🔔 '+(e.flag||'')+' '+e.title,{body:'Yaklaşıyor — '+(e.time||'')+' · '+(e.description||''),tag:base+'24'});}catch(_){}
+      _econNotifMark(base+'_24h');
+    }
+    if(ms<=75*60e3 && !done.includes(base+'_1h')){
+      try{new Notification('🔔 '+e.title+' — birazdan',{body:'Bugün '+(e.time||'')+' · '+(e.description||''),tag:base+'1'});}catch(_){}
+      _econNotifMark(base+'_1h');
+    }
+  });
+}
+if('Notification' in window){
+  setTimeout(_checkEconNotifications,8000);
+  setInterval(_checkEconNotifications,15*60*1000);
+}
 
 // ===== INIT — progressive lazy loading =====
 (async()=>{
