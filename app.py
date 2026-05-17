@@ -546,27 +546,25 @@ async def api_scan(request: Request):
 @app.get("/api/scan-status")
 async def api_scan_status(): return success(scan_coordinator.get_progress())
 
+# Cross AI yorumu cache'i — cross scan timestamp'iyle anahtarlanır.
+# Yorum yalnız yeni scan yeni sinyal ürettiğinde değişir; eskiden her
+# /api/cross çağrısında yeniden üretiliyordu (~13s Claude / ana sayfa
+# yüklemesi). Şimdi scan başına bir kez, arka planda üretilir.
+_cross_ai_cache: dict = {}
+
+
 @app.get("/api/cross")
 async def api_cross():
-    """
-    V3 FIX: Her çağrıda scan_all() tetiklemek yerine son scan sonuçlarını kullan.
+    """Son cross scan sonuçlarını döndürür.
 
-    NEDEN: scan_all() → batch_download_history() → borsapy rate limit →
-    her seferinde FARKLI alt küme → FARKLI sinyaller.
-
-    ŞİMDİ: Background scanner tarafından üretilen last_results kullanılır.
-    Veri yoksa (ilk startup) sadece O ZAMAN scan çalıştırılır.
+    PERF: request path'inde ASLA scan_all() çalıştırmaz (cold-start'ta
+    78s blokluyordu) — background scanner last_results'ı doldurur.
+    AI yorumu scan başına bir kez, arka planda üretilip cache'lenir;
+    hiçbir /api/cross çağrısı AI'yı beklemez.
     """
     try:
-        # Önce son scan sonuçlarını kullan (deterministik)
-        cached_signals = cross_hunter.last_results
-
-        if not cached_signals and cross_hunter.last_scan == 0:
-            # İlk startup — henüz hiç scan yapılmamış, bir kez çalıştır
-            log.info("cross: ilk çağrı, scan başlatılıyor")
-            cached_signals = await asyncio.to_thread(cross_hunter.scan_all)
-
-        new_signals = enrich_signals(cached_signals or [], analysis_cache)
+        cached_signals = cross_hunter.last_results or []
+        new_signals = enrich_signals(cached_signals, analysis_cache)
         bullish = sum(1 for s in new_signals if s.get("signal_type") == "bullish")
         bearish = sum(1 for s in new_signals if s.get("signal_type") == "bearish")
         total_stars = sum(s.get("stars", 1) for s in new_signals)
@@ -575,12 +573,28 @@ async def api_cross():
         momentum_count = sum(1 for s in new_signals if s.get("category") == "momentum")
         quality_a = sum(1 for s in new_signals if s.get("signal_quality") == "A")
         quality_b = sum(1 for s in new_signals if s.get("signal_quality") == "B")
+
+        # AI yorumu: cache'te varsa onu döndür; yoksa arka planda üret
+        # (bu çağrı beklemez, bir sonraki çağrı yakalar).
         ai_commentary = None
         if AI_AVAILABLE and new_signals:
-            try:
-                ai_commentary = await asyncio.to_thread(generate_cross_commentary, new_signals, bullish, bearish)
-            except Exception as e: log.debug(f"cross AI: {e}")
-        return success({"signals": new_signals, "ai_commentary": ai_commentary, "summary": {"total": len(new_signals), "bullish": bullish, "bearish": bearish, "kirilim": kirilim_count, "momentum": momentum_count, "total_stars": total_stars, "vol_confirmed": vol_confirmed, "quality_a": quality_a, "quality_b": quality_b, "scanned": len(UNIVERSE)}}, as_of=now_iso())
+            scan_key = cross_hunter.last_scan
+            ai_commentary = _cross_ai_cache.get(scan_key)
+            if scan_key not in _cross_ai_cache:
+                _cross_ai_cache[scan_key] = None  # in-flight işareti
+                async def _gen_cross_ai(sigs=new_signals, bl=bullish, br=bearish, key=scan_key):
+                    try:
+                        c = await asyncio.to_thread(generate_cross_commentary, sigs, bl, br)
+                        _cross_ai_cache.clear()
+                        _cross_ai_cache[key] = c
+                    except Exception as e:
+                        log.debug(f"cross AI bg: {e}")
+                        _cross_ai_cache.pop(key, None)
+                asyncio.create_task(_gen_cross_ai())
+
+        return success({"signals": new_signals, "ai_commentary": ai_commentary,
+                         "computing": not cached_signals and cross_hunter.last_scan == 0,
+                         "summary": {"total": len(new_signals), "bullish": bullish, "bearish": bearish, "kirilim": kirilim_count, "momentum": momentum_count, "total_stars": total_stars, "vol_confirmed": vol_confirmed, "quality_a": quality_a, "quality_b": quality_b, "scanned": len(UNIVERSE)}}, as_of=now_iso())
     except Exception as e:
         log.error(f"cross: {e}"); return error("Cross Hunter hatası", status_code=500)
 
