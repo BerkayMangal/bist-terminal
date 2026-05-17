@@ -2062,7 +2062,15 @@ function renderMakroPage(){const pg=$('pg-makro');if(!S.macro){pg.innerHTML='<di
 // === FAİZ & RİSK KARTI ===
 const rates=S.macro.rates||[];
 if(rates.length){
-h+=`<div class="card" style="margin-bottom:14px;border:1px solid rgba(255,179,0,.2)"><div class="card-h"><span class="card-t">🏦 Faiz & Risk Göstergeleri</span><span style="font-size:9px;color:var(--t4);font-family:'JetBrains Mono',monospace">Manuel veri</span></div><div class="card-b"><div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">`;
+h+=`<div class="card" style="margin-bottom:14px;border:1px solid rgba(255,179,0,.2)"><div class="card-h"><span class="card-t">🏦 Faiz & Risk Göstergeleri</span><span style="font-size:9px;color:var(--t4);font-family:'JetBrains Mono',monospace">Manuel veri</span></div><div class="card-b">`;
+const _mc=S.macro.macro_context;
+if(_mc&&_mc.real_rate_pct!=null){
+  const rr=_mc.real_rate_pct;
+  const rrCol=rr>=2?'var(--grn)':rr>=0?'var(--ylw)':'var(--red)';
+  const rrTxt=rr>=2?"Pozitif — sıkı para politikası; TL'yi tutmak cazip, hisse değerlemelerine baskı":rr>=0?'Sıfıra yakın — faiz enflasyonu ucu ucuna karşılıyor':'Negatif — enflasyon faizi eritiyor, reel kayıp var';
+  h+=`<div style="background:linear-gradient(135deg,${rrCol}1e,transparent);border:1px solid ${rrCol}55;border-radius:var(--rad);padding:12px 14px;margin-bottom:10px"><div style="display:flex;justify-content:space-between;align-items:baseline"><span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--t3);text-transform:uppercase;letter-spacing:1px">⚖️ Reel Politika Faizi</span><span style="font-family:'JetBrains Mono',monospace;font-size:22px;font-weight:800;color:${rrCol}">${rr>=0?'+':''}${rr}%</span></div><div style="font-size:10px;color:var(--t3);margin-top:4px">TCMB %${_mc.policy_rate} − TÜFE %${_mc.inflation_pct} · ${rrTxt}</div></div>`;
+}
+h+=`<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">`;
 rates.forEach(r=>{
   const chg=r.rate-r.prev;const chgCol=chg>0?'var(--red)':chg<0?'var(--grn)':'var(--t3)';
   const arrow=chg>0?'▲':chg<0?'▼':'—';
