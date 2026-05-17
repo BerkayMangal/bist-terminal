@@ -238,13 +238,16 @@ def build_rich_context(r: dict, tech: Optional[dict] = None) -> str:
     s = r["scores"]
     m = r["metrics"]
     L = r.get("legendary", {})
+    # NOT: Radar saf-temel (pure-FA) bir tarayıcı — momentum / ivme /
+    # zamanlama / teknik kırılım HESAPLAMAZ. Eski prompt bu alanları
+    # hep 50 / '?' default'larıyla AI'ya besliyordu; AI sahte veriyle
+    # yorum üretiyordu. O satırlar kaldırıldı, etiket dili yeni kalite
+    # notu sistemine göre güncellendi.
     lines = [
         f"Hisse: {r['ticker']} ({r['name']}) | Sektör: {m.get('sector', '')} ({r.get('sector_group', '')}) | {r['style']}",
-        f"FA SCORE (saf kalite): {r.get('fa_score', 50)}/100 | RİSK: {r.get('risk_score', 0)} | KARAR SKORU: {r['overall']}/100",
-        f"GİRİŞ: {r.get('entry_label', '?')} | KARAR: {r.get('decision', '?')} | KALİTE: {r.get('quality_tag', '?')}",
-        f"İVME: {r.get('ivme', 50)}/100 | ZAMANLAMA: {r.get('timing', '?')}",
-        f"Value:{s['value']:.0f} Quality:{s['quality']:.0f} Growth:{s['growth']:.0f} Balance:{s['balance']:.0f} Earnings:{s['earnings']:.0f} Moat:{s['moat']:.0f} Capital:{s['capital']:.0f}",
-        f"Momentum:{s.get('momentum', 50):.0f} TechBreak:{s.get('tech_break', 50):.0f} InstFlow:{s.get('inst_flow', 50):.0f}",
+        f"FA SKORU (saf temel kalite): {r.get('fa_score', 50)}/100 | RİSK PENALTİSİ: {r.get('risk_score', 0)} | RADAR SKORU: {r['overall']}/100",
+        f"KALİTE NOTU: {r.get('decision', '?')} | PROFİL: {r.get('entry_label', '?')}",
+        f"7 TEMEL BOYUT — Değerleme:{s['value']:.0f} Kalite:{s['quality']:.0f} Büyüme:{s['growth']:.0f} Bilanço:{s['balance']:.0f} KârKalitesi:{s['earnings']:.0f} RekabetAvantajı:{s['moat']:.0f} SermayeKullanımı:{s['capital']:.0f}",
         f"Fiyat:{fmt_num(m.get('price'))} PiyasaDeg:{fmt_num(m.get('market_cap'))} F/K:{fmt_num(m.get('pe'))} PD/DD:{fmt_num(m.get('pb'))} FD/FAVÖK:{fmt_num(m.get('ev_ebitda'))}",
         f"ROE:{fmt_pct(m.get('roe'))} ROIC:{fmt_pct(m.get('roic'))} Brüt Marj:{fmt_pct(m.get('gross_margin'))} Net Marj:{fmt_pct(m.get('net_margin'))}",
         f"Gelir Büyüme:{fmt_pct(m.get('revenue_growth'))} HBK Büyüme:{fmt_pct(m.get('eps_growth'))}",
@@ -292,7 +295,7 @@ def trader_summary_prompt(r: dict, tech: Optional[dict] = None) -> str:
     quality_note = ""
     if grade in ("C", "D"):
         quality_note = (
-            "\n⚠️ VERİ KALİTESİ DÜŞÜK (grade: {grade}). "
+            f"\n⚠️ VERİ KALİTESİ DÜŞÜK (not: {grade}). "
             "Bazı finansal veriler eksik. Bunu açıkça belirt.\n"
         )
     elif confidence < 50:
@@ -321,10 +324,10 @@ def trader_summary_prompt(r: dict, tech: Optional[dict] = None) -> str:
         "── ÇIKTI ──\n"
         "Tam olarak şu 5 satırı yaz, her biri ayrı satırda, başka HİÇBİR şey "
         "ekleme (selamlama, kapanış, açıklama yok):\n"
-        f"GİRİŞ: {entry} sinyali ne anlama geliyor? 1 cümlede açıkla.\n"
-        "TEZ: Bu karara neden varıldı? 1 spesifik cümle, rakam ver.\n"
+        f"PROFİL: '{entry}' profili ne anlama geliyor? 1 cümlede açıkla.\n"
+        "TEZ: Bu temel skora neden varıldı? 1 spesifik cümle, rakam ver.\n"
         "RİSK: En büyük risk nedir? 1 spesifik cümle, rakam ver.\n"
-        "ZAMANLAMA: Giriş zamanlaması uygun mu, ne beklenmeli? 1 cümle.\n"
+        "DEĞERLEME: Hisse pahalı mı ucuz mu — F/K, PD/DD veya FD/FAVÖK rakamıyla? 1 cümle.\n"
         "TÜRKİYE: Türkiye'ye özel bir not (döviz/enflasyon/sektör dinamiği). 1 cümle.\n"
     )
 

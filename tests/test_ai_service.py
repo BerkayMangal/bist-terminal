@@ -81,12 +81,12 @@ class TestBuildRichContext:
         ctx = build_rich_context(sample_analysis)
         assert isinstance(ctx, str)
         assert "THYAO" in ctx
-        assert "FA SCORE" in ctx
+        assert "FA SKORU" in ctx
 
     def test_includes_scores(self, sample_analysis):
         ctx = build_rich_context(sample_analysis)
-        assert "Value:68" in ctx
-        assert "Quality:72" in ctx
+        assert "Değerleme:68" in ctx
+        assert "Kalite:72" in ctx
 
     def test_includes_metrics(self, sample_analysis):
         ctx = build_rich_context(sample_analysis)
@@ -115,7 +115,7 @@ class TestTraderSummaryPrompt:
         prompt = trader_summary_prompt(sample_analysis)
         assert isinstance(prompt, str)
         assert "BIST" in prompt
-        assert "GİRİŞ:" in prompt
+        assert "PROFİL:" in prompt
 
     def test_includes_entry_label(self, sample_analysis):
         prompt = trader_summary_prompt(sample_analysis)

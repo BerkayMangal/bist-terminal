@@ -180,7 +180,7 @@ class TestPromptQuality:
         # Rewritten prompt teaches what a good thesis looks like
         assert "İYİ TEZ" in p or "somut" in p.lower()
         # Output contract intact
-        assert "GİRİŞ:" in p and "TEZ:" in p and "RİSK:" in p
+        assert "PROFİL:" in p and "TEZ:" in p and "RİSK:" in p
         # Anti-speculation
         assert "garanti" in p.lower()
 
