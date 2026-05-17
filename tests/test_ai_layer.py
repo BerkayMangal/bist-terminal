@@ -192,8 +192,8 @@ class TestPromptBuilders:
         }
         ctx = build_rich_context(r)
         assert "THYAO" in ctx
-        assert "Value:" in ctx
-        assert "Quality:" in ctx
+        assert "Değerleme:" in ctx
+        assert "Kalite:" in ctx
 
 
 # ================================================================
