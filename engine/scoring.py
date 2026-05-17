@@ -11,7 +11,7 @@ from typing import Any, Optional
 
 from config import (
     SECTOR_THRESHOLDS, DEFAULT_THRESHOLDS, SECTOR_KEYWORDS, SECTOR_DEFAULT,
-    CONFIDENCE_KEYS,
+    CONFIDENCE_KEYS, BIST_INFLATION_RATE,
     PENALTY_ND_EBITDA_DEFAULT, PENALTY_ND_EBITDA_HIGH_DEBT, HIGH_DEBT_SECTORS,
     PENALTY_DILUTION, PENALTY_BENEISH,
     PENALTY_NEGATIVE_EQUITY, PENALTY_NET_LOSS, PENALTY_NEGATIVE_CFO,
@@ -196,14 +196,27 @@ def _best_growth(m: dict, q_key: str, annual_key: str) -> Optional[float]:
     return m.get(annual_key)
 
 
+def _deflate(g: Optional[float]) -> Optional[float]:
+    """Nominal büyümeyi enflasyondan arındırıp reel büyümeye çevir.
+    reel = (1+nominal)/(1+enflasyon) - 1. None korunur."""
+    if g is None:
+        return None
+    return (1.0 + g) / (1.0 + BIST_INFLATION_RATE) - 1.0
+
+
 def score_growth(m: dict, sector_group: Optional[str] = None) -> Optional[float]:
-    th_rg = get_threshold(sector_group, "revenue_growth")
-    rev_g = _best_growth(m, "revenue_growth_yoy_q", "revenue_growth")
-    eps_g = _best_growth(m, "net_income_growth_yoy_q", "eps_growth")
+    """Reel büyüme skoru. Nominal büyüme yüksek-enflasyon ortamında
+    yanıltıcı (nominal +%30 ama enflasyon %33 ise şirket reel olarak
+    küçülmüştür); tüm büyüme metrikleri enflasyondan arındırılıp
+    reel-merkezli eşiklerle puanlanır. sector_group artık kullanılmıyor
+    ama imza score_dispatch ile uyumlu kalsın diye korundu."""
+    rev_g = _deflate(_best_growth(m, "revenue_growth_yoy_q", "revenue_growth"))
+    eps_g = _deflate(_best_growth(m, "net_income_growth_yoy_q", "eps_growth"))
+    ebitda_g = _deflate(m.get("ebitda_growth"))
     return avg([
-        score_higher(rev_g, *th_rg) if th_rg else None,
-        score_higher(eps_g, -0.10, 0.05, 0.15, 0.30),
-        score_higher(m.get("ebitda_growth"), -0.05, 0.05, 0.12, 0.25),
+        score_higher(rev_g, -0.12, 0.0, 0.10, 0.25),
+        score_higher(eps_g, -0.20, -0.05, 0.05, 0.18),
+        score_higher(ebitda_g, -0.18, -0.05, 0.03, 0.15),
         score_lower(m.get("peg"), 0.5, 1.0, 1.8, 3.0) if (m.get("peg") or 0) > 0 else None,
     ])
 
@@ -229,10 +242,12 @@ def score_balance(m: dict, sector_group: Optional[str] = None) -> Optional[float
 
 
 def score_earnings(m: dict) -> Optional[float]:
-    bm = m.get("beneish_m")
-    bm_s = None
-    if bm is not None:
-        bm_s = 90 if bm < -2.22 else (65 if bm < -1.78 else 25)
+    # Beneish M: düşük (daha negatif) = manipülasyon riski düşük = iyi.
+    # Eski kod 3 kademeli sert uçurum kullanıyordu — -1.78 sınırında
+    # 0.02'lik fark 40 puan sıçratıyordu, gürültülü bir tahmin metriği
+    # için kararsız. score_lower ile yumuşak rampaya çevrildi (klasik
+    # eşik -2.22, altı düşük manipülasyon riski).
+    bm_s = score_lower(m.get("beneish_m"), -2.85, -2.20, -1.78, -1.20)
     return avg([
         score_higher(m.get("cfo_to_ni"), 0.2, 0.6, 0.9, 1.2),
         score_higher(m.get("fcf_margin"), -0.02, 0, 0.05, 0.12),
