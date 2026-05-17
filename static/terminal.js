@@ -3,7 +3,7 @@
 // ===== STATE =====
 const S={page:'home',scan:null,cross:null,macro:null,dash:null,takas:null,social:null,hero:null,quote:null,book:null,wl:JSON.parse(localStorage.getItem('bb_wl')||'[]'),seen:JSON.parse(localStorage.getItem('bb_seen')||'[]'),_alerts:[]};
 const QT=['ASELS','THYAO','BIMAS','KCHOL','TUPRS','AKBNK','GARAN','FROTO','TOASO','PGSUS'];
-const PAGES=[{id:'nasil',label:'Nasıl?',icon:'❓'},{id:'home',label:'Ana Sayfa',icon:'🏠'},{id:'akis',label:'Akış',icon:'📰'},{id:'radar',label:'Radar',icon:'📡'},{id:'bullwatch',label:'BullWatch',icon:'🐂'},{id:'bulten',label:'Günlük Bülten',icon:'📰'},{id:'alarmlar',label:'Alarmlar',icon:'🚨'},{id:'bullalfa',label:'BullAlfa',icon:'🎯'},{id:'viop',label:'VIOP',icon:'🎲'},{id:'bilancolar',label:'Bilançolar',icon:'📊'},{id:'makro',label:'Makro',icon:'🌍'},{id:'portfoy',label:'Portföy',icon:'💼'},{id:'diag',label:'Tanı',icon:'🔧'}];
+const PAGES=[{id:'nasil',label:'Nasıl?',icon:'❓'},{id:'home',label:'Ana Sayfa',icon:'🏠'},{id:'akis',label:'Akış',icon:'📰'},{id:'radar',label:'Radar',icon:'📡'},{id:'bullwatch',label:'BullWatch',icon:'🐂'},{id:'tahtalab',label:'TahtaLab',icon:'🧪'},{id:'bulten',label:'Günlük Bülten',icon:'📰'},{id:'alarmlar',label:'Alarmlar',icon:'🚨'},{id:'bullalfa',label:'BullAlfa',icon:'🎯'},{id:'viop',label:'VIOP',icon:'🎲'},{id:'bilancolar',label:'Bilançolar',icon:'📊'},{id:'makro',label:'Makro',icon:'🌍'},{id:'portfoy',label:'Portföy',icon:'💼'},{id:'diag',label:'Tanı',icon:'🔧'}];
 const $=s=>document.getElementById(s);
 
 // ===== XSS SANITIZER =====
@@ -272,6 +272,7 @@ function goPage(id){
   if(id==='radar')renderRadarPage();
   if(id==='cross'){goPage('bullalfa');BullAlfa&&BullAlfa._setMode&&BullAlfa._setMode('__SIGNALS__');return;}
   if(id==='bullwatch')renderBullwatchPage();
+  if(id==='tahtalab')renderTahtaLabPage();
   if(id==='bulten')renderBultenPage();
   if(id==='bullalfa')renderBullalfaPage();
   if(id==='alarmlar')renderAlarmlarPage();
@@ -2058,6 +2059,58 @@ function _renderKapAiSummary(text){
 }
 
 // ===== MAKRO PAGE =====
+// ===== TAHTALAB — BIST tahta davranışı uyarıları =====
+async function loadTahtaLab(){
+  try{ S.tahtalab=await api('/api/tahtalab'); }
+  catch(e){ S.tahtalab={error:e.message||'yüklenemedi'}; }
+}
+function _tlSev(sev){
+  return sev==='high_risk'?{c:'var(--red)',bg:'rgba(239,83,80,.14)',l:'Yüksek Risk'}
+    :sev==='warning'?{c:'var(--orn)',bg:'rgba(255,138,0,.14)',l:'Dikkat'}
+    :sev==='watch'?{c:'var(--ylw)',bg:'rgba(255,202,40,.13)',l:'İzlenecek'}
+    :{c:'var(--blu)',bg:'rgba(100,181,246,.12)',l:'Bilgi'};
+}
+function renderTahtaLabPage(){
+  const pg=$('pg-tahtalab');
+  if(!S.tahtalab){
+    pg.innerHTML='<div class="ld"><div class="sp"></div><div class="ld-t">TahtaLab yükleniyor...</div></div>';
+    loadTahtaLab().then(()=>renderTahtaLabPage());
+    return;
+  }
+  const d=S.tahtalab;
+  let h=`<div class="hero-wrap" style="margin-bottom:14px"><div style="position:relative;z-index:1"><div style="font-family:'JetBrains Mono',monospace;font-size:22px;font-weight:800;color:var(--t1)">🧪 TahtaLab</div><div style="font-size:13px;color:var(--acc);margin-top:2px;font-weight:600">BIST tahta davranışı uyarıları</div><div style="font-size:12px;color:var(--t3);margin-top:6px;line-height:1.6">Bugünkü hareketlerde sık görülen tahta davranışlarını yakalar. Al/sat önerisi değildir.</div></div></div>`;
+  if(d.error){pg.innerHTML=h+`<div class="emp"><h3 style="color:var(--t2)">TahtaLab yüklenemedi</h3><p style="color:var(--t3)">${esc(d.error)}</p></div>`;return;}
+  const sm=d.summary||{},ds=d.data_status||{};
+  const card=(lbl,val,col)=>`<div style="background:var(--bg2);border:1px solid var(--bdr);border-radius:var(--rad);padding:12px;text-align:center"><div style="font-family:'JetBrains Mono',monospace;font-size:22px;font-weight:800;color:${col||'var(--t1)'}">${val}</div><div style="font-size:9px;color:var(--t3);text-transform:uppercase;letter-spacing:.5px;margin-top:3px">${lbl}</div></div>`;
+  const dataReady=!!ds.daily_available;
+  h+=`<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px;margin-bottom:14px">${card('Toplam uyarı',sm.total_warnings||0,'var(--acc)')}${card('Uyarılı hisse',sm.tickers_with_warnings||0,'var(--t1)')}${card('Yüksek risk',sm.high_risk||0,'var(--red)')}${card('İzlenecek',sm.watch||0,'var(--ylw)')}<div style="background:var(--bg2);border:1px solid var(--bdr);border-radius:var(--rad);padding:12px;text-align:center"><div style="font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:800;color:${dataReady?'var(--grn)':'var(--ylw)'};margin-top:5px">${dataReady?'Hazır':'Bekleniyor'}</div><div style="font-size:9px;color:var(--t3);text-transform:uppercase;letter-spacing:.5px;margin-top:5px">Veri durumu${dataReady&&ds.tickers_evaluated?' · '+ds.tickers_evaluated:''}</div></div></div>`;
+  h+=`<div class="card" style="margin-bottom:14px"><div class="card-h"><span class="card-t">⚠️ Bugünkü Uyarılar</span></div><div class="card-b">`;
+  const groups=d.warnings_by_ticker||[];
+  if(!groups.length){
+    h+=`<p style="color:var(--t3);font-size:13px;padding:8px 0">Bugün TahtaLab uyarısı yok.${dataReady?'':' Günlük veri henüz hazır değil — tarama tamamlanınca dolacak.'}</p>`;
+  }else{
+    groups.forEach(g=>{
+      const sv=_tlSev(g.highest_severity);
+      h+=`<div style="border:1px solid var(--bdr);border-radius:var(--rad);margin-bottom:10px;overflow:hidden"><div style="display:flex;justify-content:space-between;align-items:center;padding:9px 12px;background:var(--bg3)"><span class="clk-t" style="font-family:'JetBrains Mono',monospace;font-weight:700;font-size:14px;color:var(--cyn)" onclick="loadTicker('${esc(g.ticker)}')">${esc(g.ticker)}</span><span style="display:flex;gap:6px;align-items:center"><span style="font-size:10px;color:var(--t3)">${g.warning_count} uyarı</span><span style="font-size:9px;font-weight:700;padding:2px 8px;border-radius:3px;background:${sv.bg};color:${sv.c}">${sv.l}</span></span></div><div style="padding:6px 12px">`;
+      (g.warnings||[]).forEach(w=>{
+        const ws=_tlSev(w.severity);
+        const chips=Object.entries(w.evidence||{}).map(([k,v])=>`<span style="font-family:'JetBrains Mono',monospace;font-size:9px;background:var(--bg3);border:1px solid var(--bdr);border-radius:3px;padding:1px 6px;color:var(--t3)">${esc(k)}: ${esc(String(v))}</span>`).join(' ');
+        h+=`<div style="padding:8px 0;border-bottom:1px solid var(--bdr)"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:3px"><span style="font-size:12px;font-weight:600;color:var(--t1)">${esc(w.label_tr)}</span><span style="font-size:8px;font-weight:700;padding:1px 6px;border-radius:3px;background:${ws.bg};color:${ws.c}">${ws.l}</span><span style="font-size:8px;color:var(--grn);border:1px solid var(--bdr);padding:1px 5px;border-radius:3px">veri ✓</span></div><div style="font-size:11px;color:var(--t2);line-height:1.5;margin-bottom:5px">${esc(w.explanation_tr)}</div><div style="display:flex;gap:4px;flex-wrap:wrap">${chips}</div></div>`;
+      });
+      h+=`</div></div>`;
+    });
+  }
+  h+=`</div></div>`;
+  h+=`<div class="card" style="margin-bottom:14px"><div class="card-h"><span class="card-t">📋 Kural Kütüphanesi</span><span style="font-size:9px;color:var(--t4)">${(d.rules||[]).length} kural</span></div><div class="card-b">`;
+  (d.rules||[]).forEach(r=>{
+    const sv=_tlSev(r.severity_default);
+    const off=r.requires_intraday||r.requires_corporate_action;
+    h+=`<div style="padding:9px 0;border-bottom:1px solid var(--bdr);${off?'opacity:.6':''}"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span style="font-size:12px;font-weight:600;color:var(--t1)">${r.display_order}. ${esc(r.label_tr)}</span><span style="font-size:8px;font-weight:700;padding:1px 6px;border-radius:3px;background:${sv.bg};color:${sv.c}">${sv.l}</span>${off?`<span style="font-size:8px;color:var(--ylw);border:1px solid var(--ylw);padding:1px 5px;border-radius:3px">${r.requires_intraday?'Intraday veri gerekiyor':'KAP / bölünme verisi gerekiyor'}</span>`:''}</div><div style="font-size:11px;color:var(--t3);margin-top:3px;line-height:1.5">${esc(r.user_copy_tr)}</div></div>`;
+  });
+  h+=`</div></div>`;
+  h+=`<div style="font-size:10px;color:var(--t4);text-align:center;padding:14px 16px;line-height:1.6;border-top:1px solid var(--bdr)">TahtaLab al/sat önerisi vermez. Uyarılar geçmişte sık görülen tahta davranışlarını yakalamak için tasarlanmıştır. Veri sınırlı olabilir.</div>`;
+  pg.innerHTML=h;
+}
 function renderMakroPage(){const pg=$('pg-makro');if(!S.macro){pg.innerHTML='<div class="ld"><div class="sp"></div><div class="ld-t">Makro verileri yükleniyor...</div></div>';loadMacro().then(()=>renderMakroPage());return;}const items=S.macro.items||[];if(!items.length){pg.innerHTML='<div class="emp"><h3 style="color:var(--t2)">Makro veri alınamadı</h3></div>';return;}const cats={turkiye:[],em:[],global:[],emtia:[]};items.forEach(m=>cats[m.category]?.push(m));const emSorted=[...cats.em,...cats.turkiye.filter(m=>m.key==='XU030'||m.key==='XU100')].sort((a,b)=>(b.ytd_pct||0)-(a.ytd_pct||0));let h='<div id="macroDecisionBlock"><div class="ld"><div class="sp"></div><div class="ld-t">Karar motoru hesaplanıyor...</div></div></div>';
 // === FAİZ & RİSK KARTI ===
 const rates=S.macro.rates||[];

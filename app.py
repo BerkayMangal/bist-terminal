@@ -35,6 +35,7 @@ from api.phase4_endpoints import router as phase4_router
 from api.bullwatch import router as bullwatch_router
 from api.bullalfa import router as bullalfa_router
 from api.daily_brief import router as daily_brief_router
+from api.tahtalab import router as tahtalab_router
 
 from config import (
     BOT_VERSION, APP_NAME, CONFIDENCE_MIN, UNIVERSE, RADAR_UNIVERSE,
@@ -395,6 +396,7 @@ app.include_router(phase4_router)
 app.include_router(bullwatch_router)
 app.include_router(bullalfa_router)
 app.include_router(daily_brief_router)
+app.include_router(tahtalab_router)
 # KAP disclosure feed endpoints — Faz 1.
 try:
     from api.kap import router as kap_router
