@@ -686,6 +686,7 @@ MACRO_SYMBOLS: dict[str, dict] = {
 # ================================================================
 STATIC_RATES: list[dict] = [
     {"key": "TCMB", "name": "TCMB Politika", "rate": 37.00, "prev": 38.00, "unit": "%", "flag": "🇹🇷", "updated": "2026-03-12", "note": "Sabit tutuldu — 22 Nisan kararı bekleniyor"},
+    {"key": "CPI_TR", "name": "Türkiye TÜFE (yıllık)", "rate": 33.0, "prev": 35.5, "unit": "%", "flag": "🇹🇷", "updated": "2026-05-05", "note": "Nisan TÜFE — dezenflasyon sürüyor. Skorlama motoru bu değeri reel büyüme hesabında kullanır."},
     {"key": "FED", "name": "Fed Funds", "rate": 3.75, "prev": 3.75, "unit": "%", "flag": "🇺🇸", "updated": "2026-03-18", "note": "3.50-3.75 bant, sabit — İran savaşı belirsizliği"},
     {"key": "ECB", "name": "ECB Refi", "rate": 2.15, "prev": 2.15, "unit": "%", "flag": "🇪🇺", "updated": "2026-03-19", "note": "Sabit — bazı bankalar artırım bekliyor"},
     {"key": "CDS_TR", "name": "Türkiye 5Y CDS", "rate": 295, "prev": 280, "unit": "bps", "flag": "🇹🇷", "updated": "2026-04-11", "note": "Tahmini — MacroMicro W14 referans"},

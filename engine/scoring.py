@@ -9,9 +9,10 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
+from engine.macro_context import get_inflation_rate
 from config import (
     SECTOR_THRESHOLDS, DEFAULT_THRESHOLDS, SECTOR_KEYWORDS, SECTOR_DEFAULT,
-    CONFIDENCE_KEYS, BIST_INFLATION_RATE,
+    CONFIDENCE_KEYS,
     PENALTY_ND_EBITDA_DEFAULT, PENALTY_ND_EBITDA_HIGH_DEBT, HIGH_DEBT_SECTORS,
     PENALTY_DILUTION, PENALTY_BENEISH,
     PENALTY_NEGATIVE_EQUITY, PENALTY_NET_LOSS, PENALTY_NEGATIVE_CFO,
@@ -198,10 +199,14 @@ def _best_growth(m: dict, q_key: str, annual_key: str) -> Optional[float]:
 
 def _deflate(g: Optional[float]) -> Optional[float]:
     """Nominal büyümeyi enflasyondan arındırıp reel büyümeye çevir.
-    reel = (1+nominal)/(1+enflasyon) - 1. None korunur."""
+    reel = (1+nominal)/(1+enflasyon) - 1. None korunur.
+
+    Enflasyon merkezi makro kaynaktan (engine.macro_context) okunur —
+    config.STATIC_RATES'teki CPI_TR güncellenince burası da otomatik
+    yeni değeri kullanır."""
     if g is None:
         return None
-    return (1.0 + g) / (1.0 + BIST_INFLATION_RATE) - 1.0
+    return (1.0 + g) / (1.0 + get_inflation_rate()) - 1.0
 
 
 def score_growth(m: dict, sector_group: Optional[str] = None) -> Optional[float]:
