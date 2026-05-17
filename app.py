@@ -720,12 +720,25 @@ async def api_analytics(): return success({"events": dict(TRACK_EVENTS), "total"
 # ================================================================
 @app.get("/api/macro")
 async def api_macro():
+    # Merkezi makro bağlam (TCMB faizi, enflasyon, reel faiz, CDS) —
+    # cache'ten BAĞIMSIZ, her çağrıda taze hesaplanır ki STATIC_RATES
+    # güncellenince anında yansısın.
+    from engine.macro_context import (
+        get_policy_rate, get_inflation_rate, get_real_rate, get_cds)
+    mctx = {
+        "policy_rate": get_policy_rate(),
+        "inflation_pct": round(get_inflation_rate() * 100, 1),
+        "real_rate_pct": round(get_real_rate() * 100, 1),
+        "cds": get_cds(),
+    }
     cached = macro_cache.get("macro_all")
-    if cached is not None: return success(cached, cache_status="hit")
+    if cached is not None:
+        return success({**cached, "macro_context": mctx}, cache_status="hit")
     try:
         results = await asyncio.to_thread(fetch_all_macro)
         result = {"timestamp": now_iso(), "items": clean_for_json(results), "rates": clean_for_json(STATIC_RATES)}
-        macro_cache.set("macro_all", result); return success(result, cache_status="miss")
+        macro_cache.set("macro_all", result)
+        return success({**result, "macro_context": mctx}, cache_status="miss")
     except Exception as e:
         log.error(f"macro: {e}"); return error("Makro veri alınamadı", status_code=500)
 
