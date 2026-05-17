@@ -44,10 +44,24 @@ def _safe(fn, default=None, label: str = ""):
 
 
 def _bullwatch_top(limit: int = 5) -> tuple[list[dict], dict[str, int]]:
-    """Pull current BullWatch items + zone counts from the in-memory
-    cache. Returns (top_conviction, stats)."""
-    from api.bullwatch import _CACHE
-    items_blob = (_CACHE.get("items") or {}).get("items") or []
+    """Pull current BullWatch items + zone counts. Returns
+    (top_conviction, stats).
+
+    Önce kalıcı snapshot store'dan okur (Railway deploy/restart sonrası
+    da doludur); yoksa in-memory _CACHE'e düşer. Eskiden yalnız
+    in-memory _CACHE okunuyordu — restart sonrası boş kalıyor, bülten
+    `scanned:0` ile tamamen boş üretiliyordu."""
+    items_blob: list = []
+    try:
+        from api.bullwatch import _read_snapshot_payload
+        snap = _read_snapshot_payload(limit=500)
+        if snap and isinstance(snap.get("items"), list):
+            items_blob = snap["items"]
+    except Exception:
+        pass
+    if not items_blob:
+        from api.bullwatch import _CACHE
+        items_blob = (_CACHE.get("items") or {}).get("items") or []
     if not isinstance(items_blob, list):
         return [], {}
     by_zone: dict[str, int] = {"CONVICTION": 0, "CONFIRMED": 0, "EARLY": 0}
