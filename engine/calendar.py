@@ -52,6 +52,28 @@ RECURRING_EVENTS: list[EconEvent] = [
     EconEvent("2026-12-09","21:00","Fed FOMC Faiz Kararı","US","high","unknown","Fed yılsonu + dot plot.","🇺🇸"),
     EconEvent("2026-12-10","14:00","TCMB Faiz Kararı","TR","high","unknown","TCMB yılsonu.","🇹🇷"),
     EconEvent("2026-12-17","14:45","ECB Faiz Kararı","EU","medium","unknown","ECB yılsonu.","🇪🇺"),
+
+    # ── AYLIK VERİ AKIŞI — TÜFE / istihdam (tahmini tarihler) ──
+    # TÜİK TÜFE ~ayın 3'ü; ABD Tarım Dışı ~ilk Cuma; ABD TÜFE ~ay ortası.
+    # TCMB Haziran kararına TÜFE girdi olur, vb.
+    EconEvent("2026-07-03","10:00","Türkiye TÜFE (Haziran)","TR","high","unknown","Dezenflasyon hızı — TCMB Temmuz kararının ana girdisi.","🇹🇷"),
+    EconEvent("2026-07-03","15:30","ABD Tarım Dışı İstihdam","US","high","unknown","Haziran istihdam — küresel risk iştahı barometresi.","🇺🇸"),
+    EconEvent("2026-07-14","15:30","ABD TÜFE (Haziran)","US","high","unknown","ABD enflasyonu — Fed faiz beklentilerini şekillendirir.","🇺🇸"),
+    EconEvent("2026-08-03","10:00","Türkiye TÜFE (Temmuz)","TR","high","unknown","Yaz ayları enflasyon seyri.","🇹🇷"),
+    EconEvent("2026-08-07","15:30","ABD Tarım Dışı İstihdam","US","high","unknown","Temmuz istihdam.","🇺🇸"),
+    EconEvent("2026-08-12","15:30","ABD TÜFE (Temmuz)","US","high","unknown","ABD enflasyonu — Eylül Fed beklentisi.","🇺🇸"),
+    EconEvent("2026-09-03","10:00","Türkiye TÜFE (Ağustos)","TR","high","unknown","TCMB Eylül kararı öncesi son enflasyon.","🇹🇷"),
+    EconEvent("2026-09-04","15:30","ABD Tarım Dışı İstihdam","US","high","unknown","Ağustos istihdam.","🇺🇸"),
+    EconEvent("2026-09-11","15:30","ABD TÜFE (Ağustos)","US","high","unknown","ABD enflasyonu.","🇺🇸"),
+    EconEvent("2026-10-05","10:00","Türkiye TÜFE (Eylül)","TR","high","unknown","TCMB Ekim kararına girdi.","🇹🇷"),
+    EconEvent("2026-10-02","15:30","ABD Tarım Dışı İstihdam","US","high","unknown","Eylül istihdam.","🇺🇸"),
+    EconEvent("2026-10-14","15:30","ABD TÜFE (Eylül)","US","high","unknown","ABD enflasyonu.","🇺🇸"),
+    EconEvent("2026-11-03","10:00","Türkiye TÜFE (Ekim)","TR","high","unknown","Yıl sonu enflasyon patikası.","🇹🇷"),
+    EconEvent("2026-11-06","15:30","ABD Tarım Dışı İstihdam","US","high","unknown","Ekim istihdam.","🇺🇸"),
+    EconEvent("2026-11-12","15:30","ABD TÜFE (Ekim)","US","high","unknown","ABD enflasyonu.","🇺🇸"),
+    EconEvent("2026-12-03","10:00","Türkiye TÜFE (Kasım)","TR","high","unknown","TCMB Aralık kararına girdi.","🇹🇷"),
+    EconEvent("2026-12-04","15:30","ABD Tarım Dışı İstihdam","US","high","unknown","Kasım istihdam.","🇺🇸"),
+    EconEvent("2026-12-10","15:30","ABD TÜFE (Kasım)","US","high","unknown","ABD enflasyonu.","🇺🇸"),
 ]
 
 MANUAL_EVENTS: list[EconEvent] = []
@@ -81,12 +103,19 @@ def format_event_for_action(event):
         return f"{days.get(d.weekday(),'')} {event.title}"
     except: return event.title
 
+def get_future_events():
+    """Bugün ve sonrası — tüm gelecek olaylar (takvim paneli için)."""
+    today_s = dt.date.today().isoformat()
+    return [e for e in get_all_events() if e.date >= today_s]
+
+
 def get_calendar_summary():
     week = get_this_week_events(); upcoming = get_upcoming_events(14)
     nxt = get_next_important_event()
     return {
         "this_week": [e.to_dict() for e in week],
         "upcoming_14d": [e.to_dict() for e in upcoming],
+        "future": [e.to_dict() for e in get_future_events()],
         "next_important": nxt.to_dict() if nxt else None,
         "next_important_label": format_event_for_action(nxt) if nxt else None,
         "total_events": len(get_all_events()), "as_of": dt.date.today().isoformat(),

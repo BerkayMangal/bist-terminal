@@ -2130,6 +2130,19 @@ h+=`<div style="margin-bottom:14px;padding:16px;background:linear-gradient(135de
 h+=`<div style="font-family:'JetBrains Mono',monospace;font-size:var(--fs-xs);color:var(--acc);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">📋 Bugün Ne Yapmalı?</div>`;
 h+=`<div style="font-size:var(--fs-base);color:var(--t1);line-height:1.7">${esc(d.action_summary)}</div>`;
 h+=`</div>`;}
+// ECONOMIC CALENDAR — TCMB / Fed / ECB / TÜFE / istihdam
+if(d.calendar&&d.calendar.future&&d.calendar.future.length){
+const _evs=d.calendar.future.slice(0,16);
+h+=`<div class="card" style="margin-bottom:14px"><div class="card-h"><span class="card-t">📅 Ekonomik Takvim</span><span style="font-size:9px;color:var(--t4);font-family:'JetBrains Mono',monospace">TCMB · Fed · ECB · TÜFE · İstihdam</span></div><div class="card-b">`;
+_evs.forEach(e=>{
+const _isHigh=e.importance==='high';
+const _impCol=_isHigh?'var(--red)':e.importance==='medium'?'var(--ylw)':'var(--t4)';
+const _dd=new Date(e.date+'T00:00:00');
+const _dayN=['Paz','Pzt','Sal','Çar','Per','Cum','Cmt'][_dd.getDay()];
+const _dateStr=_dd.toLocaleDateString('tr-TR',{day:'2-digit',month:'short'});
+h+=`<div style="display:flex;gap:10px;padding:9px 0;border-bottom:1px solid var(--bdr)"><div style="width:64px;flex-shrink:0;text-align:center"><div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--t1);font-weight:700">${_dateStr}</div><div style="font-size:8px;color:var(--t4)">${_dayN} ${esc(e.time)}</div></div><div style="width:3px;background:${_impCol};border-radius:2px;flex-shrink:0"></div><div style="flex:1;min-width:0"><div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap"><span style="font-size:var(--fs-sm);color:var(--t1);font-weight:600">${esc(e.flag||'')} ${esc(e.title)}</span>${e.is_today?'<span style="font-size:7px;background:var(--acc);color:#000;padding:1px 5px;border-radius:2px;font-weight:700">BUGÜN</span>':''}${_isHigh?'<span style="font-size:7px;color:var(--red);border:1px solid var(--red);padding:1px 4px;border-radius:2px;font-family:\'JetBrains Mono\',monospace">YÜKSEK ETKİ</span>':''}</div><div style="font-size:10px;color:var(--t3);margin-top:2px;line-height:1.5">${esc(e.description||'')}</div></div></div>`;
+});
+h+=`</div></div>`;}
 // AI ROLES BUTTON — AI Consolidation: single Claude, "external brief"
 // (Perplexity) button removed since that provider is retired.
 h+=`<div style="margin-bottom:14px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-sm btn-blu" onclick="loadMacroRoles()">🤖 AI Makro Yorumu</button></div><div id="macroRolesBlock"></div>`;
