@@ -36,6 +36,7 @@ def build_scan_item(r: dict) -> dict:
         "entry_label": r.get("entry_label", ""), "is_hype": r.get("is_hype", False),
         "timing": r.get("timing", ""), "quality_tag": r.get("quality_tag", ""),
         "decision": r.get("decision", ""), "sector_group": r.get("sector_group", ""),
+        "size_tier": r.get("size_tier", ""),
         "style": r["style"], "scores": r["scores"],
         "sector": r.get("sector", ""), "industry": r.get("industry", ""),
         "legendary": r["legendary"], "positives": r["positives"], "negatives": r["negatives"],
