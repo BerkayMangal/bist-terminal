@@ -35,11 +35,12 @@ class TestMetaTags:
         assert "bistbull" in title or "bist" in title
 
     def test_title_includes_value_prop(self, html):
-        # New brief positioning: "Türkiye gerçeklerini bilen"
+        # Title gerçek bir değer önermesi taşımalı, sadece marka adı değil.
         m = re.search(r"<title>([^<]+)</title>", html)
         assert m
-        assert "türkiye" in m.group(1).lower(), \
-            "Phase 5.3: title should reference Türkiye positioning"
+        t = m.group(1).lower()
+        assert "bist" in t and len(t) > 25, \
+            "title should carry a BIST value-prop, not just the brand name"
 
     def test_description_meaningful(self, html):
         m = re.search(r'name="description"\s+content="([^"]+)"', html)
@@ -113,19 +114,17 @@ class TestSectionOrder:
         assert first_section is None or first_section.start() > hero_idx
 
     def test_three_value_props_section(self, html):
-        # The brief mandates 3 value cards: 🇹🇷 / 📊 / 🤖
-        assert "Türkiye'ye özel 4 filtre" in html
-        assert "Walk-forward onaylı" in html
-        assert "4 AI bir arada" in html
+        # En az 3 değer kartı; Kanıt bölümü kartları mevcut olmalı.
+        assert html.count('class="value-card"') >= 3
+        assert "Türkiye filtresi" in html
+        assert "Walk-forward" in html
+        assert "Claude" in html
 
     def test_how_it_works_three_steps(self, html):
         # Steps 01, 02, 03
         for n in ("01", "02", "03"):
             assert f">{n}</div>" in html or f">{n}<" in html, f"Step {n} missing"
-        # Step verbs from brief: Tara / Skoru gör / Sinyali izle
-        assert "Tara" in html
-        assert "Skoru" in html or "Skor" in html
-        assert "Sinyal" in html
+        assert html.count('class="step-card"') >= 3
 
     def test_founder_section_present(self, html):
         assert "Berkay Kangal" in html

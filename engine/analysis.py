@@ -32,10 +32,8 @@ from engine.scoring import (
     score_balance, score_earnings, score_moat, score_capital,
     compute_risk_penalties,
     confidence_score,
-    quality_label, entry_quality_label,
-    decision_engine, style_label, legendary_labels, drivers,
-    compute_valuation_stretch,
-    fundamental_quality_label, fundamental_decision,
+    style_label, legendary_labels, drivers,
+    fundamental_quality_label, radar_grade,
 )
 from engine.scoring_v11 import get_risk_cap, detect_fatal_risks
 from engine.applicability import build_applicability_flags
@@ -65,6 +63,23 @@ def _data_age_hours(raw: Optional[dict]) -> Optional[float]:
         return round(delta.total_seconds() / 3600.0, 1)
     except (TypeError, ValueError):
         return None
+
+
+def _size_tier(market_cap: Optional[float]) -> str:
+    """Piyasa değerine göre büyüklük katmanı (TRY). Radar tüm BIST'i
+    (622 hisse) tarıyor; ince/likit olmayan mikro-cap'lerin radar
+    tepesinde fluke-temiz bilançoyla görünmesini engellemek için
+    kullanıcıya bir uyarı bayrağı sağlar. Skoru ETKİLEMEZ."""
+    mc = safe_num(market_cap)
+    if mc is None or mc <= 0:
+        return "bilinmiyor"
+    if mc >= 100e9:
+        return "büyük"
+    if mc >= 25e9:
+        return "orta"
+    if mc >= 6e9:
+        return "küçük"
+    return "mikro"
 
 
 # ================================================================
@@ -330,6 +345,16 @@ def analyze_symbol(symbol: str, scoring_version: Optional[str] = None,
     else:
         fa_pure = 35.0  # absolute minimum — no data at all
 
+    # #5: eksik-veri shrinkage. Re-normalizasyon eksik boyutları
+    # dışlıyor — bir hisse zayıf boyutlarını (balance/earnings) eksik
+    # bildirirse fa_pure yapay yükseliyor, ince-veri hisseler radar
+    # tepesine çıkıyordu. Mevcut ağırlık oranı (coverage) kadar
+    # fa_pure'a, kalan kadar temkinli bir prior'a (45) çekiyoruz:
+    # eksik veri artık ödüllendirilmiyor, belirsizlik skoru indiriyor.
+    if 0 < len(_active) < 7:
+        _coverage = min(1.0, sum(V11_FA_WEIGHTS.get(k, 0.10) for k in _active))
+        fa_pure = round(max(1, fa_pure * _coverage + 45.0 * (1.0 - _coverage)), 1)
+
     # ──────────────────────────────────────────────────
     # K2-Risk: Risk penalties (deterministic, no momentum)
     # ──────────────────────────────────────────────────
@@ -381,16 +406,18 @@ def analyze_symbol(symbol: str, scoring_version: Optional[str] = None,
 
     # ──────────────────────────────────────────────────
     # V13 FINAL SCORE — Pure Fundamental, NO momentum
-    # Formula: clamp(TR_adjusted_FA + academic_penalty + risk_penalty × factor + val_stretch, 1, 99)
+    # Formül: clamp(TR_adjusted_FA + academic_penalty
+    #               + capped_risk × factor, 1, 99)
+    # #2 NOT: değerleme (value) zaten fa_pure içinde 0.18 ağırlıkla
+    # sayılıyor. Eski val_stretch AYNI value skorundan ikinci kez
+    # ±10/−15 ekliyordu (double-count) — kaldırıldı.
     # ──────────────────────────────────────────────────
     risk_cap = get_risk_cap(m)
     capped_risk = max(risk_penalty, risk_cap)
-    val_stretch = compute_valuation_stretch(scores.get("value", 50))
 
     v13_final = round(max(1, min(99,
         tr_adjusted_fa
         + academic_penalty
-        + val_stretch
         + capped_risk * V13_OVERALL_RISK_FACTOR
     )), 1)
 
@@ -404,11 +431,16 @@ def analyze_symbol(symbol: str, scoring_version: Optional[str] = None,
     # quality labels. Radar answers "is this company fundamentally
     # good + fairly priced?" — timing ("enter now / stay away") is
     # Cross Hunter / BullWatch territory.
-    q_label = quality_label(fa_pure)
+    # #1: tüm etiketler manşet skorla (v13_final) AYNI tabandan
+    # üretilir — eskiden q_label/decision fa_pure'dan, gösterilen skor
+    # v13_final'dan geliyordu ve ikisi gözle çelişebiliyordu.
+    # #10: "AL/İZLE/BEKLE/KAÇIN" aksiyon etiketi kaldırıldı; radar
+    # şirket kalitesini söyler, alım kararını değil.
+    q_label = radar_grade(v13_final)
     e_label = fundamental_quality_label(
-        fa_pure, scores.get("value", 50.0), risk_penalty,
+        v13_final, scores.get("value", 50.0), risk_penalty,
     )
-    decision = fundamental_decision(fa_pure, risk_penalty)
+    decision = q_label
 
     # Confidence — base score minus penalty for excluded dimensions
     confidence = confidence_score(m)
@@ -439,12 +471,10 @@ def analyze_symbol(symbol: str, scoring_version: Optional[str] = None,
         "turkey": turkey_result,
         "academic": academic_result,
         "academic_penalty": academic_penalty,
-        "val_stretch": val_stretch,
         "risk_capped": capped_risk,
         "formula": (
             f"TR_adj({tr_adjusted_fa:.1f}) + Acad({academic_penalty:+d}) "
-            f"+ ValStr({val_stretch:+d}) + Risk({capped_risk}×{V13_OVERALL_RISK_FACTOR}) "
-            f"= {v13_final:.1f}"
+            f"+ Risk({capped_risk}×{V13_OVERALL_RISK_FACTOR}) = {v13_final:.1f}"
         ),
         # `sentiment` block intentionally removed — Radar is pure-fundamental.
         # Timing / momentum signals live in BullAlpha (timing+FA hybrid) and
@@ -466,6 +496,7 @@ def analyze_symbol(symbol: str, scoring_version: Optional[str] = None,
         "data_source": m.get("data_source", "unknown"),
         "data_fetched_at": raw_cache.get(symbol, {}).get("_fetched_at") if raw_cache.get(symbol) else None,
         "data_age_hours": _data_age_hours(raw_cache.get(symbol)),
+        "size_tier": _size_tier(m.get("market_cap")),
         "analyzed_at": dt.datetime.now(dt.timezone.utc).isoformat(),
         "_metric_violations": m.get("_metric_violations", 0),
         "v13": v13_block,
