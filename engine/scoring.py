@@ -514,24 +514,22 @@ def entry_quality_label(fa_pure: float, ivme: float, risk_penalty: int) -> str:
 
 
 def fundamental_quality_label(
-    fa_pure: float,
+    overall_score: float,
     value_score: float,
     risk_penalty: int,
 ) -> str:
-    """Radar Overhaul (2026-05): pure-fundamental quality label.
+    """İki eksenli profil etiketi: KALİTE (overall_score — radar'ın
+    nihai skoru) × DEĞERLEME (value_score: yüksek = ucuz). radar_grade
+    notuyla aynı tabandan (overall) beslenir, böylece skor ↔ etiket
+    çelişmez.
 
-    Radar no longer scores on momentum/timing, so the old timing-flavored
-    labels (TEYİTLİ / ERKEN / GEÇ) made no sense. This classifies a stock
-    on two fundamental axes — QUALITY (fa_pure) and VALUATION
-    (value_score: high = cheap) — plus a risk gate.
-
-      Zayıf Temel     — fa < 35 or heavy risk: avoid on fundamentals
-      Kaliteli Değer  — strong fundamentals AND cheap: the sweet spot
-      Pahalı Kalite   — strong fundamentals but expensive valuation
-      Ucuz ama Riskli — cheap but weak/mediocre fundamentals
-      Dengeli         — middling on both axes
+      Zayıf Temel     — skor < 35 veya ağır risk
+      Kaliteli Değer  — güçlü temel + ucuz: tatlı nokta
+      Pahalı Kalite   — güçlü temel ama değerleme pahalı
+      Ucuz ama Riskli — ucuz ama temel zayıf (değer tuzağı)
+      Dengeli         — iki eksende de orta
     """
-    fa = fa_pure if fa_pure is not None else 50.0
+    fa = overall_score if overall_score is not None else 50.0
     val = value_score if value_score is not None else 50.0
     rp = risk_penalty or 0
 
@@ -544,21 +542,27 @@ def fundamental_quality_label(
     return "Dengeli"
 
 
-def fundamental_decision(fa_pure: float, risk_penalty: int) -> str:
-    """Radar Overhaul: AL / İZLE / BEKLE / KAÇIN purely from the
-    fundamental score + risk penalty — no momentum, no entry-timing
-    label dependency. Timing belongs to Cross Hunter / BullWatch."""
-    fa = fa_pure if fa_pure is not None else 50.0
-    rp = risk_penalty or 0
-    if rp <= -25 or fa < 30:
-        return "KAÇIN"
-    if fa >= 60 and rp > -15:
-        return "AL"
-    if fa >= 45 and rp > -20:
-        return "İZLE"
-    if fa >= 38:
-        return "BEKLE"
-    return "KAÇIN"
+def radar_grade(score: float) -> str:
+    """Radar kalite notu — şirketin temel skorunu (overall / v13_final)
+    tek kelimeyle özetler.
+
+    Aksiyon/zamanlama etiketi DEĞİL ("AL", "GİR" gibi şeyler bilinçli
+    olarak kaldırıldı): radar bir şirketin temelinin ne kadar iyi
+    olduğunu söyler, ne zaman alınacağını değil. Zamanlama BullAlfa /
+    Cross Hunter işi.
+
+    Tek girdi `score` (overall) — risk, Türkiye filtresi ve değerleme
+    zaten o skorun içinde olduğu için not ile skor her zaman tutarlı."""
+    s = score if score is not None else 50.0
+    if s >= 78:
+        return "Çok Başarılı"
+    if s >= 62:
+        return "Başarılı"
+    if s >= 45:
+        return "Orta"
+    if s >= 30:
+        return "Zayıf"
+    return "Riskli"
 
 
 def decision_engine(fa_pure: float, ivme: float, risk_penalty: int, entry_label: str) -> str:

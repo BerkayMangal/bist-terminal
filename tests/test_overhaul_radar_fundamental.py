@@ -116,42 +116,55 @@ class TestFundamentalQualityLabel:
 
 
 # ────────────────────────────────────────────────────────────────
-# fundamental_decision
+# radar_grade — kalite notu (eski fundamental_decision'ın yerine)
 # ────────────────────────────────────────────────────────────────
 
 
-class TestFundamentalDecision:
-    def test_al_on_strong_fa(self):
-        from engine.scoring import fundamental_decision
-        assert fundamental_decision(72, 0) == "AL"
-        assert fundamental_decision(60, -10) == "AL"
+class TestRadarGrade:
+    """radar_grade — şirket kalite notu (overall skordan). Aksiyon
+    etiketi DEĞİL: AL/GİR/KAÇIN gibi kelimeler bilinçle kaldırıldı."""
 
-    def test_izle_on_mid_fa(self):
-        from engine.scoring import fundamental_decision
-        assert fundamental_decision(50, -5) == "İZLE"
+    def test_top_grade_on_high_score(self):
+        from engine.scoring import radar_grade
+        assert radar_grade(85) == "Çok Başarılı"
+        assert radar_grade(78) == "Çok Başarılı"
 
-    def test_bekle_on_low_mid(self):
-        from engine.scoring import fundamental_decision
-        assert fundamental_decision(40, -5) == "BEKLE"
+    def test_basarili_on_strong_score(self):
+        from engine.scoring import radar_grade
+        assert radar_grade(70) == "Başarılı"
+        assert radar_grade(62) == "Başarılı"
 
-    def test_kacin_on_weak_fa(self):
-        from engine.scoring import fundamental_decision
-        assert fundamental_decision(25, 0) == "KAÇIN"
+    def test_orta_on_mid_score(self):
+        from engine.scoring import radar_grade
+        assert radar_grade(50) == "Orta"
 
-    def test_kacin_on_severe_risk(self):
-        from engine.scoring import fundamental_decision
-        assert fundamental_decision(70, -30) == "KAÇIN"
+    def test_zayif_on_low_score(self):
+        from engine.scoring import radar_grade
+        assert radar_grade(35) == "Zayıf"
 
-    def test_decision_monotonic_in_fa(self):
-        """Higher FA should never produce a *worse* decision (at fixed
-        risk). Pin the ordering AL > İZLE > BEKLE > KAÇIN."""
-        from engine.scoring import fundamental_decision
-        rank = {"KAÇIN": 0, "BEKLE": 1, "İZLE": 2, "AL": 3}
+    def test_riskli_on_weak_score(self):
+        from engine.scoring import radar_grade
+        assert radar_grade(20) == "Riskli"
+
+    def test_grade_monotonic_in_score(self):
+        """Yüksek skor asla daha kötü not üretmemeli. Sıralamayı sabitle:
+        Çok Başarılı > Başarılı > Orta > Zayıf > Riskli."""
+        from engine.scoring import radar_grade
+        rank = {"Riskli": 0, "Zayıf": 1, "Orta": 2, "Başarılı": 3,
+                "Çok Başarılı": 4}
         prev = -1
-        for fa in range(20, 90, 5):
-            d = fundamental_decision(fa, 0)
-            assert rank[d] >= prev, f"decision regressed at fa={fa}: {d}"
-            prev = rank[d]
+        for s in range(10, 99, 5):
+            g = radar_grade(s)
+            assert rank[g] >= prev, f"grade regressed at score={s}: {g}"
+            prev = rank[g]
+
+    def test_no_action_words(self):
+        """Radar notu şirket kalitesini tanımlar, alım aksiyonu değil —
+        'AL'/'GİR'/'KAÇIN'/'SAT' hiçbir notta geçmemeli."""
+        from engine.scoring import radar_grade
+        grades = {radar_grade(s) for s in range(1, 100)}
+        for bad in ("AL", "GİR", "KAÇIN", "SAT", "İZLE"):
+            assert bad not in grades
 
 
 # ────────────────────────────────────────────────────────────────
@@ -166,7 +179,7 @@ class TestAnalysisWiring:
         from engine import analysis
         src = inspect.getsource(analysis)
         assert "fundamental_quality_label" in src
-        assert "fundamental_decision" in src
+        assert "radar_grade" in src
 
     def test_analysis_no_longer_calls_entry_quality_label(self):
         """The old timing classifier must not be wired into the radar

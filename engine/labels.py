@@ -154,7 +154,9 @@ def regime_label(analysis_result: dict) -> str:
     fa = analysis_result.get("fa_score", analysis_result.get("deger", 50))
     ivme = analysis_result.get("ivme", 50)
     risk = analysis_result.get("risk_penalty", 0)
-    decision = analysis_result.get("decision", "BEKLE")
+    # Radar artık aksiyon etiketi (AL/İZLE) üretmiyor; profil özetini
+    # doğrudan nihai skordan (overall) türetiyoruz.
+    overall = analysis_result.get("overall", analysis_result.get("deger", 50))
     is_hype = analysis_result.get("is_hype", False)
     scores = analysis_result.get("scores", {})
 
@@ -173,7 +175,7 @@ def regime_label(analysis_result: dict) -> str:
     # Temel + momentum + akış kombinasyonları
     if fa >= 65 and acc_type == "ACCUMULATION":
         return "GÜÇLÜ TEMEL + SESSİZ ALIM"
-    if fa >= 65 and ivme >= 60 and decision == "AL":
+    if fa >= 65 and ivme >= 60 and overall >= 62:
         return "GÜÇLÜ TEMEL + UYGUN MOMENTUM"
     if fa >= 55 and ivme < 40:
         return "KALİTELİ AMA HENÜZ İVME YOK"
@@ -188,12 +190,12 @@ def regime_label(analysis_result: dict) -> str:
     if ciro_label in ("KELEPİR", "ÇOK UCUZ") and scores.get("balance", 50) < 45:
         return "UCUZ AMA BİLANÇO ZAYIF — DİKKAT"
 
-    # Genel durumlar
-    if decision == "AL":
+    # Genel durumlar — nihai skora göre
+    if overall >= 62:
         return "GÜÇLÜ GÖRÜNÜYOR"
-    if decision == "İZLE":
+    if overall >= 45:
         return "İZLENEBİLİR — GELİŞİYOR"
-    if decision == "BEKLE":
+    if overall >= 33:
         return "BEKLEMEDE — NET SİNYAL YOK"
     return "ZAYIF GÖRÜNÜYOR — DİKKAT"
 
