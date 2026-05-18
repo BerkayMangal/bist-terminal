@@ -118,6 +118,8 @@ def init_db() -> None:
     # migration and may already have the column from a previous install).
     # Migration 005 adds source_url to universe_history.
     _ensure_column(conn, "universe_history", "source_url", "TEXT")
+    # score_history.price — event-study (ileri-getiri) doğrulaması için.
+    _ensure_column(conn, "score_history", "price", "REAL")
     conn.commit()
 
     log.info(f"SQLite storage initialized: {DB_PATH}")
