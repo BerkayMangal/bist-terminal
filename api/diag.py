@@ -632,3 +632,17 @@ async def api_diag_score_history(
         {"ticker": sym, "days": days, "items": items, "count": len(items)},
         extra_meta={"endpoint": "diag.score_history"},
     )
+
+
+@router.get("/api/diag/score-validation")
+async def api_diag_score_validation(horizon_days: int = Query(20, ge=5, le=120)):
+    """Radar skoru event-study — skor-bandı başına ileri-getiri.
+
+    "Yüksek radar skoru gerçekten daha iyi getiri getiriyor mu?"
+    sorusunu ölçer. score_history her gün skor+fiyat biriktirir; yeterli
+    geçmiş oluşunca skor bantları ileri-getiriyle karşılaştırılır.
+    Veri henüz birikmediyse status='veri_yetersiz' döner.
+    """
+    from research.score_validation import run_event_study
+    result = await asyncio.to_thread(run_event_study, horizon_days)
+    return success(result, extra_meta={"endpoint": "diag.score_validation"})

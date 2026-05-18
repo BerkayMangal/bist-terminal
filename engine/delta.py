@@ -22,12 +22,14 @@ def _save(symbol,a,scoring_version=None):
  # Phase 4.9: scoring_version can be explicitly passed to write distinct
  # rows for V13 and calibrated on the same date (A/B telemetry). None =>
  # the column DEFAULT takes over (v13_handpicked) for backward compat.
+ # price: ileri-getiri (event-study) doğrulaması fiyatı da gerektirir.
+ _px=_sf((a.get("metrics") or {}).get("price")) or None
  if scoring_version is None:
-  conn.execute("INSERT INTO score_history(symbol,snap_date,score,momentum,risk,fa_score,ivme,decision) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(symbol,snap_date,scoring_version) DO UPDATE SET score=excluded.score,momentum=excluded.momentum,risk=excluded.risk,fa_score=excluded.fa_score,ivme=excluded.ivme,decision=excluded.decision",
-   (symbol.upper(),today,_sf(a.get("overall") or a.get("deger")),_sf(a.get("ivme")),_sf(a.get("risk_score")),_sf(a.get("fa_score")),_sf(a.get("ivme")),a.get("decision","")))
+  conn.execute("INSERT INTO score_history(symbol,snap_date,score,momentum,risk,fa_score,ivme,decision,price) VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(symbol,snap_date,scoring_version) DO UPDATE SET score=excluded.score,momentum=excluded.momentum,risk=excluded.risk,fa_score=excluded.fa_score,ivme=excluded.ivme,decision=excluded.decision,price=excluded.price",
+   (symbol.upper(),today,_sf(a.get("overall") or a.get("deger")),_sf(a.get("ivme")),_sf(a.get("risk_score")),_sf(a.get("fa_score")),_sf(a.get("ivme")),a.get("decision",""),_px))
  else:
-  conn.execute("INSERT INTO score_history(symbol,snap_date,score,momentum,risk,fa_score,ivme,decision,scoring_version) VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(symbol,snap_date,scoring_version) DO UPDATE SET score=excluded.score,momentum=excluded.momentum,risk=excluded.risk,fa_score=excluded.fa_score,ivme=excluded.ivme,decision=excluded.decision",
-   (symbol.upper(),today,_sf(a.get("overall") or a.get("deger")),_sf(a.get("ivme")),_sf(a.get("risk_score")),_sf(a.get("fa_score")),_sf(a.get("ivme")),a.get("decision",""),scoring_version))
+  conn.execute("INSERT INTO score_history(symbol,snap_date,score,momentum,risk,fa_score,ivme,decision,price,scoring_version) VALUES(?,?,?,?,?,?,?,?,?,?) ON CONFLICT(symbol,snap_date,scoring_version) DO UPDATE SET score=excluded.score,momentum=excluded.momentum,risk=excluded.risk,fa_score=excluded.fa_score,ivme=excluded.ivme,decision=excluded.decision,price=excluded.price",
+   (symbol.upper(),today,_sf(a.get("overall") or a.get("deger")),_sf(a.get("ivme")),_sf(a.get("risk_score")),_sf(a.get("fa_score")),_sf(a.get("ivme")),a.get("decision",""),_px,scoring_version))
  conn.commit()
 def _compute(symbol,a):
  from infra.storage import _get_conn
