@@ -473,6 +473,14 @@ SECTOR_THRESHOLDS: dict[str, dict] = {
         "pb": (0.5, 0.8, 1.1, 1.6),
         "roe": (0.06, 0.10, 0.16, 0.24),
         "net_margin": (0.04, 0.08, 0.14, 0.22),
+        # Holdingler iştiraklerinin (çoğu zaman bir banka dahil)
+        # borcunu KONSOLİDE taşır → endüstriyel borç eşikleri ezici.
+        # Gevşek, holding-uygun eşikler. Altman Z bir holding için
+        # anlamsız (üretici şirket formülü) → devre dışı.
+        "net_debt_ebitda": (2.0, 4.0, 6.5, 10.0),
+        "debt_equity": (100, 250, 450, 700),
+        "current_ratio": (0.6, 0.9, 1.3, 1.8),
+        "altman_z": None,
     },
     "savunma": {
         "pe": (7, 12, 18, 28),

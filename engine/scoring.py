@@ -270,11 +270,17 @@ def score_balance(m: dict, sector_group: Optional[str] = None) -> Optional[float
     if th_nde:
         nde_s = 100.0 if nde is not None and nde < 0 else score_lower(nde, *th_nde)
 
+    # Faiz karşılama — holding/banka/sigorta için atlanır: konsolide
+    # finansal muhasebede faiz gideri yapısal (bir holdingin içindeki
+    # banka, bankanın ana işi faiz) — risk penaltisiyle aynı muafiyet.
+    ic_s = (None if sector_group in ("banka", "holding", "sigorta")
+            else score_higher(m.get("interest_coverage"), 1.5, 3.0, 6.0, 12.0))
+
     return avg([
         nde_s,
         score_lower(m.get("debt_equity"), *th_de) if th_de else None,
         score_higher(m.get("current_ratio"), *th_cr) if th_cr else None,
-        score_higher(m.get("interest_coverage"), 1.5, 3.0, 6.0, 12.0),
+        ic_s,
         score_higher(m.get("altman_z"), *th_az) if th_az else None,
     ])
 
