@@ -5,14 +5,15 @@
 #
 # After the universe expanded to the full BIST board (~622), ~130
 # thin-data small caps collapsed to overall=1 and piled up at the
-# bottom of the radar as misleading "UZAK DUR" rows. The real message
-# for those stocks is "veri yetersiz", not "bad company".
+# bottom of the radar as misleading rows. The real message for those
+# stocks is "veri yetersiz", not "bad company".
 #
 # Fix: a stock only enters the radar ranking if at least
-# RADAR_MIN_DIMENSIONS (4) of the 7 FA dimensions have real data.
-# Thin-data stocks are dropped from the list (still searchable via
-# /api/analyze). Genuinely-bad stocks WITH full data stay — a low
-# score on real data is correct, not noise.
+# RADAR_MIN_DIMENSIONS (4) of the 7 FA dimensions have REAL (non-
+# imputed) data. The gate reads `scores_imputed` — analysis.py'nin
+# otoriter imputed-boyut listesi. (Eski sürüm ayrı bir score_coverage
+# sayımı kullanıyordu; o fazla sayıyordu — bankalar borsapy'den
+# finansal veri alamadığı halde radarda kalıyordu.)
 # ================================================================
 
 from __future__ import annotations
@@ -33,45 +34,56 @@ class TestConfig:
 
 
 class TestDataSufficiencyGate:
-    def _cov(self, dims):
-        return {"score_coverage": {"summary": {"dimensions_with_data": dims}}}
+    _ALL_DIMS = ["value", "quality", "growth", "balance",
+                 "earnings", "moat", "capital"]
+
+    def _result(self, real_dims):
+        """real_dims kadar GERÇEK boyutu olan bir analiz sonucu üret —
+        kalan 7-real_dims boyut imputed (scores_imputed listesinde)."""
+        n_imputed = 7 - real_dims
+        return {"scores_imputed": self._ALL_DIMS[:n_imputed]}
 
     def test_full_coverage_passes(self):
         from core.scan_coordinator import _radar_data_sufficient
-        assert _radar_data_sufficient(self._cov(7)) is True
+        assert _radar_data_sufficient(self._result(7)) is True
 
     def test_at_threshold_passes(self):
         from core.scan_coordinator import _radar_data_sufficient
         from config import RADAR_MIN_DIMENSIONS
-        assert _radar_data_sufficient(self._cov(RADAR_MIN_DIMENSIONS)) is True
+        assert _radar_data_sufficient(
+            self._result(RADAR_MIN_DIMENSIONS)
+        ) is True
 
     def test_below_threshold_dropped(self):
         from core.scan_coordinator import _radar_data_sufficient
         from config import RADAR_MIN_DIMENSIONS
         assert _radar_data_sufficient(
-            self._cov(RADAR_MIN_DIMENSIONS - 1)
+            self._result(RADAR_MIN_DIMENSIONS - 1)
         ) is False
 
     def test_thin_data_two_dims_dropped(self):
         from core.scan_coordinator import _radar_data_sufficient
-        assert _radar_data_sufficient(self._cov(2)) is False
+        assert _radar_data_sufficient(self._result(2)) is False
 
-    def test_missing_coverage_field_defaults_pass(self):
-        """A stock with no score_coverage must NOT be silently dropped —
-        default to 'sufficient' so a field-shape regression can't empty
-        the radar."""
+    def test_bank_no_financials_dropped(self):
+        """Banka senaryosu: borsapy banka bilançosu vermez →
+        quality/growth/balance/earnings/moat imputed → 2 gerçek boyut
+        → radardan düşmeli (sahte imputed-50 skoru gösterilmemeli)."""
+        from core.scan_coordinator import _radar_data_sufficient
+        bank = {"scores_imputed": ["quality", "growth", "balance",
+                                   "earnings", "moat"]}
+        assert _radar_data_sufficient(bank) is False
+
+    def test_missing_field_defaults_pass(self):
+        """scores_imputed alanı hiç yoksa (beklenmedik) stock sessizce
+        düşürülmemeli — güvenli tarafta 'yeterli' say."""
         from core.scan_coordinator import _radar_data_sufficient
         assert _radar_data_sufficient({}) is True
-        assert _radar_data_sufficient({"score_coverage": {}}) is True
 
     def test_genuinely_bad_full_data_stock_still_passes(self):
-        """A stock with all 7 dimensions but terrible fundamentals
-        (e.g. ROE -116%) must STILL enter the radar — a low score on
-        real data is accurate, not noise. The gate only filters
-        thin-data stocks, not bad ones."""
+        """Tüm 7 boyutu olan ama berbat temelli (ör. ROE -%116) bir
+        hisse radara GİRMELİ — gerçek veride düşük skor doğrudur,
+        gürültü değil. Kapı yalnız ince-veri hisseleri eler."""
         from core.scan_coordinator import _radar_data_sufficient
-        bad_but_complete = {
-            "overall": 1,
-            "score_coverage": {"summary": {"dimensions_with_data": 7}},
-        }
+        bad_but_complete = {"overall": 1, "scores_imputed": []}
         assert _radar_data_sufficient(bad_but_complete) is True

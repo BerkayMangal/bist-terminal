@@ -57,20 +57,28 @@ def _radar_data_sufficient(r: dict) -> bool:
     yetersiz", not "bad company".
 
     A stock passing confidence_score (CONFIDENCE_MIN) can still have
-    most FA dimensions imputed; this second gate uses score_coverage's
-    per-dimension breakdown. Stocks below RADAR_MIN_DIMENSIONS are
-    dropped from the radar list — they remain individually searchable
-    via /api/analyze, just not ranked among analyzable peers.
+    most FA dimensions imputed; this second gate drops stocks below
+    RADAR_MIN_DIMENSIONS real (non-imputed) FA dimensions — they remain
+    individually searchable via /api/analyze, just not ranked.
+
+    OTORİTE: `scores_imputed` — analysis.py'nin gerçekten hesapladığı
+    imputed-boyut listesi. Eskiden ayrı `score_coverage` sayımı
+    kullanılıyordu; o fazla sayıyordu (örn. bankalar — borsapy banka
+    bilançosu vermez, roe/marj/büyüme/bilanço hepsi None → 5/7 boyut
+    imputed → gerçekte 2 boyut — ama score_coverage onları radarda
+    tutuyordu; banka skoru imputed-50 duvarından ibaret, sahte).
     """
     try:
         from config import RADAR_MIN_DIMENSIONS
     except Exception:
         RADAR_MIN_DIMENSIONS = 4
-    cov = (r.get("score_coverage") or {}).get("summary") or {}
-    # Default 7 (fully covered) when the field is absent so a missing
-    # score_coverage never silently drops a stock.
-    dims = cov.get("dimensions_with_data", 7)
-    return dims >= RADAR_MIN_DIMENSIONS
+    imputed = r.get("scores_imputed")
+    # scores_imputed her zaman analysis.py tarafından set edilir; yoksa
+    # (beklenmedik) güvenli tarafta kal — düşürme.
+    if imputed is None:
+        return True
+    real_dims = 7 - len(imputed)
+    return real_dims >= RADAR_MIN_DIMENSIONS
 
 
 class ScanCoordinator:
