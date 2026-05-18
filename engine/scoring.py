@@ -187,14 +187,28 @@ def score_value(m: dict, sector_group: Optional[str] = None) -> Optional[float]:
 
 
 def score_quality(m: dict, sector_group: Optional[str] = None) -> Optional[float]:
+    """İş kalitesi — AĞIRLIKLI: sermaye getirisi (ROE/ROIC) baskın,
+    net marj daha hafif.
+
+    Eskiden üçü EŞİT ortalanıyordu; bu, sermaye-verimli ama yapısal
+    olarak ince-marjlı işleri (otomotiv, perakende, dağıtım) haksızca
+    eziyordu — örn. TOASO ROE %13.9 (sağlıklı) ama net marj %2.6 →
+    kalite 20'ye düşüyordu. ROE/ROIC kârlılığı marjdan bağımsız
+    yakalar; net marj daha çok fiyatlama gücü sinyalidir (zaten
+    score_moat onu ayrıca kullanıyor)."""
     th_roe = get_threshold(sector_group, "roe")
     th_roic = get_threshold(sector_group, "roic")
     th_nm = get_threshold(sector_group, "net_margin")
-    return avg([
-        score_higher(m.get("roe"), *th_roe) if th_roe else None,
-        score_higher(m.get("roic"), *th_roic) if th_roic else None,
-        score_higher(m.get("net_margin"), *th_nm) if th_nm else None,
-    ])
+    parts = [
+        (0.45, score_higher(m.get("roe"), *th_roe) if th_roe else None),
+        (0.35, score_higher(m.get("roic"), *th_roic) if th_roic else None),
+        (0.20, score_higher(m.get("net_margin"), *th_nm) if th_nm else None),
+    ]
+    active = [(w, s) for w, s in parts if s is not None]
+    if not active:
+        return None
+    wsum = sum(w for w, _ in active)
+    return sum(w * s for w, s in active) / wsum
 
 
 def _best_growth(m: dict, q_key: str, annual_key: str) -> Optional[float]:
