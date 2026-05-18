@@ -67,32 +67,47 @@ def _graduated_penalty(value: Optional[float], thresholds: list[tuple[float, int
     return 0
 
 
+# Holding / banka / sigorta — konsolide ve finansal muhasebede
+# NB/FAVÖK, negatif operasyonel nakit akışı ve faiz karşılama
+# yapısal olarak ANLAMSIZ. Bir holding iştiraklerinin borcunu
+# konsolide taşır; bir bankanın "faiz gideri" zaten ana işidir.
+# Bu penaltiler bu sektörlerde haksız ezilmeye yol açıyordu
+# (örn. Koç Holding risk_penalty −57). Negatif özsermaye, net zarar,
+# Beneish ve seyreltme EVRENSEL kırmızı bayrak — onlar her sektörde
+# uygulanır.
+_RISK_EXEMPT_SECTORS: set = {"banka", "holding", "sigorta"}
+
+
 def compute_risk_penalties(
     m: dict,
     sector_group: Optional[str] = None,
 ) -> tuple[int, list[str]]:
-    """Kademeli risk penaltileri hesapla. Returns: (total_penalty, reasons)"""
+    """Kademeli risk penaltileri hesapla. Returns: (total_penalty, reasons)
+
+    Holding/banka/sigorta için nakit-akış ve kaldıraç penaltileri
+    atlanır — bu metrikler o sektörlerde uygulanamaz."""
     total = 0
     reasons: list[str] = []
+    _financial = sector_group in _RISK_EXEMPT_SECTORS
 
-    # Negatif özsermaye
+    # Negatif özsermaye — her sektör
     if m.get("equity") is not None and m["equity"] < 0:
         total += PENALTY_NEGATIVE_EQUITY
         reasons.append(f"Negatif özsermaye ({PENALTY_NEGATIVE_EQUITY})")
 
-    # Net zarar
+    # Net zarar — her sektör
     if m.get("net_income") is not None and m["net_income"] < 0:
         total += PENALTY_NET_LOSS
         reasons.append(f"Net zarar ({PENALTY_NET_LOSS})")
 
-    # Negatif nakit akış
-    if m.get("operating_cf") is not None and m["operating_cf"] < 0:
+    # Negatif nakit akış — holding/banka/sigorta hariç
+    if not _financial and m.get("operating_cf") is not None and m["operating_cf"] < 0:
         total += PENALTY_NEGATIVE_CFO
         reasons.append(f"Negatif nakit akışı ({PENALTY_NEGATIVE_CFO})")
 
-    # NB/FAVÖK kademeli — sektör-bazlı
+    # NB/FAVÖK kademeli — sektör-bazlı; holding/banka/sigorta hariç
     nd = m.get("net_debt_ebitda")
-    if nd is not None and nd > 0:
+    if not _financial and nd is not None and nd > 0:
         nd_thresholds = (
             PENALTY_ND_EBITDA_HIGH_DEBT
             if sector_group in HIGH_DEBT_SECTORS
@@ -103,9 +118,9 @@ def compute_risk_penalties(
             total += p
             reasons.append(f"Yüksek NB/FAVÖK {nd:.1f}x ({p:+d})")
 
-    # Faiz karşılama (düşük = kötü)
+    # Faiz karşılama (düşük = kötü) — holding/banka/sigorta hariç
     ic = m.get("interest_coverage")
-    if ic is not None and ic < 3.0:
+    if not _financial and ic is not None and ic < 3.0:
         p = 0
         for threshold, penalty in INT_COV_PENALTIES:
             if ic < threshold:

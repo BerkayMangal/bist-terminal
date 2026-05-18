@@ -361,9 +361,12 @@ def analyze_symbol(symbol: str, scoring_version: Optional[str] = None,
     # ──────────────────────────────────────────────────
     risk_penalty, risk_reasons = compute_risk_penalties(m, sector_group)
 
-    # Fake Profit filter
+    # Fake Profit filter — holding/banka/sigorta HARİÇ. Holding'lerin
+    # özkaynak-yöntemi iştirak kârı meşru olarak nakitten ayrışır;
+    # "kâr var nakit yok" bu sektörlerde sahte kâr değil, normal
+    # konsolidasyon. compute_risk_penalties ile aynı muafiyet.
     cfo_ni = m.get("cfo_to_ni")
-    if cfo_ni is not None:
+    if cfo_ni is not None and sector_group not in ("banka", "holding", "sigorta"):
         if m.get("operating_cf") is not None and m["operating_cf"] < 0 and m.get("net_income") is not None and m["net_income"] > 0:
             risk_penalty -= 12
             risk_reasons.append("Kâr var nakit yok — sahte kâr riski (-12)")
