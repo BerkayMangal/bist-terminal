@@ -81,6 +81,21 @@ FQ_PE_MAX: float = 15.0
 FQ_ROE_MIN: float = 0.15           # 15% (we expect fraction, e.g. 0.18)
 FQ_NET_DEBT_EBITDA_MAX: float = 2.0
 
+# ----------------------------------------------------------------
+# Renormalization denominator floor — score-integrity audit fix.
+# When an engine has no data its weight is dropped and the remaining
+# weights are renormalized to 100. Without a floor this *inflates*
+# scores: a stock missing the 25-point operator-evidence block
+# (kap_activity 15 + ownership 10) had its 75 remaining points scaled
+# up by 100/75 = 1.33×, manufacturing CONVICTION-tier scores out of
+# technical engines alone — the opposite of the "track operator
+# activity" thesis. Flooring the denominator at 85 means a stock
+# missing real operator confirmation cannot fully renormalize: it
+# keeps an honest ceiling. Stocks with >=85 weight covered are
+# unaffected; the floor only ever lowers thin-data scores, never
+# raises one, so it preserves the ranking order.
+RENORM_DENOM_FLOOR: float = 85.0
+
 
 # ----------------------------------------------------------------
 # Sector mapping — yfinance returns English sector strings; we group
@@ -1571,7 +1586,9 @@ def score_symbol(metrics: dict,
     }
 
     # ---- Weight redistribution: drop weights for engines with no data,
-    # then renormalize so the maximum achievable score is always 100.
+    # then renormalize toward 100. The denominator is floored below so
+    # that data-poor stocks (missing the operator-evidence engines) keep
+    # an honest ceiling instead of being inflated to a full 100.
     available = {k: v for k, v in sub_scores.items() if v is not None}
     if not available:
         return BullWatchResult(
@@ -1599,7 +1616,10 @@ def score_symbol(metrics: dict,
     else:
         # Each engine contributes (sub * weight); we report contributions
         # in the original 100-point scale by renormalizing weight_total.
-        norm = 100.0 / weight_total
+        # The denominator is floored (RENORM_DENOM_FLOOR) so that missing
+        # the operator-evidence engines can't inflate a technical-only
+        # score into the top zones — see the constant's definition.
+        norm = 100.0 / max(weight_total, RENORM_DENOM_FLOOR)
         contributions = {k: available[k] * weights[k] * norm
                          for k in available}
         score = sum(contributions.values())
