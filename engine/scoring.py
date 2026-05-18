@@ -32,8 +32,12 @@ from utils.helpers import safe_num, avg, score_higher, score_lower, fmt_num, fmt
 # SEKTÖR MAPPING
 # ================================================================
 def map_sector(sector_str: str) -> str:
-    """yfinance sector string → bizim sektör grubu."""
-    s = (sector_str or "").lower()
+    """Sektör string'i → bizim sektör grubu. İngilizce + Türkçe.
+
+    NOT: Türkçe "İ".lower() Python'da combining-dot (U+0307) üretir
+    ("MALİ" → "mali̇"), bu da substring eşleşmesini bozar — combining
+    işaret temizlenir."""
+    s = (sector_str or "").lower().replace("̇", "")
     for group, keywords in SECTOR_KEYWORDS.items():
         if any(k in s for k in keywords):
             return group

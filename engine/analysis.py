@@ -276,22 +276,35 @@ def analyze_symbol(symbol: str, scoring_version: Optional[str] = None,
             return cached
 
     m = validate_metrics(normalize_metrics(compute_metrics(symbol)))
-    # Sector resolution. borsapy Ticker.info is unreliable from prod —
-    # the sector field comes back empty for ~all stocks, which collapsed
-    # every stock to the "sanayi" default and broke sector-conditional
-    # scoring + the dashboard sector breakdown. When borsapy gives us a
-    # sector we use it; otherwise we fall back to the frozen BIST sector
-    # map (data/bist_sectors.py, built from borsapy's bulk sector indices).
+    # Sektör çözümü — FROZEN MAP BİRİNCİL.
+    #
+    # borsapy'nin per-stock Ticker.info `sector` alanı GÜVENİLMEZ:
+    # bazen boş, bazen Türkçe ("MALİ KURULUŞLAR" gibi) döner. map_sector
+    # yalnız İngilizce anahtar kelime ("bank", "holding") arıyordu →
+    # Türkçe string'ler "sanayi" default'una düşüyordu. Sonuç: Koç
+    # Holding bir tarama "holding" (borsapy boş → frozen map), sonraki
+    # tarama "sanayi" (borsapy "MALİ KURULUŞLAR" → map_sector fail)
+    # oluyordu. sector_group taramadan taramaya zıplayınca holding/banka
+    # risk muafiyeti tutarsız uygulanıyor, skor 8↔17 arası savruluyordu.
+    #
+    # data/bist_sectors.py (borsapy'nin GÜVENİLİR toplu sektör
+    # endekslerinden — XBANK/XHOLD/... — üretilmiş frozen map) birincil
+    # kaynak. borsapy'nin per-stock sector'ı yalnız frozen map'te
+    # OLMAYAN hisseler için fallback.
     from data.bist_sectors import sector_label_for, sector_group_for
+    _frozen_group = sector_group_for(symbol)
+    _frozen_label = sector_label_for(symbol)
     _borsapy_sector = (m.get("sector") or "").strip()
-    if _borsapy_sector:
+    if _frozen_label:
+        sector_group = _frozen_group
+        _display_sector = _frozen_label
+        m["sector"] = _frozen_label
+    elif _borsapy_sector:
         sector_group = map_sector(_borsapy_sector)
         _display_sector = _borsapy_sector
     else:
-        sector_group = sector_group_for(symbol)
-        _display_sector = sector_label_for(symbol)
-        if _display_sector:
-            m["sector"] = _display_sector
+        sector_group = _frozen_group  # "sanayi" default
+        _display_sector = ""
 
     # Radar is pure fundamental — momentum / tech_break / institutional flow
     # were already excluded from v13_final (kept only as a sentiment badge).

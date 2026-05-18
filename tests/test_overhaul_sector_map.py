@@ -87,13 +87,20 @@ class TestAnalysisWiring:
         )
         assert "sector_label_for" in src
 
-    def test_borsapy_sector_still_wins_when_present(self):
-        """When borsapy DOES return a sector, that path is preferred —
-        the frozen map is only a fallback. Pin via source check."""
+    def test_frozen_map_is_primary_source(self):
+        """Frozen sector map (data/bist_sectors.py — borsapy'nin
+        GÜVENİLİR toplu sektör endekslerinden üretildi) BİRİNCİL kaynak.
+        borsapy'nin per-stock Ticker.info sector'ı güvenilmez (boş ya da
+        Türkçe döner) — yalnız frozen map'te olmayan hisseler için
+        fallback. Kaynak sırası ile pinlenir."""
         import inspect
         from engine import analysis
         src = inspect.getsource(analysis.analyze_symbol)
-        # The borsapy-present branch calls map_sector; the empty branch
-        # uses the frozen map. Both must be present.
-        assert "map_sector(_borsapy_sector)" in src
+        assert "_frozen_label" in src
         assert "sector_group_for(symbol)" in src
+        assert "map_sector(_borsapy_sector)" in src
+        # Frozen-map dalı, borsapy fallback'inden ÖNCE gelmeli.
+        i_frozen = src.find("if _frozen_label")
+        i_borsapy = src.find("elif _borsapy_sector")
+        assert i_frozen != -1 and i_borsapy != -1
+        assert i_frozen < i_borsapy, "frozen map borsapy'den önce gelmeli"

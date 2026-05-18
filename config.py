@@ -530,13 +530,21 @@ DEFAULT_THRESHOLDS: dict[str, tuple] = {
 }
 
 # Sektör mapping kuralları
+# Anahtar kelimeler — hem İngilizce hem TÜRKÇE. borsapy bazı hisseler
+# için sektörü Türkçe döndürür ("MALİ KURULUŞLAR" vb); İngilizce-only
+# liste bunları "sanayi" default'una düşürüyordu. (Asıl sektör kaynağı
+# data/bist_sectors.py frozen map — bunlar yalnız frozen map'te
+# olmayan hisseler için fallback.)
 SECTOR_KEYWORDS: dict[str, list[str]] = {
-    "banka": ["bank", "financial serv"],
+    "banka": ["bank", "financial serv", "banka", "mali kurul"],
     "holding": ["holding", "conglomerate", "industrial conglomerate"],
-    "savunma": ["defense", "aerospace"],
-    "enerji": ["energy", "oil", "gas", "refin", "mining", "metals"],
-    "perakende": ["retail", "consumer", "food", "beverage", "household"],
-    "ulasim": ["airline", "transport", "logistic", "shipping"],
+    "savunma": ["defense", "aerospace", "savunma"],
+    "enerji": ["energy", "oil", "gas", "refin", "mining", "metals",
+               "enerji", "elektrik", "petrol", "metal", "madencil"],
+    "perakende": ["retail", "consumer", "food", "beverage", "household",
+                  "perakende", "gida", "ticaret"],
+    "ulasim": ["airline", "transport", "logistic", "shipping",
+               "havayol", "ulaşt", "taşima"],
 }
 SECTOR_DEFAULT = "sanayi"
 
