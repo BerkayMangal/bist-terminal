@@ -611,8 +611,12 @@ HIGH_DEBT_SECTORS: set[str] = {"ulasim", "enerji"}
 PENALTY_DILUTION: list[tuple[float, int]] = [
     (0.20, -20), (0.10, -12), (0.05, -6), (0.02, -3),
 ]
+# Beneish M-skoru gürültülü bir adli-muhasebe sezgiseli — yanlış-pozitif
+# oranı yüksek. Eski −18 tek bir noisy metrik için fazla sert (örn.
+# TOASO bm −0.76 → −18, sağlıklı şirkette). Yumuşatıldı; ayrıca
+# score_earnings boyutu zaten Beneish'i ayrıca puanlıyor.
 PENALTY_BENEISH: list[tuple[float, int]] = [
-    (-1.5, -18), (-1.78, -10), (-2.22, -3),
+    (-1.4, -10), (-1.78, -6), (-2.22, -2),
 ]
 
 # Sabit penaltiler
@@ -624,9 +628,11 @@ PENALTY_LOW_CASH_QUALITY = -6
 BONUS_NET_CASH = 4
 NET_CASH_THRESHOLD_MULTIPLIER = 1.2
 
-# Interest coverage penaltileri
+# Faiz karşılama penaltileri. %46 faiz ortamında faiz karşılama <1
+# BIST'te yaygın — eski −20 hem fazla sert hem de Türkiye faiz-direnci
+# filtresiyle çifte sayım. Yumuşatıldı.
 INT_COV_PENALTIES: list[tuple[float, int]] = [
-    (1.0, -20), (1.5, -12), (2.0, -8), (3.0, -4),
+    (0.7, -12), (1.2, -7), (1.8, -4), (2.6, -2),
 ]
 
 # Hype detection eşikleri
