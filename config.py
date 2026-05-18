@@ -115,7 +115,14 @@ STALE_GRACE_SECONDS = 3600
 # V13 PURE RADAR
 V13_ENABLED: bool = True
 V13_OVERALL_FA_WEIGHT: float = 1.0
-V13_OVERALL_RISK_FACTOR: float = 0.42
+# Risk faktörü 0.42 → 0.30: audit'te v13_final formülünün yapısal
+# aşağı-baskılı olduğu görüldü (Türkiye çarpanı + akademik + risk üçü
+# de yalnız çıkarıyordu → medyan 14, hisselerin %25'i taban 1'e
+# sıkışmış). Risk hâlâ konuşuyor ama daha ölçülü.
+V13_OVERALL_RISK_FACTOR: float = 0.30
+# Akademik penalti çarpanı — akademik katman composite_penalty'si
+# pratikte hep negatif (sabit ~−10 vergi). Yarıya indirildi.
+V13_ACADEMIC_FACTOR: float = 0.5
 V13_AI_TEMPERATURE: float = 0.0
 
 # ================================================================

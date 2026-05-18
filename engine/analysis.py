@@ -26,7 +26,10 @@ from engine.explainability import build_explanation
 # dimension_explainer, turkey_context, delta, labels, verdict, scoring_v11.enrich_*)
 # remain inline on purpose so that missing/broken optional modules degrade gracefully
 # instead of breaking analyze_symbol() at import time.
-from config import V11_FA_WEIGHTS, V13_OVERALL_FA_WEIGHT, V13_OVERALL_RISK_FACTOR
+from config import (
+    V11_FA_WEIGHTS, V13_OVERALL_FA_WEIGHT, V13_OVERALL_RISK_FACTOR,
+    V13_ACADEMIC_FACTOR,
+)
 from engine.scoring import (
     map_sector, score_value, score_quality, score_growth,
     score_balance, score_earnings, score_moat, score_capital,
@@ -389,7 +392,13 @@ def analyze_symbol(symbol: str, scoring_version: Optional[str] = None,
     except Exception as e:
         log.debug(f"K3 Turkey skipped for {symbol}: {e}")
 
-    tr_adjusted_fa = turkey_result.get("adjusted_fa") or fa_pure
+    # Türkiye çarpanını 1.0'a doğru harmanla. Ham çarpan (0.70-1.15)
+    # fa_pure'un TAMAMINI ölçeklediği için tek başına çok sert; ayrıca
+    # aynı makro rüzgârı akademik katman + reel büyüme arındırması da
+    # sayıyor (çoklu sayım). Harman, çarpanın etkisini ~yarıya indirir
+    # ama yönü korur (dirençli hisse yine daha yüksek).
+    _turkey_mult = turkey_result.get("composite_multiplier") or 1.0
+    tr_adjusted_fa = round(fa_pure * (0.55 + 0.45 * _turkey_mult), 1)
 
     # ──────────────────────────────────────────────────
     # K4: Akademik Katman (V13 — Damodaran + Greenwald)
@@ -421,7 +430,7 @@ def analyze_symbol(symbol: str, scoring_version: Optional[str] = None,
 
     v13_final = round(max(1, min(99,
         tr_adjusted_fa
-        + academic_penalty
+        + academic_penalty * V13_ACADEMIC_FACTOR
         + capped_risk * V13_OVERALL_RISK_FACTOR
     )), 1)
 
@@ -477,7 +486,7 @@ def analyze_symbol(symbol: str, scoring_version: Optional[str] = None,
         "academic_penalty": academic_penalty,
         "risk_capped": capped_risk,
         "formula": (
-            f"TR_adj({tr_adjusted_fa:.1f}) + Acad({academic_penalty:+d}) "
+            f"TR_adj({tr_adjusted_fa:.1f}) + Acad({academic_penalty:+d}×{V13_ACADEMIC_FACTOR}) "
             f"+ Risk({capped_risk}×{V13_OVERALL_RISK_FACTOR}) = {v13_final:.1f}"
         ),
         # `sentiment` block intentionally removed — Radar is pure-fundamental.
