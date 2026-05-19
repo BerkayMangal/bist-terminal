@@ -511,6 +511,8 @@ def analyze_symbol(symbol: str, scoring_version: Optional[str] = None,
         # Cross Hunter (technical), not here.
     }
 
+    # audit #7 — read the raw-cache entry once instead of 3× per symbol.
+    _raw_cached = raw_cache.get(symbol)
     r = {
         "symbol": symbol, "ticker": base_ticker(symbol), "name": m["name"], "currency": m["currency"],
         "sector": m.get("sector", ""), "sector_group": sector_group, "industry": m.get("industry", ""),
@@ -524,8 +526,8 @@ def analyze_symbol(symbol: str, scoring_version: Optional[str] = None,
         "scores_imputed": scores_imputed,
         "score_coverage": score_coverage,
         "data_source": m.get("data_source", "unknown"),
-        "data_fetched_at": raw_cache.get(symbol, {}).get("_fetched_at") if raw_cache.get(symbol) else None,
-        "data_age_hours": _data_age_hours(raw_cache.get(symbol)),
+        "data_fetched_at": (_raw_cached or {}).get("_fetched_at"),
+        "data_age_hours": _data_age_hours(_raw_cached),
         "size_tier": _size_tier(m.get("market_cap")),
         "analyzed_at": dt.datetime.now(dt.timezone.utc).isoformat(),
         "_metric_violations": m.get("_metric_violations", 0),

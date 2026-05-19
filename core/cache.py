@@ -69,7 +69,8 @@ class SafeCache:
       Bunun için dahili _timestamps dict'i tutulur.
     """
 
-    __slots__ = ("_cache", "_lock", "_namespace", "_ttl", "_timestamps", "_l2_enabled")
+    __slots__ = ("_cache", "_lock", "_namespace", "_ttl", "_timestamps",
+                 "_l2_enabled", "_l2_size_cached", "_l2_size_at")
 
     def __init__(self, maxsize: int, ttl: int, namespace: str, l2_enabled: bool = True) -> None:
         self._cache: TTLCache = TTLCache(maxsize=maxsize, ttl=ttl)
@@ -78,6 +79,10 @@ class SafeCache:
         self._ttl: int = ttl
         self._timestamps: dict[str, float] = {}
         self._l2_enabled: bool = l2_enabled
+        # audit #12 — cache the L2-size SCAN result so health polling
+        # doesn't fire a keyspace scan per cache per request.
+        self._l2_size_cached: Optional[int] = None
+        self._l2_size_at: float = 0.0
 
     def _l2_key(self, key: str) -> str:
         return f"cache:{self._namespace}:{key}"
@@ -205,10 +210,12 @@ class SafeCache:
                 "oldest_age_s": round(max(ages), 1) if ages else None,
                 "newest_age_s": round(min(ages), 1) if ages else None,
             }
-        # L2 size — best-effort Redis KEYS scan with hard cap so we never
-        # block on huge cache namespaces. None means "not measured".
-        l2_size: Optional[int] = None
-        if self._l2_enabled and redis_client.is_available():
+        # L2 size — best-effort Redis SCAN, capped. Cached for 60 s
+        # (audit #12) so health-endpoint polling doesn't fire a full
+        # keyspace scan per cache per request.
+        l2_size: Optional[int] = self._l2_size_cached
+        if (self._l2_enabled and redis_client.is_available()
+                and now - self._l2_size_at >= 60.0):
             try:
                 client = redis_client.get_client()
                 if client is not None:
@@ -219,6 +226,8 @@ class SafeCache:
                         if count >= 10000:  # safety guard
                             break
                     l2_size = count
+                    self._l2_size_cached = count
+                    self._l2_size_at = now
             except Exception:
                 pass
         base["l2_size"] = l2_size

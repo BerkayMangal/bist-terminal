@@ -324,20 +324,27 @@ async def paper_trade_loop() -> None:
 
             # ── 1. borsapy fast_info prices ───────────────────────────
             if BORSAPY_AVAILABLE and tickers:
-                try:
-                    import borsapy as bp_m
-                    for t in tickers:
-                        try:
-                            _tk = bp_m.Ticker(t)
-                            fi = _tk.fast_info
-                            lp = getattr(fi, "last_price", None)
-                            if lp is not None and float(lp) > 0:
-                                price_map[t] = round(float(lp), 4)
-                        except Exception:
-                            pass
-                    log.debug(f"PaperTrade borsapy: {len(price_map)}/{len(tickers)} fiyat alindi")
-                except Exception as e:
-                    log.warning(f"PaperTrade borsapy batch hatasi: {e}")
+                def _fetch_borsapy_prices() -> dict[str, float]:
+                    out: dict[str, float] = {}
+                    try:
+                        import borsapy as bp_m
+                        for t in tickers:
+                            try:
+                                _tk = bp_m.Ticker(t)
+                                fi = _tk.fast_info
+                                lp = getattr(fi, "last_price", None)
+                                if lp is not None and float(lp) > 0:
+                                    out[t] = round(float(lp), 4)
+                            except Exception:
+                                pass
+                    except Exception as e:
+                        log.warning(f"PaperTrade borsapy batch hatasi: {e}")
+                    return out
+                # audit #4 — these are blocking borsapy HTTP calls; run the
+                # whole batch off the event loop (was a sync N+1 directly
+                # on the asyncio loop, freezing request handling).
+                price_map.update(await asyncio.to_thread(_fetch_borsapy_prices))
+                log.debug(f"PaperTrade borsapy: {len(price_map)}/{len(tickers)} fiyat alindi")
 
             # ── 2. tech_cache fallback for missing tickers ──────────
             for t in [x for x in tickers if x not in price_map]:
