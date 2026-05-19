@@ -497,24 +497,32 @@ async def bullwatch_refresh_loop() -> None:
             await asyncio.sleep(BULLWATCH_RETRY_AFTER_ERROR)
             continue
 
-        # ── Stage 7c: daily bulletin auto-fire ─────────────────────
-        # The bulletin generator (Stage 7b) composes a daily summary
-        # from currently-warm sources. It must fire ONLY after the
-        # post_close (18:30 IST) scan so the daily candle is final
-        # and confirmed_new_today actually reflects the day's
-        # zone-entries. last_slot_label was set the previous loop tick.
-        if last_slot_label == "post_close":
-            try:
-                from engine.daily_bulletin import generate_and_persist
-                rec = await asyncio.to_thread(generate_and_persist)
-                log.info(
-                    "Daily bulletin saved for %s",
-                    rec.get("bulletin_date"),
+        # ── Stage 7c / audit H3: daily bulletin ────────────────────
+        # Fires after the post_close (18:30 IST) scan so the daily
+        # candle is final. CATCH-UP: an app restart (deploy) between
+        # the post_close slot and bulletin generation wipes the in-loop
+        # `last_slot_label` state, dropping the day's bulletin. So also
+        # generate whenever it's the post-close evening on a weekday
+        # and today's bulletin is still missing. Idempotent — the
+        # bulletin_storage.get() guard prevents double generation.
+        try:
+            from infra import bulletin_storage as _bs
+            _today_ist = _bs.istanbul_today()
+            if _bs.get(_today_ist) is None:
+                _ist_now = dt.datetime.now(dt.timezone.utc).astimezone(
+                    dt.timezone(dt.timedelta(hours=3)))
+                _post_close_evening = (
+                    _ist_now.weekday() < 5
+                    and (_ist_now.hour, _ist_now.minute) >= (18, 30)
                 )
-            except Exception as exc:
-                # Best-effort — bulletin failure must never break the
-                # scan loop. Operator gets a warning and we move on.
-                log.warning("Daily bulletin generation failed: %r", exc)
+                if last_slot_label == "post_close" or _post_close_evening:
+                    from engine.daily_bulletin import generate_and_persist
+                    rec = await asyncio.to_thread(generate_and_persist)
+                    log.info("Daily bulletin saved for %s",
+                             rec.get("bulletin_date"))
+        except Exception as exc:
+            # Best-effort — bulletin failure must never break the loop.
+            log.warning("Daily bulletin generation failed: %r", exc)
 
         # ── Sleep until next scheduled slot ────────────────────────
         sleep_for, label = seconds_until_next_scan()
