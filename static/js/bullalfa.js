@@ -167,11 +167,13 @@
       </div>`;
     }
 
-    // Calibration state
-    const calib = s.calibration_state;
+    // Calibration state — backend nests the phase under `confidence`,
+    // there is no top-level `calibration_state` (audit M1).
+    const calib = s.confidence && s.confidence.phase;
     let calibHtml = '';
     if (calib && calib !== 'active') {
-      calibHtml = `<span style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--t4);background:var(--bg2);padding:2px 6px;border-radius:3px;text-transform:uppercase;letter-spacing:.3px">Kalibrasyon: ${esc(calib === 'preview' ? 'ön-aşama' : calib)}</span>`;
+      const calibLabel = (calib === 'v1_heuristic' || calib === 'preview') ? 'ön-aşama' : calib;
+      calibHtml = `<span style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--t4);background:var(--bg2);padding:2px 6px;border-radius:3px;text-transform:uppercase;letter-spacing:.3px">Kalibrasyon: ${esc(calibLabel)}</span>`;
     }
 
     return `<div class="pkc" style="border-left-color:${m.color};margin-bottom:0">
