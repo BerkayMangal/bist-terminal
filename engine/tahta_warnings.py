@@ -272,7 +272,7 @@ def _rule_unconfirmed_breakout(f: dict) -> Optional[dict]:
     rh = f.get("rolling_high_20d_prev")
     if vr is None or rh is None:
         return None
-    if f["close"] > rh and vr < t["volume_ratio_max"]:
+    if f["close"] > rh * (1 + t["breakout_margin"]) and vr < t["volume_ratio_max"]:
         return {
             "close": _r(f["close"], 2),
             "resistance_20d": _r(rh, 2),

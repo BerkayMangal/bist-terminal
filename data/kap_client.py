@@ -39,6 +39,22 @@ FINANCIAL_REPORT_SUBJECTS = {
 }
 
 
+def _kap_fold(s: str) -> str:
+    """Casing- and dotted-i-robust fold for matching KAP subject text.
+
+    KAP publishes subjects in inconsistent casing, and Python's
+    str.lower() mangles Turkish 'İ'→'i̇' (i + combining dot) and
+    'I'→'i' (dotted) — both break substring matching against
+    dotless-ı Turkish needles. We fold every i-variant (İ I ı i) to
+    plain 'i' on BOTH the subject and the needles, so a match works
+    no matter how KAP cased the text. No needle relies on the ı/i
+    distinction to disambiguate, so the fold is lossless here."""
+    s = s or ""
+    for a, b in (("İ", "i"), ("I", "i"), ("ı", "i"), ("̇", "")):
+        s = s.replace(a, b)
+    return s.lower().strip()
+
+
 @dataclass
 class DisclosureRecord:
     """Normalized KAP disclosure event.
@@ -66,8 +82,8 @@ class DisclosureRecord:
         release — the kind that should invalidate scoring caches."""
         if self.disclosure_type != DISCLOSURE_TYPE_FINANCIAL:
             return False
-        subj = (self.subject or "").lower().strip()
-        return any(s in subj for s in FINANCIAL_REPORT_SUBJECTS)
+        subj = _kap_fold(self.subject)
+        return any(_kap_fold(s) in subj for s in FINANCIAL_REPORT_SUBJECTS)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -211,7 +227,9 @@ OPERATOR_SIGNAL_PATTERNS: dict[str, tuple[str, ...]] = {
                        "devralma", "bağlı ortaklık devri", "satın alma"),
     "CAPITAL_CHANGE": ("sermaye artırım", "bedelsiz sermaye",
                        "bedelli sermaye", "sermaye azaltım"),
-    "MGMT_CHANGE":    ("yönetim kurulu", "yönetici atama",
+    # bare "yönetim kurulu" kaldırıldı — neredeyse her KAP açıklamasında
+    # geçer, MGMT_CHANGE'i gürültüye boğuyordu (audit M2).
+    "MGMT_CHANGE":    ("yönetim kurulu üye", "yönetici atama",
                        "genel müdür", "yönetici değişiklik"),
 }
 
@@ -226,10 +244,10 @@ def classify_operator_signal(subject: str) -> Optional[str]:
     """
     if not subject:
         return None
-    s = subject.lower().strip()
+    s = _kap_fold(subject)
     for tag, needles in OPERATOR_SIGNAL_PATTERNS.items():
         for needle in needles:
-            if needle in s:
+            if _kap_fold(needle) in s:
                 return tag
     return None
 

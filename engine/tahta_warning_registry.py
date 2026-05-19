@@ -75,7 +75,10 @@ THRESHOLDS: dict[str, dict] = {
         "prev_return_min": 0.05,
         "prev_volume_ratio_min": 2.0,
         "followup_volume_ratio_max": 0.65,
-        "high_breach_max": 1.01,
+        # 1.00: bugünkü high dünküyü AŞMADI = zayıf devam. Eski 1.01,
+        # dünküden %1 YUKARI yeni bir zirveyi bile "zayıf" sayıyordu —
+        # karşılaştırma yanlış taraftaydı (audit H4).
+        "high_breach_max": 1.00,
         "close_position_max": 0.50,
     },
     "close_selloff": {
@@ -85,12 +88,19 @@ THRESHOLDS: dict[str, dict] = {
     },
     "unconfirmed_breakout": {
         "volume_ratio_max": 1.2,
+        # close direncin en az %0.5 üstünde olmalı — sıfır marjin,
+        # düz 20g tavanındaki gün-içi gürültüyü "kırılım" sanıyordu
+        # (audit M4).
+        "breakout_margin": 0.005,
     },
     "strong_vs_index": {
         "index_return_max": -0.01,
-        "stock_return_min": 0.0,
+        # hisse gerçekten artıda olmalı — 0.0 düz kapanışı da "güçlü"
+        # sayıyordu; hacim en az ortalama olmalı — 0.8 düşük hacimde
+        # "göreceli güç" zayıf kanıt (audit M3).
+        "stock_return_min": 0.005,
         "close_position_min": 0.60,
-        "volume_ratio_min": 0.8,
+        "volume_ratio_min": 1.0,
     },
 }
 
