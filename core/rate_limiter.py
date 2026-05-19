@@ -27,6 +27,8 @@ import logging
 from collections import defaultdict, deque
 from typing import Any, Optional
 
+from fastapi import Request
+
 from config import (
     RATE_LIMIT_ENABLED,
     RATE_LIMIT_AI_SUMMARY,
@@ -101,6 +103,14 @@ RATE_LIMITS: dict[str, dict[str, int]] = {
     "ab_report": {
         "max_requests": 60,
         "window_seconds": 60,
+    },
+    # audit M1 — heavy unauthenticated ops endpoints (kap/viop/bullalfa
+    # refresh, fundamentals refresh, daily-brief regenerate, bullwatch
+    # force-reset); each triggers an expensive scan / external-API burst.
+    # 5 per 5 min per IP is ample for legitimate manual use, blocks abuse.
+    "ops_heavy": {
+        "max_requests": 5,
+        "window_seconds": 300,
     },
 }
 
@@ -304,3 +314,14 @@ def get_remaining(request: Any, endpoint: str) -> dict[str, Any]:
             "reset": round(reset, 1),
             "window": window,
         }
+
+
+# ================================================================
+# FASTAPI ROUTE DEPENDENCY (audit M1)
+# ================================================================
+async def ops_heavy_rate_limit(request: Request) -> None:
+    """FastAPI route dependency — rate-limits heavy ops/refresh
+    endpoints under the shared "ops_heavy" bucket. Attach with:
+        @router.post(..., dependencies=[Depends(ops_heavy_rate_limit)])
+    Raises RateLimitExceeded (-> 429 via the global handler) on abuse."""
+    check_rate_limit(request, "ops_heavy")

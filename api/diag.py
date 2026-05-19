@@ -16,7 +16,9 @@ import asyncio
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
+
+from core.rate_limiter import ops_heavy_rate_limit
 
 from core.response_envelope import success, error
 
@@ -240,7 +242,7 @@ async def api_diag_system():
     return success(out, extra_meta={"endpoint": "diag.system"})
 
 
-@router.post("/api/diag/bullwatch/force-reset")
+@router.post("/api/diag/bullwatch/force-reset", dependencies=[Depends(ops_heavy_rate_limit)])
 async def api_diag_bw_force_reset():
     """Admin emergency — BullWatch scan hung olduğunda zorla reset et.
     Watchdog 8 dakika bekler ama bazen kullanıcı manuel resetlemek
@@ -355,7 +357,7 @@ async def api_diag_stale(
     )
 
 
-@router.post("/api/diag/fundamentals/batch-refresh")
+@router.post("/api/diag/fundamentals/batch-refresh", dependencies=[Depends(ops_heavy_rate_limit)])
 async def api_diag_batch_refresh(
     tickers: str = Query(..., description="Comma-separated ticker list"),
     max_concurrency: int = Query(4, ge=1, le=8),
@@ -440,7 +442,7 @@ async def api_diag_fundamentals_one(ticker: str):
     )
 
 
-@router.post("/api/diag/fundamentals/{ticker}/refresh")
+@router.post("/api/diag/fundamentals/{ticker}/refresh", dependencies=[Depends(ops_heavy_rate_limit)])
 async def api_diag_fundamentals_refresh(ticker: str):
     """Force-refresh ONE ticker: invalidate every cache layer (raw,
     analysis, tech, bullwatch) and re-fetch via analyze_symbol so the
