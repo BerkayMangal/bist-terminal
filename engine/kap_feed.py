@@ -156,10 +156,22 @@ def run_one_cycle(universe: Optional[list[str]] = None) -> CycleStats:
                             rec.ticker, rec.disclosure_index, exc,
                         )
 
-    # Bump high-water mark only on success — if everything errored we
-    # don't want to silently advance past unseen events.
-    if stats.highest_index_seen > last_seen:
+    # Bump the high-water mark ONLY when every ticker fetched cleanly.
+    # KAP disclosure indices are global-monotonic, so advancing the mark
+    # past a ticker that failed THIS cycle would permanently skip any
+    # unseen disclosure it holds below the new mark (audit H1). On a
+    # partial failure we hold the mark — save_disclosure is idempotent
+    # (INSERT OR IGNORE / SET NX) and dispatch fires only on genuinely
+    # new rows, so the next cycle re-scans the window cheaply and
+    # catches the stragglers from the ticker that failed.
+    if stats.errors == 0 and stats.highest_index_seen > last_seen:
         kap_storage.set_last_seen_index(stats.highest_index_seen)
+    elif stats.errors > 0:
+        log.info(
+            "KAP feed: %d ticker error(s) — high-water mark held at %d "
+            "so failed tickers are re-scanned next cycle",
+            stats.errors, last_seen,
+        )
 
     stats.finished_at = time.time()
     _last_cycle = stats
