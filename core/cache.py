@@ -70,15 +70,24 @@ class SafeCache:
     """
 
     __slots__ = ("_cache", "_lock", "_namespace", "_ttl", "_timestamps",
-                 "_l2_enabled", "_l2_size_cached", "_l2_size_at")
+                 "_l2_enabled", "_l2_size_cached", "_l2_size_at",
+                 "_serializer", "_deserializer")
 
-    def __init__(self, maxsize: int, ttl: int, namespace: str, l2_enabled: bool = True) -> None:
+    def __init__(self, maxsize: int, ttl: int, namespace: str,
+                 l2_enabled: bool = True,
+                 serializer=None, deserializer=None) -> None:
         self._cache: TTLCache = TTLCache(maxsize=maxsize, ttl=ttl)
         self._lock: threading.Lock = threading.Lock()
         self._namespace: str = namespace
         self._ttl: int = ttl
         self._timestamps: dict[str, float] = {}
         self._l2_enabled: bool = l2_enabled
+        # audit perf#2 — optional L2 (de)serializer. The Redis layer is
+        # JSON-based, so values that don't survive json.dumps (pandas
+        # DataFrames) need a codec. None → L2 stores the value as-is
+        # (unchanged behaviour for every cache except history_cache).
+        self._serializer = serializer
+        self._deserializer = deserializer
         # audit #12 — cache the L2-size SCAN result so health polling
         # doesn't fire a keyspace scan per cache per request.
         self._l2_size_cached: Optional[int] = None
@@ -106,6 +115,11 @@ class SafeCache:
         # L1 miss — L2'ye bak
         if self._l2_enabled and redis_client.is_available():
             l2_val = redis_client.get_json(self._l2_key(key))
+            if l2_val is not None and self._deserializer is not None:
+                try:
+                    l2_val = self._deserializer(l2_val)
+                except Exception:
+                    l2_val = None  # corrupt / cross-version → cache miss
             if l2_val is not None:
                 with self._lock:
                     try:
@@ -142,6 +156,11 @@ class SafeCache:
                 # L2'den stale veri çek
                 if self._l2_enabled and redis_client.is_available():
                     l2_val = redis_client.get_json(self._l2_key(key))
+                    if l2_val is not None and self._deserializer is not None:
+                        try:
+                            l2_val = self._deserializer(l2_val)
+                        except Exception:
+                            l2_val = None
                     if l2_val is not None:
                         return l2_val, True, age
 
@@ -159,9 +178,11 @@ class SafeCache:
         # L2'ye async-ish yaz (blocking ama hızlı)
         if self._l2_enabled and redis_client.is_available():
             try:
+                _l2_val = (self._serializer(value)
+                           if self._serializer is not None else value)
                 redis_client.set_json(
                     self._l2_key(key),
-                    value,
+                    _l2_val,
                     ttl=self._ttl + STALE_GRACE_SECONDS,
                 )
             except Exception as e:
@@ -235,6 +256,26 @@ class SafeCache:
 
 
 # ================================================================
+# L2 CODEC — pandas DataFrame <-> JSON-safe string (audit perf#2)
+# ================================================================
+def _df_l2_encode(value):
+    """Serialize a value (a pandas DataFrame, for history_cache) for
+    the JSON-based L2 store: pickle -> base64 ascii string. Survives
+    the DatetimeIndex / dtypes that DataFrame.to_json would mangle."""
+    import base64
+    import pickle
+    return base64.b64encode(pickle.dumps(value, protocol=4)).decode("ascii")
+
+
+def _df_l2_decode(raw):
+    """Inverse of _df_l2_encode. Raises on corrupt or cross-pandas-
+    version data — SafeCache.get / get_with_meta treat that as a miss."""
+    import base64
+    import pickle
+    return pickle.loads(base64.b64decode(raw))
+
+
+# ================================================================
 # GLOBAL CACHE INSTANCES
 # Her modül buradan import eder. Magic number sıfır — config'den gelir.
 # ================================================================
@@ -242,7 +283,12 @@ raw_cache = SafeCache(RAW_CACHE_SIZE, RAW_CACHE_TTL, "raw")
 analysis_cache = SafeCache(ANALYSIS_CACHE_SIZE, ANALYSIS_CACHE_TTL, "analysis")
 tech_cache = SafeCache(TECH_CACHE_SIZE, TECH_CACHE_TTL, "tech")
 ai_cache = SafeCache(AI_CACHE_SIZE, AI_CACHE_TTL, "ai", l2_enabled=True)
-history_cache = SafeCache(HISTORY_CACHE_SIZE, HISTORY_CACHE_TTL, "history", l2_enabled=False)
+# history_cache holds 1-year OHLCV DataFrames — L2 needs the codec
+# (audit perf#2) so a deploy / cross-loop scan finds history warm
+# instead of re-downloading ~622 symbols from borsapy.
+history_cache = SafeCache(HISTORY_CACHE_SIZE, HISTORY_CACHE_TTL, "history",
+                          l2_enabled=True,
+                          serializer=_df_l2_encode, deserializer=_df_l2_decode)
 macro_cache = SafeCache(50, MACRO_CACHE_TTL, "macro")
 takas_cache = SafeCache(50, TAKAS_CACHE_TTL, "takas")
 social_cache = SafeCache(10, SOCIAL_CACHE_TTL, "social")
