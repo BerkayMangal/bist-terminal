@@ -80,10 +80,10 @@ def _unconfirmed_breakout_df() -> pd.DataFrame:
 def _weak_continuation_df() -> pd.DataFrame:
     """Dün güçlü+yüksek hacim, bugün zayıf hacim."""
     rows = _flat_rows(23, price=100, vol=1000)
-    # dün: +8% güçlü, çok yüksek hacim
-    rows.append({"Open": 101, "High": 120, "Low": 100, "Close": 108,
+    # dün: +8% güçlü, çok yüksek hacim, gün-içi tepe 122
+    rows.append({"Open": 101, "High": 122, "Low": 100, "Close": 108,
                  "Volume": 10000})
-    # bugün: hacim çok düşük, tepe aşılamadı, zayıf kapanış
+    # bugün: hacim çok düşük, dünkü 122 tepesi AŞILAMADI, zayıf kapanış
     rows.append({"Open": 110, "High": 121, "Low": 110, "Close": 113,
                  "Volume": 3000})
     return _df(rows)
