@@ -15,7 +15,9 @@ import logging
 import re
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
+
+from core.rate_limiter import ops_heavy_rate_limit
 
 from core.response_envelope import success, error
 
@@ -68,7 +70,7 @@ async def api_daily_brief_by_date(bulletin_date: str):
     return success({"bulletin": record})
 
 
-@router.post("/api/daily-brief/regenerate")
+@router.post("/api/daily-brief/regenerate", dependencies=[Depends(ops_heavy_rate_limit)])
 async def api_daily_brief_regenerate(
     bulletin_date: Optional[str] = Query(
         None,

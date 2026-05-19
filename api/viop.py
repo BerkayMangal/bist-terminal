@@ -18,7 +18,9 @@ import asyncio
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
+
+from core.rate_limiter import ops_heavy_rate_limit
 
 from core.response_envelope import success, error
 
@@ -175,7 +177,7 @@ async def api_viop_tahtaci_overlay_summary(
     return success(data, extra_meta={"endpoint": "viop.tahtaci_overlay.summary"})
 
 
-@router.post("/api/viop/refresh")
+@router.post("/api/viop/refresh", dependencies=[Depends(ops_heavy_rate_limit)])
 async def api_viop_refresh():
     """Manual ingest trigger — same code path as the background loop.
     Useful when the user wants to force a fresh snapshot before

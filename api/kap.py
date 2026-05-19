@@ -20,7 +20,9 @@ from __future__ import annotations
 import asyncio
 import logging
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
+
+from core.rate_limiter import ops_heavy_rate_limit
 
 from core.response_envelope import success, error
 
@@ -161,7 +163,7 @@ async def api_kap_disclosure_analyze(index: int):
     )
 
 
-@router.post("/api/kap/poll")
+@router.post("/api/kap/poll", dependencies=[Depends(ops_heavy_rate_limit)])
 async def api_kap_poll_trigger():
     """Kick a manual poll cycle. Used by ops and by tests that want to
     drive a deterministic cycle instead of waiting for the loop."""

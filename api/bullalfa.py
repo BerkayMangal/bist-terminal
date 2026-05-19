@@ -36,7 +36,9 @@ import time
 from dataclasses import dataclass
 from typing import Any, Awaitable, Callable, Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
+
+from core.rate_limiter import ops_heavy_rate_limit
 
 from engine.bullalfa import build_bullalfa_signal, build_scan_response
 from engine.bullalfa_params import (
@@ -543,7 +545,7 @@ async def get_scan(
     return response
 
 
-@router.get("/api/bullalfa/scan/refresh")
+@router.get("/api/bullalfa/scan/refresh", dependencies=[Depends(ops_heavy_rate_limit)])
 async def force_refresh() -> dict:
     """Manually invalidate + rebuild the scan cache. Useful for ops.
 
