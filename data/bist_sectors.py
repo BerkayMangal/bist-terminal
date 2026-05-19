@@ -543,14 +543,17 @@ BIST_SECTOR_MAP: dict[str, str] = {
     'ZRGYO': 'GYO',
 }
 
-# sector label -> internal scoring group (banka/holding/enerji/
-# perakende/ulasim/sanayi). Only these 7 groups have distinct
-# SECTOR_THRESHOLDS; everything else scores as "sanayi".
+# sector label -> internal scoring group. Each group with a distinct
+# SECTOR_THRESHOLDS block scores on its own bands; everything else
+# scores as "sanayi". audit C2: 'Teknoloji'→teknoloji and 'GYO'→
+# gayrimenkul were previously collapsed into 'sanayi', so the
+# teknoloji/gayrimenkul threshold blocks (and the academic growth-
+# sector treatment) never fired.
 _LABEL_TO_GROUP: dict[str, str] = {
     'Banka': 'banka',
     'Elektrik': 'enerji',
     'Finansal Kiralama': 'banka',
-    'GYO': 'sanayi',
+    'GYO': 'gayrimenkul',
     'Gıda-İçecek': 'sanayi',
     'Holding': 'holding',
     'Kimya-Petrol': 'enerji',
@@ -561,13 +564,20 @@ _LABEL_TO_GROUP: dict[str, str] = {
     'Spor': 'sanayi',
     'Sınai': 'sanayi',
     'Taş-Toprak': 'sanayi',
-    'Teknoloji': 'sanayi',
+    'Teknoloji': 'teknoloji',
     'Ticaret': 'perakende',
     'Turizm': 'sanayi',
     'Ulaştırma': 'ulasim',
     'İletişim': 'ulasim',
     'İnşaat': 'sanayi',
 }
+
+# Defense names — the frozen map labels these 'Teknoloji'/'Sınai'
+# (BIST has no 'Savunma' index label), so without an explicit override
+# they score on generic tech/industrial bands. Defense firms carry
+# long-cycle order books and trade at a structural premium; the
+# `savunma` SECTOR_THRESHOLDS block exists for exactly this (audit C2).
+_DEFENSE_TICKERS: frozenset = frozenset({"ASELS", "SDTTR", "OTKAR", "KATMR"})
 
 
 def sector_label_for(ticker: str) -> str:
@@ -578,5 +588,7 @@ def sector_label_for(ticker: str) -> str:
 def sector_group_for(ticker: str) -> str:
     """Internal scoring group for a ticker. Falls back to "sanayi"
     when the ticker is not in the frozen map."""
-    lab = sector_label_for(ticker)
-    return _LABEL_TO_GROUP.get(lab, "sanayi")
+    sym = (ticker or "").upper().replace(".IS", "")
+    if sym in _DEFENSE_TICKERS:
+        return "savunma"
+    return _LABEL_TO_GROUP.get(sector_label_for(ticker), "sanayi")
