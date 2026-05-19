@@ -1299,8 +1299,16 @@ def build_bullalfa_signal(
     # ----------------------------------------------------------------
     # Assemble per §19 schema
     # ----------------------------------------------------------------
+    # UX — surface the last close so the UI can display a share price.
+    _last_price = None
+    try:
+        if hist_df is not None and len(hist_df) > 0:
+            _last_price = round(float(hist_df["Close"].iloc[-1]), 4)
+    except Exception:
+        _last_price = None
     return {
         "ticker":         ticker,
+        "last_price":     _last_price,
         "sector_group":   sector_ctx.sector_group,
         "generated_at":   now,
         "schema_version": SCHEMA_VERSION,
