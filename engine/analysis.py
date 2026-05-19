@@ -219,7 +219,17 @@ def compute_metrics(symbol: str) -> dict:
     raw = fetch_raw(symbol)
 
     if BORSAPY_AVAILABLE and compute_metrics_v9 is not None:
-        m = compute_metrics_v9(symbol)
+        # audit perf#1 — route through the shared 12h metrics cache
+        # (cached_compute_metrics is a documented drop-in for
+        # compute_metrics_v9, same return shape) so Radar / BullWatch /
+        # BullAlfa compute the metric dict once per symbol per 12h
+        # instead of 3× with separate caches. Falls through to
+        # compute_metrics_v9 on cache miss / no Redis — degrades safely.
+        try:
+            from data.bullwatch_cache import cached_compute_metrics
+            m = cached_compute_metrics(symbol)
+        except Exception:
+            m = compute_metrics_v9(symbol)
         m["piotroski_f"] = compute_piotroski(m)
         m["altman_z"] = compute_altman(m)
         m["beneish_m"] = compute_beneish(m)
