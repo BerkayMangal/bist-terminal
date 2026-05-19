@@ -412,6 +412,10 @@ def analyze_symbol(symbol: str, scoring_version: Optional[str] = None,
     # ama yönü korur (dirençli hisse yine daha yüksek).
     _turkey_mult = turkey_result.get("composite_multiplier") or 1.0
     tr_adjusted_fa = round(fa_pure * (0.55 + 0.45 * _turkey_mult), 1)
+    # K3'ün kendi ham adjusted_fa'sı (fa_pure*mult) motorda kullanılmıyor;
+    # arayüze tutarlı harmanlanmış değeri yansıt (audit M3).
+    if isinstance(turkey_result, dict):
+        turkey_result["adjusted_fa"] = tr_adjusted_fa
 
     # ──────────────────────────────────────────────────
     # K4: Akademik Katman (V13 — Damodaran + Greenwald)

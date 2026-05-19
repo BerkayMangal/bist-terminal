@@ -489,7 +489,10 @@ SECTOR_THRESHOLDS: dict[str, dict] = {
         "revenue_growth": (-0.02, 0.08, 0.18, 0.30),
     },
     "enerji": {
-        "pe": (2, 3, 5, 8),
+        # pe: enerji döngüsel bir sektör — eski (2,3,5,8) bir EV/EBITDA
+        # ölçeği gibiydi; P/E 8'in üstündeki sağlıklı enerji hisseleri
+        # değer bacağında 5/100 alıyordu (audit C1).
+        "pe": (4, 7, 11, 16),
         "ev_ebitda": (2.5, 4, 6, 8),
         "roe": (0.10, 0.16, 0.22, 0.30),
         "net_margin": (0.02, 0.06, 0.10, 0.18),

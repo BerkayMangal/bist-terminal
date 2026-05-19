@@ -59,7 +59,11 @@ def _fx_shield(m: dict, sg: str, pr: float) -> dict:
     export_r = _sf(m.get("foreign_ratio")) or _SECTOR_EXPORT.get(sg, 0.20)
     nd = _sf(m.get("net_debt_ebitda"))
     rg = _sf(m.get("revenue_growth"))
-    inflation = max(pr * 0.8, 0.25)  # proxy: %80 of policy rate
+    # Gerçek TÜFE — eskiden policy_rate*0.8 proxy'siydi; bu, K3'ü
+    # score_growth + K4'ten FARKLI bir enflasyonla çalıştırıyordu
+    # (audit H3 — tek enflasyon kaynağı macro_context olmalı).
+    from engine.macro_context import get_inflation_rate
+    inflation = get_inflation_rate()
 
     # Döviz gelir puanı (0-40)
     fx_pts = 40 if export_r >= 0.60 else 30 if export_r >= 0.40 else 18 if export_r >= 0.20 else 10 if export_r >= 0.10 else 3
