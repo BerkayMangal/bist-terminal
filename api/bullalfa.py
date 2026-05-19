@@ -180,6 +180,7 @@ class _ScanCache:
     consecutive_failures: int     = 0
     is_frozen:     bool           = False
     frozen_reason: Optional[str]  = None
+    frozen_at:     float          = 0.0   # audit M3 — circuit-breaker trip time
 
 
 _CACHE = _ScanCache()
@@ -195,9 +196,16 @@ def _get_lock() -> asyncio.Lock:
     return _CACHE_LOCK
 
 
+# audit M3 — once the breaker trips, stay OPEN this long before a
+# single half-open trial scan. Stops BullAlfa from hammering a failing
+# provider every refresh tick while still probing for recovery.
+CIRCUIT_BREAKER_COOLDOWN_SEC: float = 600.0
+
+
 def _circuit_break(reason: str) -> None:
     _CACHE.is_frozen = True
     _CACHE.frozen_reason = reason
+    _CACHE.frozen_at = time.time()
     log.warning("bullalfa scan circuit-breaker tripped: %s", reason)
 
 
@@ -327,6 +335,25 @@ async def _run_scan() -> dict:
     On failure, increments the consecutive-failure counter; trips the
     circuit breaker if it exceeds the threshold.
     """
+    # audit M3 — honour the circuit breaker. When tripped, stay OPEN
+    # for CIRCUIT_BREAKER_COOLDOWN_SEC (serve cache, don't touch the
+    # failing provider), then allow ONE half-open trial. A successful
+    # trial resets the breaker (_circuit_reset below); a failed one
+    # re-arms it via _circuit_break. Without this gate the breaker was
+    # cosmetic — scans kept hammering the provider every tick.
+    if _CACHE.is_frozen:
+        _frozen_for = time.time() - _CACHE.frozen_at
+        if _frozen_for < CIRCUIT_BREAKER_COOLDOWN_SEC:
+            log.debug(
+                "bullalfa circuit-breaker OPEN (%.0fs/%.0fs) — serving cache",
+                _frozen_for, CIRCUIT_BREAKER_COOLDOWN_SEC,
+            )
+            return _CACHE.payload if _CACHE.payload is not None else _empty_payload()
+        # Cooldown elapsed -> half-open: re-arm the timer (so a failed
+        # trial waits another full cooldown) and let one scan through.
+        _CACHE.frozen_at = time.time()
+        log.info("bullalfa circuit-breaker HALF-OPEN — trial scan")
+
     scan_provider = _PROVIDERS["scan_provider"]
     try:
         ctx, ticker_inputs = await scan_provider()

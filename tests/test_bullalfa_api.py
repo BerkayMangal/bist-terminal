@@ -50,6 +50,21 @@ def client(app):
     reset_data_provider()
 
 
+@pytest.fixture(autouse=True)
+def _disable_rate_limit():
+    """These tests exercise BullAlfa endpoint logic, not rate limiting
+    (audit M1 added an ops_heavy limit to /scan/refresh). The minimal
+    test app has no RateLimitExceeded handler, and the circuit-breaker
+    tests legitimately call /scan/refresh more than the limit allows.
+    Disable rate limiting here — the dedicated rate-limit tests live in
+    their own module."""
+    import core.rate_limiter as _rl
+    _saved = _rl.RATE_LIMIT_ENABLED
+    _rl.RATE_LIMIT_ENABLED = False
+    yield
+    _rl.RATE_LIMIT_ENABLED = _saved
+
+
 def _hist(seed: int = 42) -> pd.DataFrame:
     rng = np.random.default_rng(seed)
     closes = np.cumsum(rng.normal(0.20, 0.30, 250)) + 100
@@ -412,6 +427,11 @@ class TestCircuitBreaker:
             scan_provider=_make_scan_provider(["AKBNK", "ASELS"]),
             ticker_provider=_make_ticker_provider(),
         )
+        # audit M3 — the breaker now stays OPEN for a cooldown before a
+        # half-open trial. Age the trip time past the cooldown so the
+        # next scan is the half-open trial that recovers the breaker.
+        from api.bullalfa import _CACHE
+        _CACHE.frozen_at = 0.0
         client.get("/api/bullalfa/scan/refresh")
         r = client.get("/api/bullalfa/scan")
         assert r.json()["meta"]["circuit_breaker"]["frozen"] is False
