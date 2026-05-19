@@ -11,7 +11,7 @@ This module produces a small additive boost on top of the base score.
 from __future__ import annotations
 import datetime as _dt
 import logging
-from typing import Any
+from typing import Any, Optional
 
 from engine.bullwatch_holding_groups import get_group, get_peers
 

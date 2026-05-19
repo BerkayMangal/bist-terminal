@@ -191,6 +191,9 @@ def _resolve_macro_state(
             tl_vol_val = float(tl_vol)
         except (TypeError, ValueError):
             tl_vol_val = 50.0
+        # tl_vol_pct is a percentile — clamp defensively so a malformed
+        # upstream value can't skew the macro bucket (audit L5).
+        tl_vol_val = max(0.0, min(100.0, tl_vol_val))
 
     return _MacroState(regime=norm, tl_vol_pct=tl_vol_val, available=True)
 
@@ -456,6 +459,15 @@ def _tech_score(engines: Mapping[str, Any], mode: str) -> float:
 # Mode-condition predicates per §11
 # ----------------------------------------------------------------
 
+# Breakout freshness window — engine_4_breakout reports ANY breakout in
+# the whole available history, so without an upper bound on bars_ago the
+# E4 leg is effectively always-on for any stock in an uptrend. A 20d/55d
+# high breakout only counts toward a HIZLI/SWING trigger if it is recent
+# (audit H2). Heuristic v1 — tune alongside the rest of BULLALFA_PARAMS.
+HIZLI_BREAKOUT_MAX_BARS = 7
+SWING_BREAKOUT_MAX_BARS = 15
+
+
 def _hizli_conditions_met(
     eng: Mapping[str, Any],
     macro: _MacroState,
@@ -469,7 +481,10 @@ def _hizli_conditions_met(
         return False
     if not eng.get("e3_volume", {}).get("passed"):
         return False
-    breakout_ok = eng.get("e4_breakout", {}).get("type") == "20d"
+    _e4 = eng.get("e4_breakout", {})
+    _e4_bars = _e4.get("bars_ago")
+    breakout_ok = (_e4.get("type") == "20d" and _e4_bars is not None
+                   and _e4_bars <= HIZLI_BREAKOUT_MAX_BARS)
     expansion_ok = bool(eng.get("e5_compression", {}).get("expanded"))
     if not (breakout_ok or expansion_ok):
         return False
@@ -496,7 +511,10 @@ def _swing_conditions_met(
         return False
     if not eng.get("e3_volume", {}).get("passed"):
         return False
-    breakout_55 = eng.get("e4_breakout", {}).get("type") == "55d"
+    _e4 = eng.get("e4_breakout", {})
+    _e4_bars = _e4.get("bars_ago")
+    breakout_55 = (_e4.get("type") == "55d" and _e4_bars is not None
+                   and _e4_bars <= SWING_BREAKOUT_MAX_BARS)
     pullback = bool(eng.get("e6_pullback"))
     if not (breakout_55 or pullback):
         return False
@@ -899,12 +917,18 @@ def build_bullalfa_signal(
     if halted_today:
         log_obj.record(DegradeCode.HALTED_TODAY)
 
-    newly = is_newly_listed(days_listed)
+    # Fall back to the actual bar count when days_listed wasn't supplied
+    # — otherwise is_newly_listed silently returns False and the §14
+    # grade cap + mode restriction are lost for short-history stocks
+    # (audit M2). Bar count is an acceptable proxy for the day cutoff.
+    _hist_len = days_listed if days_listed is not None else (
+        len(hist_df) if hist_df is not None else None)
+    newly = is_newly_listed(_hist_len)
 
     sector_ctx = resolve_sector_context(
         yf_sector=sector_raw,
         yf_industry=industry_raw,
-        history_length_days=days_listed,
+        history_length_days=_hist_len,
         is_halted=halted_today,
     )
 

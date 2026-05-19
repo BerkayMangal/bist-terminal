@@ -1633,10 +1633,10 @@ def score_symbol(metrics: dict,
     if s_cm is not None and s_cm >= THRESH: active.append("Compression")
     if s_pa >= THRESH: active.append("Price Action")
     # Tahtacı PR A2 — KAP activity counts as an active engine when at
-    # least one operator-signal tag fired in the past 14 days. This
-    # threshold (0.20) corresponds to roughly one MGMT_CHANGE or one
-    # CAPITAL_CHANGE — the lighter signals. Anything stronger pushes
-    # the sub-score past 0.2 naturally.
+    # least one operator-signal tag fired in the past 14 days. The
+    # 0.20 threshold admits a single BUYBACK / MNA / KAP_ALERT /
+    # INSIDER disclosure (or two of the lighter ~0.10 events —
+    # MGMT_CHANGE / CAPITAL_CHANGE); one light event alone is below it.
     if s_ka is not None and s_ka >= 0.20: active.append("KAP Activity")
     pattern = _pattern_label(active, patterns, s_ow)
     zone = _classify_zone(
@@ -1689,6 +1689,16 @@ def score_symbol(metrics: dict,
                 reasons = reasons[:8]
     except Exception as _exc:
         log.debug("group_activity_boost failed for %s: %r", symbol, _exc)
+
+    # Group boost lifts `score` after the initial zone call above — the
+    # zone must be re-classified or the displayed score and zone diverge
+    # (e.g. a boosted 77 shown as CONFIRMED because the zone saw the
+    # pre-boost 71). audit H1.
+    if group_boost_meta.get("boost"):
+        zone = _classify_zone(
+            score, fp, rvol, s_ow, patterns.get("count", 0), s_cm,
+            previous_zone=previous_zone,
+        )
 
     metrics_dict = {
         "float_market_cap": fmc,
