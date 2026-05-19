@@ -721,7 +721,11 @@ TRACK_EVENTS = defaultdict(int); TRACK_LOG = deque(maxlen=500)
 
 @app.api_route("/api/track", methods=["GET", "POST"])
 async def api_track(e: str = ""):
-    if e: TRACK_EVENTS[e] += 1; TRACK_LOG.append({"event": e, "ts": now_iso()})
+    # audit L6 — bound the event-name length and the distinct-key count
+    # so an arbitrary client can't grow TRACK_EVENTS without limit.
+    e = (e or "")[:64]
+    if e and (e in TRACK_EVENTS or len(TRACK_EVENTS) < 200):
+        TRACK_EVENTS[e] += 1; TRACK_LOG.append({"event": e, "ts": now_iso()})
     return JSONResponse({"ok": True})
 
 @app.get("/api/analytics")

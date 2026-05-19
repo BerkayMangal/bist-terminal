@@ -258,6 +258,10 @@ class ScanCoordinator:
             "elapsed_s": elapsed,
             "scan_count": self._scan_count,
             "last_scan_duration_s": self._last_scan_duration,
+            # audit H1 — the frontend's pollScanProgress breaks its poll
+            # loop on `!running && has_data`; this field was never emitted
+            # so the post-scan UI refresh never fired (user had to reload).
+            "has_data": self._scan_count > 0,
         }
 
     # ================================================================

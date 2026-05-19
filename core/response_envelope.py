@@ -76,7 +76,14 @@ def success(
     if isinstance(data, dict):
         # Dict → key'leri üst seviyeye aç
         body = clean_for_json(data)
-        body["_meta"] = meta
+        # audit H2 — if `data` already carries its own `_meta` (e.g.
+        # analyze_symbol's A/B scoring telemetry), merge it instead of
+        # clobbering it; envelope-level keys win on conflict.
+        if isinstance(body.get("_meta"), dict):
+            _merged = dict(body["_meta"]); _merged.update(meta)
+            body["_meta"] = _merged
+        else:
+            body["_meta"] = meta
     elif isinstance(data, list):
         # List → items key'ine sar
         body = {"items": clean_for_json(data), "_meta": meta}
