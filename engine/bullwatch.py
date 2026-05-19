@@ -1703,6 +1703,10 @@ def score_symbol(metrics: dict,
     metrics_dict = {
         "float_market_cap": fmc,
         "market_cap": market_cap,
+        # UX — surface the share price so the UI can display it and the
+        # "+ Aldım" button gets a real entry price (it read
+        # metrics.last_price, which was never populated → always null).
+        "last_price": metrics.get("price"),
         "free_float": free_float,
         "revenue_to_marketcap": rev_mc,
         "rvol": rvol,
