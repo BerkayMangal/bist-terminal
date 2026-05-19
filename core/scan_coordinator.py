@@ -77,7 +77,11 @@ def _radar_data_sufficient(r: dict) -> bool:
     # (beklenmedik) güvenli tarafta kal — düşürme.
     if imputed is None:
         return True
-    real_dims = 7 - len(imputed)
+    # audit H1 — structurally-inapplicable dims (scores_na) are not
+    # "real dimensions" for this sector, so don't count them in the
+    # 7-dim total. Absent (old snapshots) → empty → unchanged behavior.
+    na = r.get("scores_na") or []
+    real_dims = (7 - len(na)) - len(imputed)
     return real_dims >= RADAR_MIN_DIMENSIONS
 
 
