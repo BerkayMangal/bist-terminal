@@ -334,9 +334,23 @@ def analyze_symbol(symbol: str, scoring_version: Optional[str] = None,
         "capital": score_capital(m),
     }
 
+    # audit H1 — structural inapplicability: dimensions the
+    # SECTOR_APPLICABILITY matrix marks "na" for this sector (e.g.
+    # `balance` for a bank — the industrial Altman/EV-EBITDA/leverage
+    # formulas don't apply) are excluded as INAPPLICABLE and kept
+    # separate from genuinely-missing data, so the matrix and the
+    # None-renormalization stop being two disagreeing mechanisms.
+    # No-op for every non-bank sector — only `banka` has an "na" dim.
+    from engine.applicability import get_score_applicability
+    scores_na: list[str] = [
+        k for k in _raw_fa
+        if get_score_applicability(sector_group, k) == "na"
+    ]
+    _applicable_fa = {k: v for k, v in _raw_fa.items() if k not in scores_na}
+
     # V13: Track missing dimensions — NO imputation, EXCLUDE + re-normalize
-    scores_imputed: list[str] = [k for k, v in _raw_fa.items() if v is None]
-    _active = {k: v for k, v in _raw_fa.items() if v is not None}
+    scores_imputed: list[str] = [k for k, v in _applicable_fa.items() if v is None]
+    _active = {k: v for k, v in _applicable_fa.items() if v is not None}
 
     # For display: None dims get a neutral 50 marker (UI only, NOT used in score calc)
     scores: dict[str, float] = {
@@ -368,8 +382,14 @@ def analyze_symbol(symbol: str, scoring_version: Optional[str] = None,
     # tepesine çıkıyordu. Mevcut ağırlık oranı (coverage) kadar
     # fa_pure'a, kalan kadar temkinli bir prior'a (45) çekiyoruz:
     # eksik veri artık ödüllendirilmiyor, belirsizlik skoru indiriyor.
-    if 0 < len(_active) < 7:
-        _coverage = min(1.0, sum(V11_FA_WEIGHTS.get(k, 0.10) for k in _active))
+    # Coverage is measured over APPLICABLE dimensions — a bank with all
+    # of its applicable dims present is full-coverage, not shrunk for
+    # the structurally-inapplicable `balance` (audit H1). For non-banks
+    # _applicable_fa is all 7 and V11_FA_WEIGHTS sums to 1.0, so this is
+    # identical to the previous min(1.0, sum(active weights)).
+    if 0 < len(_active) < len(_applicable_fa):
+        _applic_total = sum(V11_FA_WEIGHTS.get(k, 0.10) for k in _applicable_fa) or 1.0
+        _coverage = min(1.0, sum(V11_FA_WEIGHTS.get(k, 0.10) for k in _active) / _applic_total)
         fa_pure = round(max(1, fa_pure * _coverage + 45.0 * (1.0 - _coverage)), 1)
 
     # ──────────────────────────────────────────────────
@@ -524,6 +544,7 @@ def analyze_symbol(symbol: str, scoring_version: Optional[str] = None,
         "style": style, "legendary": legends, "positives": pos, "negatives": neg,
         "applicability": applicability_flags,
         "scores_imputed": scores_imputed,
+        "scores_na": scores_na,
         "score_coverage": score_coverage,
         "data_source": m.get("data_source", "unknown"),
         "data_fetched_at": (_raw_cached or {}).get("_fetched_at"),
