@@ -176,8 +176,9 @@ def score_value(m: dict, sector_group: Optional[str] = None) -> Optional[float]:
         ev = mc + (td or 0) - (cash or 0)
         ev_sales = ev / rev
 
-    mos_raw = score_higher(m.get("margin_safety"), -0.2, 0, 0.15, 0.30)
-    mos_capped = min(mos_raw, 70) if mos_raw is not None else None
+    # MoS bacağı diğer 5 değer bacağı gibi 0-100 ölçeğinde — eskiden
+    # 70'e kırpılıyordu (belgesiz asimetri; derin değeri eziyordu, audit M2).
+    mos = score_higher(m.get("margin_safety"), -0.2, 0, 0.15, 0.30)
 
     parts = [
         score_lower(m.get("pe"), *th_pe) if th_pe and (m.get("pe") or 0) > 0 else None,
@@ -185,7 +186,7 @@ def score_value(m: dict, sector_group: Optional[str] = None) -> Optional[float]:
         score_lower(m.get("ev_ebitda"), *th_ev) if th_ev and (m.get("ev_ebitda") or 0) > 0 else None,
         score_lower(ev_sales, 0.5, 1.2, 2.5, 5.0) if ev_sales is not None and ev_sales > 0 else None,
         score_higher(m.get("fcf_yield"), 0, 0.02, 0.05, 0.08),
-        mos_capped,
+        mos,
     ]
     return avg(parts)
 
@@ -306,8 +307,8 @@ def score_moat(m: dict) -> Optional[float]:
     roa_stab = None
     if m.get("roa") is not None and m.get("roa_prev") is not None:
         roa_stab = score_lower(abs(m["roa"] - m["roa_prev"]), 0, 0.02, 0.05, 0.10)
-    pricing = score_higher(m.get("gross_margin"), 0.08, 0.15, 0.25, 0.40) if m.get("gross_margin") else None
-    op_power = score_higher(m.get("operating_margin"), 0.02, 0.06, 0.12, 0.20) if m.get("operating_margin") else None
+    pricing = score_higher(m.get("gross_margin"), 0.08, 0.15, 0.25, 0.40) if m.get("gross_margin") is not None else None
+    op_power = score_higher(m.get("operating_margin"), 0.02, 0.06, 0.12, 0.20) if m.get("operating_margin") is not None else None
     at_trend = None
     if m.get("asset_turnover") is not None and m.get("asset_turnover_prev") is not None:
         delta_at = m["asset_turnover"] - m["asset_turnover_prev"]
@@ -326,7 +327,7 @@ def score_capital(m: dict) -> Optional[float]:
     if sc is not None:
         dil = 100 if sc <= 0 else score_lower(sc, 0, 0.03, 0.08, 0.20)
     capex_rev = None
-    if m.get("operating_cf") and m.get("free_cf") and m.get("revenue"):
+    if m.get("operating_cf") is not None and m.get("free_cf") is not None and m.get("revenue"):
         capex = abs(m["operating_cf"] - m["free_cf"])
         if m["revenue"] > 0:
             cr = capex / m["revenue"]
