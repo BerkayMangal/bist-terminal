@@ -522,6 +522,22 @@ SECTOR_THRESHOLDS: dict[str, dict] = {
         "net_margin": (0.03, 0.08, 0.13, 0.20),
         "ev_ebitda": (2.5, 4, 7, 10),
     },
+    # audit C2 — teknoloji: growth premium, higher multiple tolerance
+    # than sanayi. Unspecified metrics fall through to DEFAULT_THRESHOLDS.
+    "teknoloji": {
+        "pe": (8, 14, 22, 32),
+        "ev_ebitda": (5, 9, 14, 20),
+        "revenue_growth": (-0.02, 0.08, 0.20, 0.38),
+    },
+    # audit C2 — gayrimenkul (GYO/REIT): trades on NAV, often below
+    # book value; Altman-Z is a manufacturing formula, N/A here.
+    "gayrimenkul": {
+        "pe": (4, 7, 12, 18),
+        "pb": (0.4, 0.7, 1.1, 1.6),
+        "ev_ebitda": (5, 9, 14, 20),
+        "net_debt_ebitda": (2.0, 4.0, 6.5, 10.0),
+        "altman_z": None,
+    },
 }
 
 # Default eşikler (sektör override yoksa bunlar kullanılır).
