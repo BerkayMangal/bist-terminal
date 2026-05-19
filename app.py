@@ -154,8 +154,18 @@ async def _background_scanner():
                         # Sequential pass — we already did the parallel
                         # heavy work; this just re-scores using cached raw
                         # data + writes the second snapshot row.
-                        for sym in UNIVERSE:
-                            await asyncio.to_thread(_analyze_cal, sym)
+                        # audit #3 — parallelize the calibrated A/B pass
+                        # (was a fully sequential second scan). Bounded at
+                        # 6, matching the primary scan; raw data is cached
+                        # so this is CPU + one SQLite upsert per symbol.
+                        _cal_sem = asyncio.Semaphore(6)
+                        async def _analyze_cal_bounded(sym):
+                            async with _cal_sem:
+                                await asyncio.to_thread(_analyze_cal, sym)
+                        await asyncio.gather(
+                            *(_analyze_cal_bounded(s) for s in UNIVERSE),
+                            return_exceptions=True,
+                        )
                         log.info("Phase 4.7 A/B dual-write: calibrated pass done")
                     else:
                         log.debug("Phase 4.7 A/B dual-write: no fits, skipping calibrated pass")

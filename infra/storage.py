@@ -120,6 +120,13 @@ def init_db() -> None:
     _ensure_column(conn, "universe_history", "source_url", "TEXT")
     # score_history.price — event-study (ileri-getiri) doğrulaması için.
     _ensure_column(conn, "score_history", "price", "REAL")
+    # audit #9 — get_movers() filtreleri score_history'yi snap_date ile
+    # arıyor; tek mevcut indeks (symbol, snap_date) olduğu için çıplak
+    # snap_date araması tarama yapıyordu.
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_score_history_snap_date "
+        "ON score_history(snap_date)"
+    )
     conn.commit()
 
     log.info(f"SQLite storage initialized: {DB_PATH}")
