@@ -181,6 +181,7 @@
         <div style="flex:1;min-width:0">
           <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
             <span class="clk-t" style="font-size:18px;font-weight:700" onclick="window.loadTicker && window.loadTicker('${esc(s.ticker)}')">${esc(s.ticker)}</span>
+            ${s.last_price!=null?`<span style="font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:600;color:var(--t1)">₺${Number(s.last_price).toFixed(2)}</span>`:''}
           </div>
           <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;align-items:center">
             <span style="display:inline-block;font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;padding:3px 8px;border-radius:4px;background:${m.bg};color:${m.color};border:1px solid ${m.color}55">${m.icon} ${m.label}</span>
